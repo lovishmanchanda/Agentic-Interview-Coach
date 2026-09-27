@@ -1,0 +1,138 @@
+[
+  {
+    "question_id": "swe_hash_map_internals",
+    "type": "technical",
+    "topic": "dsa",
+    "subtopic": "hashing",
+    "difficulty": "medium",
+    "roles": ["software_engineer", "backend", "fullstack"],
+    "question_text": "How does a hash map work internally? Walk me through what happens on insert and lookup, how collisions are handled, and what the time complexity is in the average and worst case.",
+    "expected_concepts": ["hash function", "buckets", "chaining vs open addressing", "load factor", "resizing / rehashing", "O(1) average, O(n) worst case"],
+    "evaluation_rubric": {
+      "correctness": "Accurately describes hashing to a bucket and at least one collision strategy.",
+      "depth": "Explains load factor and why resizing keeps operations O(1) amortised.",
+      "communication": "Structured explanation, ideally with a small example."
+    },
+    "follow_up_possibilities": ["What makes a good hash function?", "Why might the worst case happen in practice?", "How does Python's dict differ?"],
+    "for_coding_interview": false
+  },
+  {
+    "question_id": "swe_bfs_vs_dfs",
+    "type": "technical",
+    "topic": "dsa",
+    "subtopic": "graphs",
+    "difficulty": "easy",
+    "roles": ["software_engineer", "backend", "fullstack", "ml_engineer"],
+    "question_text": "Explain the difference between breadth-first search and depth-first search. When would you choose one over the other?",
+    "expected_concepts": ["queue vs stack/recursion", "shortest path in unweighted graphs", "memory usage", "visited set", "O(V+E)"],
+    "evaluation_rubric": {
+      "correctness": "Correct data structures and traversal order for each.",
+      "depth": "Gives concrete use cases (shortest path, topological sort, cycle detection).",
+      "communication": "Clear comparison rather than two separate monologues."
+    },
+    "follow_up_possibilities": ["How would you detect a cycle in a directed graph?", "What changes for a weighted graph?"],
+    "for_coding_interview": false
+  },
+  {
+    "question_id": "swe_url_shortener_design",
+    "type": "technical",
+    "topic": "system_design",
+    "subtopic": "high_level_design",
+    "difficulty": "medium",
+    "roles": ["software_engineer", "backend", "fullstack"],
+    "question_text": "Design a URL shortening service like bit.ly. Cover the API, how short codes are generated, the data model, and how you would scale reads.",
+    "expected_concepts": ["base62 encoding or hashing", "collision handling", "key-value store", "read-heavy caching", "301 vs 302 redirects", "capacity estimation"],
+    "evaluation_rubric": {
+      "correctness": "A working end-to-end design with a sound code-generation scheme.",
+      "depth": "Discusses scaling reads with caching/CDN and estimates storage or QPS.",
+      "communication": "Clarifies requirements before designing; explains trade-offs."
+    },
+    "follow_up_possibilities": ["How do you support custom aliases?", "How would you add click analytics?", "How do you expire links?"],
+    "for_coding_interview": false
+  },
+  {
+    "question_id": "swe_sql_joins",
+    "type": "technical",
+    "topic": "dbms",
+    "subtopic": "sql",
+    "difficulty": "easy",
+    "roles": ["software_engineer", "backend", "fullstack", "ml_engineer"],
+    "question_text": "What is the difference between an INNER JOIN and a LEFT JOIN? Give an example where choosing the wrong one would produce a subtle bug.",
+    "expected_concepts": ["matching rows only vs all left rows", "NULLs for unmatched rows", "filtering in WHERE turns LEFT into INNER", "row multiplication with one-to-many"],
+    "evaluation_rubric": {
+      "correctness": "Accurate definitions of both joins.",
+      "depth": "Identifies a real pitfall such as WHERE on the right table or duplicated rows.",
+      "communication": "Uses a concrete table example."
+    },
+    "follow_up_possibilities": ["How do you find rows in A with no match in B?", "What does an index on the join key change?"],
+    "for_coding_interview": false
+  },
+  {
+    "question_id": "swe_db_indexes",
+    "type": "technical",
+    "topic": "dbms",
+    "subtopic": "indexing",
+    "difficulty": "medium",
+    "roles": ["software_engineer", "backend"],
+    "question_text": "How does a database index speed up queries, and what does it cost? When would adding an index make things worse?",
+    "expected_concepts": ["B-tree", "O(log n) lookup", "slower writes", "storage cost", "selectivity", "composite index column order"],
+    "evaluation_rubric": {
+      "correctness": "Explains the data structure behind a typical index.",
+      "depth": "Covers write amplification, low-selectivity columns and composite index ordering.",
+      "communication": "Connects the explanation to a realistic query."
+    },
+    "follow_up_possibilities": ["What is a covering index?", "How do you find which queries need an index?"],
+    "for_coding_interview": false
+  },
+  {
+    "question_id": "swe_process_vs_thread",
+    "type": "technical",
+    "topic": "os",
+    "subtopic": "concurrency",
+    "difficulty": "easy",
+    "roles": ["software_engineer", "backend"],
+    "question_text": "What is the difference between a process and a thread? What problems appear when multiple threads share memory, and how do you prevent them?",
+    "expected_concepts": ["separate vs shared address space", "context switch cost", "race conditions", "locks / mutexes", "deadlock", "atomic operations"],
+    "evaluation_rubric": {
+      "correctness": "Accurate distinction between process and thread memory models.",
+      "depth": "Explains a race condition and at least one synchronisation primitive and its risks.",
+      "communication": "Uses a concrete example such as a shared counter."
+    },
+    "follow_up_possibilities": ["What are the four conditions for deadlock?", "How does Python's GIL affect this?"],
+    "for_coding_interview": false
+  },
+  {
+    "question_id": "swe_solid_principles",
+    "type": "technical",
+    "topic": "oops",
+    "subtopic": "design_principles",
+    "difficulty": "medium",
+    "roles": ["software_engineer", "backend", "fullstack"],
+    "question_text": "Pick two of the SOLID principles and explain them with an example from code you have written or reviewed. What goes wrong when they are violated?",
+    "expected_concepts": ["single responsibility", "open/closed", "Liskov substitution", "interface segregation", "dependency inversion", "testability"],
+    "evaluation_rubric": {
+      "correctness": "Correct definitions of the chosen principles.",
+      "depth": "Real, specific example and a clear consequence of violating it.",
+      "communication": "Avoids textbook recitation; grounds it in practice."
+    },
+    "follow_up_possibilities": ["When is it fine to break one of these?", "How does dependency injection relate?"],
+    "for_coding_interview": false
+  },
+  {
+    "question_id": "swe_python_generators",
+    "type": "technical",
+    "topic": "python",
+    "subtopic": "iterators",
+    "difficulty": "medium",
+    "roles": ["software_engineer", "backend", "ml_engineer"],
+    "question_text": "What is a generator in Python and how does it differ from returning a list? When would you use one?",
+    "expected_concepts": ["yield", "lazy evaluation", "memory efficiency", "single pass", "iterator protocol", "generator expressions"],
+    "evaluation_rubric": {
+      "correctness": "Explains yield and lazy evaluation correctly.",
+      "depth": "Discusses memory trade-offs and the single-pass limitation.",
+      "communication": "Gives a concrete use case like streaming a large file."
+    },
+    "follow_up_possibilities": ["What does `yield from` do?", "How would you make a generator restartable?"],
+    "for_coding_interview": false
+  }
+]

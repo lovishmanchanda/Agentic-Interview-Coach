@@ -1,0 +1,87 @@
+[
+  {
+    "question_id": "ml_bias_variance",
+    "type": "technical",
+    "topic": "machine_learning",
+    "subtopic": "fundamentals",
+    "difficulty": "easy",
+    "roles": ["ml_engineer"],
+    "question_text": "Explain the bias-variance trade-off. How would you tell from training and validation curves whether a model is underfitting or overfitting, and what would you do about each?",
+    "expected_concepts": ["bias = underfitting", "variance = overfitting", "train vs validation gap", "regularisation", "more data", "model capacity"],
+    "evaluation_rubric": {
+      "correctness": "Correctly maps high bias and high variance to the curves.",
+      "depth": "Proposes appropriate fixes for each case.",
+      "communication": "Clear and structured, ideally sketching the curves."
+    },
+    "follow_up_possibilities": ["How does regularisation strength move you along the trade-off?", "Does this still apply to very large neural networks?"],
+    "for_coding_interview": false
+  },
+  {
+    "question_id": "ml_precision_recall",
+    "type": "technical",
+    "topic": "machine_learning",
+    "subtopic": "evaluation",
+    "difficulty": "medium",
+    "roles": ["ml_engineer"],
+    "question_text": "You are building a fraud detection model where only 0.5% of transactions are fraudulent. Why is accuracy a poor metric here, and which metrics would you use instead?",
+    "expected_concepts": ["class imbalance", "precision", "recall", "F1", "PR-AUC vs ROC-AUC", "threshold tuning", "cost of false negatives"],
+    "evaluation_rubric": {
+      "correctness": "Explains why a trivial model gets 99.5% accuracy.",
+      "depth": "Chooses metrics tied to business cost and discusses thresholds.",
+      "communication": "Connects metrics to the fraud use case."
+    },
+    "follow_up_possibilities": ["How would you handle the imbalance during training?", "How do you pick the operating threshold?"],
+    "for_coding_interview": false
+  },
+  {
+    "question_id": "ml_data_leakage",
+    "type": "technical",
+    "topic": "machine_learning",
+    "subtopic": "data",
+    "difficulty": "medium",
+    "roles": ["ml_engineer"],
+    "question_text": "What is data leakage? Describe two ways it can sneak into a training pipeline and how you would detect and prevent them.",
+    "expected_concepts": ["target leakage", "train/test contamination", "fitting scalers on full data", "time-based splits", "suspiciously high validation score"],
+    "evaluation_rubric": {
+      "correctness": "Accurate definition with realistic examples.",
+      "depth": "Gives detection signals and pipeline-level prevention.",
+      "communication": "Examples are concrete rather than abstract."
+    },
+    "follow_up_possibilities": ["How do you split data for a time-series problem?", "How does cross-validation interact with preprocessing?"],
+    "for_coding_interview": false
+  },
+  {
+    "question_id": "ml_rag_system",
+    "type": "technical",
+    "topic": "system_design",
+    "subtopic": "ml_systems",
+    "difficulty": "hard",
+    "roles": ["ml_engineer"],
+    "question_text": "Design a retrieval-augmented generation (RAG) system that answers questions over a company's internal documents. Cover chunking, embeddings, retrieval, prompting, and how you would evaluate it.",
+    "expected_concepts": ["chunking strategy", "embedding model choice", "vector store", "metadata filtering / access control", "top-k and reranking", "grounding and citations", "offline eval set", "hallucination checks"],
+    "evaluation_rubric": {
+      "correctness": "A complete pipeline from ingestion to answer.",
+      "depth": "Addresses access control, evaluation and failure modes like irrelevant retrieval.",
+      "communication": "States trade-offs (chunk size, k, latency vs quality)."
+    },
+    "follow_up_possibilities": ["How do you keep the index fresh?", "How would you stop one user seeing another's documents?", "How do you measure answer faithfulness?"],
+    "for_coding_interview": false
+  },
+  {
+    "question_id": "ml_gradient_descent",
+    "type": "technical",
+    "topic": "machine_learning",
+    "subtopic": "optimisation",
+    "difficulty": "easy",
+    "roles": ["ml_engineer"],
+    "question_text": "How does gradient descent work, and what are the differences between batch, stochastic and mini-batch gradient descent? What happens if the learning rate is too high or too low?",
+    "expected_concepts": ["gradient of loss", "update rule", "noise vs stability", "compute efficiency", "divergence", "slow convergence", "learning rate schedules"],
+    "evaluation_rubric": {
+      "correctness": "Correct update rule and variant differences.",
+      "depth": "Discusses learning-rate effects and practical choices like Adam or schedules.",
+      "communication": "Intuitive explanation, not just formulas."
+    },
+    "follow_up_possibilities": ["What does momentum add?", "Why does Adam often converge faster?"],
+    "for_coding_interview": false
+  }
+]

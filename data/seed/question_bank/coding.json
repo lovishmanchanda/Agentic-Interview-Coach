@@ -1,0 +1,115 @@
+[
+  {
+    "question_id": "two_sum",
+    "type": "coding",
+    "topic": "arrays",
+    "subtopic": "hash_map",
+    "difficulty": "medium",
+    "roles": ["software_engineer", "backend", "fullstack", "ml_engineer"],
+    "question_text": "Given an array of integers `nums` and an integer `target`, return the indices of the two numbers that add up to `target`. Each input has exactly one solution, and you may not use the same element twice. Return the answer in any order.",
+    "expected_concepts": ["hash map lookup", "single pass", "O(n) time", "O(n) space", "complement = target - x"],
+    "evaluation_rubric": {
+      "correctness": "Returns the correct pair of indices for all cases, including duplicates like [3,3].",
+      "complexity": "Recognises the O(n^2) brute force and improves it to O(n) with a hash map.",
+      "edge_cases": "Handles negative numbers, duplicates, and does not reuse the same index.",
+      "communication": "Explains the complement idea before coding."
+    },
+    "follow_up_possibilities": ["What if the array is sorted?", "What if there can be multiple valid pairs?", "Can you do it in O(1) extra space?"],
+    "for_coding_interview": true,
+    "test_cases": [
+      {"input": "[2,7,11,15], 9", "expected_output": "[0, 1]", "is_hidden": false},
+      {"input": "[3,2,4], 6", "expected_output": "[1, 2]", "is_hidden": false},
+      {"input": "[3,3], 6", "expected_output": "[0, 1]", "is_hidden": false},
+      {"input": "[1,2,3,4], 7", "expected_output": "[2, 3]", "is_hidden": true},
+      {"input": "[-3,4,3,90], 0", "expected_output": "[0, 2]", "is_hidden": true}
+    ],
+    "coding": {
+      "entry_function": "two_sum",
+      "constraints": "2 <= nums.length <= 10^4 | -10^9 <= nums[i] <= 10^9 | exactly one valid answer",
+      "examples": [
+        {"input": "nums = [2,7,11,15], target = 9", "output": "[0,1]", "explanation": "nums[0] + nums[1] == 9"},
+        {"input": "nums = [3,2,4], target = 6", "output": "[1,2]"}
+      ],
+      "template_code": {
+        "python": "def two_sum(nums: list[int], target: int) -> list[int]:\n    \"\"\"Return indices of the two numbers that add up to target.\"\"\"\n    # Your solution here\n    pass\n",
+        "javascript": "/**\n * @param {number[]} nums\n * @param {number} target\n * @return {number[]}\n */\nfunction twoSum(nums, target) {\n    // Your solution here\n}\n",
+        "java": "import java.util.*;\n\nclass Solution {\n    public int[] twoSum(int[] nums, int target) {\n        // Your solution here\n        return new int[]{};\n    }\n}\n"
+      },
+      "time_limit_minutes": 20
+    }
+  },
+  {
+    "question_id": "reverse_linked_list",
+    "type": "coding",
+    "topic": "linked_list",
+    "subtopic": "pointer_manipulation",
+    "difficulty": "easy",
+    "roles": ["software_engineer", "backend", "fullstack"],
+    "question_text": "Given the head of a singly linked list, reverse the list and return the new head. Follow-up: can you do it both iteratively and recursively?",
+    "expected_concepts": ["prev/current/next pointers", "in-place reversal", "O(n) time", "O(1) space iterative", "recursion depth O(n)"],
+    "evaluation_rubric": {
+      "correctness": "Correctly reverses lists of length 0, 1 and n.",
+      "complexity": "Iterative solution is O(n) time, O(1) space; knows recursive uses O(n) stack.",
+      "edge_cases": "Handles empty list and single node without errors.",
+      "communication": "Describes the pointer updates clearly, ideally with a small drawing or trace."
+    },
+    "follow_up_possibilities": ["Reverse only positions m to n.", "Reverse in groups of k.", "Implement it recursively."],
+    "for_coding_interview": true,
+    "test_cases": [
+      {"input": "[1,2,3,4,5]", "expected_output": "[5, 4, 3, 2, 1]", "is_hidden": false},
+      {"input": "[1,2]", "expected_output": "[2, 1]", "is_hidden": false},
+      {"input": "[]", "expected_output": "[]", "is_hidden": false},
+      {"input": "[7]", "expected_output": "[7]", "is_hidden": true}
+    ],
+    "coding": {
+      "entry_function": "reverse_list",
+      "constraints": "0 <= number of nodes <= 5000 | -5000 <= Node.val <= 5000",
+      "examples": [
+        {"input": "head = [1,2,3,4,5]", "output": "[5,4,3,2,1]"},
+        {"input": "head = []", "output": "[]"}
+      ],
+      "template_code": {
+        "python": "class ListNode:\n    def __init__(self, val=0, next=None):\n        self.val = val\n        self.next = next\n\n\ndef reverse_list(head: ListNode | None) -> ListNode | None:\n    \"\"\"Reverse a singly linked list and return the new head.\"\"\"\n    # Your solution here\n    pass\n"
+      },
+      "time_limit_minutes": 20
+    }
+  },
+  {
+    "question_id": "valid_parentheses",
+    "type": "coding",
+    "topic": "stack",
+    "subtopic": "bracket_matching",
+    "difficulty": "easy",
+    "roles": ["software_engineer", "backend", "fullstack", "frontend"],
+    "question_text": "Given a string `s` containing only the characters '(', ')', '{', '}', '[' and ']', determine whether it is valid: open brackets must be closed by the same type of bracket, in the correct order, and every close bracket must have a matching open bracket.",
+    "expected_concepts": ["stack", "matching map", "early exit on mismatch", "empty stack at the end", "O(n) time"],
+    "evaluation_rubric": {
+      "correctness": "Rejects interleaved brackets like '([)]' and unmatched closers.",
+      "complexity": "O(n) time and O(n) space with a stack.",
+      "edge_cases": "Handles a lone closing bracket and leftover open brackets.",
+      "communication": "Explains why a stack fits the last-opened-first-closed rule."
+    },
+    "follow_up_possibilities": ["Return the index of the first invalid character.", "What is the minimum number of insertions to make it valid?"],
+    "for_coding_interview": true,
+    "test_cases": [
+      {"input": "\"()\"", "expected_output": "True", "is_hidden": false},
+      {"input": "\"()[]{}\"", "expected_output": "True", "is_hidden": false},
+      {"input": "\"(]\"", "expected_output": "False", "is_hidden": false},
+      {"input": "\"([)]\"", "expected_output": "False", "is_hidden": true},
+      {"input": "\"]\"", "expected_output": "False", "is_hidden": true}
+    ],
+    "coding": {
+      "entry_function": "is_valid",
+      "constraints": "1 <= s.length <= 10^4 | s consists of brackets only",
+      "examples": [
+        {"input": "s = \"()[]{}\"", "output": "true"},
+        {"input": "s = \"(]\"", "output": "false"}
+      ],
+      "template_code": {
+        "python": "def is_valid(s: str) -> bool:\n    \"\"\"Return True if the bracket string is valid.\"\"\"\n    # Your solution here\n    pass\n",
+        "javascript": "/**\n * @param {string} s\n * @return {boolean}\n */\nfunction isValid(s) {\n    // Your solution here\n}\n"
+      },
+      "time_limit_minutes": 15
+    }
+  }
+]

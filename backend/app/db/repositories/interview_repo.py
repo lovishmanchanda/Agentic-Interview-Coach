@@ -1,0 +1,109 @@
+"""interview_sessions, interview_questions, candidate_answers, evaluations, interview_reports."""
+from datetime import datetime, timezone
+
+from pymongo import ASCENDING, DESCENDING, ReturnDocument
+
+_NO_ID = {"_id": 0}
+
+
+def utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _strip_id(doc: dict | None) -> dict | None:
+    if doc is not None:
+        doc.pop("_id", None)
+    return doc
+
+
+def as_utc(value: datetime) -> datetime:
+    """Stored datetimes are UTC; some drivers/test doubles hand them back naive."""
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
+class InterviewRepository:
+    def __init__(self, db):
+        self.sessions = db["interview_sessions"]
+        self.questions = db["interview_questions"]
+        self.answers = db["candidate_answers"]
+        self.evaluations = db["evaluations"]
+        self.reports = db["interview_reports"]
+
+    # ── sessions ──
+    async def create_session(self, doc: dict) -> dict:
+        await self.sessions.insert_one({**doc})
+        return doc
+
+    async def get_session(self, session_id: str) -> dict | None:
+        return await self.sessions.find_one({"session_id": session_id}, _NO_ID)
+
+    async def list_sessions(self, candidate_id: str, limit: int = 50) -> list[dict]:
+        cursor = self.sessions.find({"candidate_id": candidate_id}, _NO_ID).sort("started_at", DESCENDING)
+        return await cursor.to_list(length=limit)
+
+    async def transition(self, session_id: str, *, from_states: list[str], to_state: str,
+                         extra: dict | None = None) -> dict | None:
+        """Compare-and-set state change. Returns None if the session was not in one of `from_states`
+        (e.g. a duplicate ANSWER while the first one is still being evaluated)."""
+        # No projection here: the in-memory test double returns None for find_one_and_update when a
+        # projection is combined with a filter on the field being updated. `_id` is dropped in Python.
+        doc = await self.sessions.find_one_and_update(
+            {"session_id": session_id, "state": {"$in": from_states}},
+            {"$set": {"state": to_state, "updated_at": utcnow(), **(extra or {})}},
+            return_document=ReturnDocument.AFTER)
+        return _strip_id(doc)
+
+    async def update_session(self, session_id: str, changes: dict) -> dict | None:
+        doc = await self.sessions.find_one_and_update(
+            {"session_id": session_id}, {"$set": {**changes, "updated_at": utcnow()}},
+            return_document=ReturnDocument.AFTER)
+        return _strip_id(doc)
+
+    # ── questions / answers / evaluations ──
+    async def add_question(self, doc: dict) -> dict:
+        await self.questions.insert_one({**doc})
+        return doc
+
+    async def get_question(self, question_id: str) -> dict | None:
+        return await self.questions.find_one({"question_id": question_id}, _NO_ID)
+
+    async def recent_bank_question_ids(self, candidate_id: str, *, exclude_session_id: str | None = None,
+                                       limit: int = 50) -> list[str]:
+        """Bank questions this candidate was asked most recently (newest first), so new interviews vary."""
+        query: dict = {"candidate_id": candidate_id, "bank_question_id": {"$ne": None}}
+        if exclude_session_id:
+            query["session_id"] = {"$ne": exclude_session_id}
+        cursor = self.questions.find(query, {"_id": 0, "bank_question_id": 1}).sort("asked_at", DESCENDING)
+        return list(dict.fromkeys(d["bank_question_id"] for d in await cursor.to_list(length=limit)))
+
+    async def session_questions(self, session_id: str) -> list[dict]:
+        return await self.questions.find({"session_id": session_id}, _NO_ID).sort("asked_at", ASCENDING).to_list(length=100)
+
+    async def add_answer(self, doc: dict) -> dict:
+        await self.answers.insert_one({**doc})
+        return doc
+
+    async def session_answers(self, session_id: str) -> list[dict]:
+        return await self.answers.find({"session_id": session_id}, _NO_ID).sort("submitted_at", ASCENDING).to_list(length=200)
+
+    async def add_evaluation(self, doc: dict) -> dict:
+        await self.evaluations.insert_one({**doc})
+        return doc
+
+    async def session_evaluations(self, session_id: str) -> list[dict]:
+        return await self.evaluations.find({"session_id": session_id}, _NO_ID).sort("evaluated_at", ASCENDING).to_list(length=200)
+
+    # ── reports ──
+    async def save_report(self, doc: dict) -> dict:
+        await self.reports.insert_one({**doc})
+        return doc
+
+    async def get_report(self, report_id: str) -> dict | None:
+        return await self.reports.find_one({"report_id": report_id}, _NO_ID)
+
+    async def list_reports(self, candidate_id: str, limit: int = 50) -> list[dict]:
+        cursor = self.reports.find({"candidate_id": candidate_id}, _NO_ID).sort("generated_at", DESCENDING)
+        return await cursor.to_list(length=limit)
+
+    async def update_report(self, report_id: str, changes: dict) -> None:
+        await self.reports.update_one({"report_id": report_id}, {"$set": changes})

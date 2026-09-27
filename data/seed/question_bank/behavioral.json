@@ -1,0 +1,74 @@
+[
+  {
+    "question_id": "beh_difficult_project",
+    "type": "behavioral",
+    "topic": "behavioral",
+    "subtopic": "ownership",
+    "difficulty": "medium",
+    "roles": ["software_engineer", "backend", "fullstack", "frontend", "ml_engineer"],
+    "question_text": "Tell me about a time you led or drove a project that was in trouble. What was going wrong, what did you do, and what was the outcome?",
+    "expected_concepts": ["clear situation", "own role vs team", "specific actions", "measurable result", "lessons learned"],
+    "evaluation_rubric": {
+      "situation": "Context is specific enough to understand the stakes.",
+      "task": "Candidate's own responsibility is clear.",
+      "action": "Concrete steps the candidate personally took.",
+      "result": "Quantified or clearly described outcome, plus reflection."
+    },
+    "follow_up_possibilities": ["What would you do differently?", "How did you get buy-in from others?"],
+    "for_coding_interview": false
+  },
+  {
+    "question_id": "beh_disagreement",
+    "type": "behavioral",
+    "topic": "behavioral",
+    "subtopic": "collaboration",
+    "difficulty": "medium",
+    "roles": ["software_engineer", "backend", "fullstack", "frontend", "ml_engineer"],
+    "question_text": "Describe a time you disagreed with a teammate or manager on a technical decision. How did you handle it, and how was it resolved?",
+    "expected_concepts": ["respectful disagreement", "data or evidence", "listening", "commit after decision", "relationship preserved"],
+    "evaluation_rubric": {
+      "situation": "The disagreement and its stakes are clear.",
+      "task": "What the candidate needed to achieve is clear.",
+      "action": "Shows evidence-based persuasion and openness to being wrong.",
+      "result": "A resolution and its effect on the work and relationship."
+    },
+    "follow_up_possibilities": ["What if the decision had gone against you?", "Did you change your mind about anything?"],
+    "for_coding_interview": false
+  },
+  {
+    "question_id": "beh_failure",
+    "type": "behavioral",
+    "topic": "behavioral",
+    "subtopic": "growth",
+    "difficulty": "easy",
+    "roles": ["software_engineer", "backend", "fullstack", "frontend", "ml_engineer"],
+    "question_text": "Tell me about a mistake you made that had a real impact. How did you find out, what did you do next, and what changed afterwards?",
+    "expected_concepts": ["genuine mistake", "ownership without blame", "remediation", "prevention", "learning"],
+    "evaluation_rubric": {
+      "situation": "A real mistake, not a disguised strength.",
+      "task": "Clear on what needed fixing.",
+      "action": "Took ownership and fixed both the issue and its cause.",
+      "result": "Concrete change in process or behaviour afterwards."
+    },
+    "follow_up_possibilities": ["How did you communicate it to others?", "Has anything similar happened since?"],
+    "for_coding_interview": false
+  },
+  {
+    "question_id": "beh_learn_fast",
+    "type": "behavioral",
+    "topic": "behavioral",
+    "subtopic": "learning",
+    "difficulty": "easy",
+    "roles": ["software_engineer", "backend", "fullstack", "frontend", "ml_engineer"],
+    "question_text": "Describe a situation where you had to learn a new technology or domain quickly to deliver something. How did you approach it?",
+    "expected_concepts": ["learning strategy", "prioritisation", "asking for help", "delivering under time pressure", "outcome"],
+    "evaluation_rubric": {
+      "situation": "Why fast learning was necessary.",
+      "task": "What had to be delivered and by when.",
+      "action": "A deliberate learning approach, not just 'I read docs'.",
+      "result": "What was delivered and how well the learning held up."
+    },
+    "follow_up_possibilities": ["What would you do to ramp up faster next time?", "How did you validate your understanding?"],
+    "for_coding_interview": false
+  }
+]

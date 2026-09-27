@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+
+# Node / Next.js
+node_modules/
+.next/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Local data (Chroma index, seed outputs, audio)
+data/*
+!data/seed/
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Personal progress log -- kept local, never pushed
+workingflow.md
+
+# Project-local package caches
+**/.npm-cache/
+
+# Next.js writes these AI-agent notes on every `next dev`; not project files
+frontend/AGENTS.md
+frontend/CLAUDE.md
+
+# Kept locally, not pushed: replaced or rewritten in later phases
+# - sandbox_tool hard-codes the Piston VM's address and runs its own Flask server; it joins the repo in
+#   Phase 4 once it reads PISTON_URL from config (plan-review.md §C). The original is in "Live Interview Coach copy/".
+backend/app/core/coding/sandbox_tool/
+backend/scripts/sandbox_demo.py
+# - reference UI for the Monaco CodingLayout (Phase 4), deleted once that exists
+frontend/prototypes/
+# - superseded designs
+docs/archive/

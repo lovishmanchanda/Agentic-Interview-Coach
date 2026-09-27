@@ -1,0 +1,30 @@
+# Web / API
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic>=2.8
+pydantic-settings>=2.4
+email-validator>=2.1
+python-dotenv>=1.0
+
+# Database (Cosmos DB MongoDB API) -- PyMongo's native async client
+pymongo>=4.13
+
+# Auth
+pyjwt>=2.9
+bcrypt>=4.2
+
+# Mentor RAG (app/core/mentor/rag_tool)
+chromadb>=0.5
+langchain-core>=0.3
+huggingface-hub>=0.28
+groq>=0.11
+
+# Coding sandbox (app/core/coding/sandbox_tool). Flask goes away when server.py
+# is replaced by app/api/v1/code.py in Phase 4.
+requests>=2.31
+flask>=3.0
+
+# Tests + keyless local dev (in-memory MongoDB double; USE_INMEMORY_DB=true)
+pytest>=8.0
+httpx>=0.27
+mongomock-motor>=0.0.34

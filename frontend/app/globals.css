@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+/* Design tokens. Components use these via Tailwind utilities (bg-surface, text-muted, …). */
+:root {
+  --background: #f7f7fb;
+  --surface: #ffffff;
+  --surface-muted: #f1f2f7;
+  --border: #e3e5ee;
+  --foreground: #15172a;
+  --muted: #5d6278;
+  --primary: #5b5bd6;
+  --primary-hover: #4a4ac2;
+  --primary-soft: #ececfd;
+  --primary-foreground: #ffffff;
+  --success: #15803d;
+  --success-soft: #e8f6ee;
+  --danger: #c62f3b;
+  --danger-soft: #fdecee;
+  --warning: #a15c07;
+  --warning-soft: #fdf4e3;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0f1020;
+    --surface: #17182b;
+    --surface-muted: #1f2036;
+    --border: #2c2e48;
+    --foreground: #eceefa;
+    --muted: #a0a4c0;
+    --primary: #8b8bf5;
+    --primary-hover: #a3a3f8;
+    --primary-soft: #26274a;
+    --primary-foreground: #0f1020;
+    --success: #4ade80;
+    --success-soft: #16301f;
+    --danger: #f87171;
+    --danger-soft: #3a1a1f;
+    --warning: #fbbf24;
+    --warning-soft: #372a12;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-border: var(--border);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-soft: var(--primary-soft);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
+
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}

@@ -1,0 +1,1062 @@
+# AI Interview Coach — Master Implementation Plan
+
+> **Purpose**: This is the guiding stone for the entire project. All subsequent phase-wise plans, `flow.md`, `architecture.md`, and component-level plans should trace back to this document. Every decision made during the build should be consistent with the principles established here.
+
+---
+
+## Project Vision (North Star)
+
+Build an **AI-powered interview coaching platform** that goes beyond a simple question-asking chatbot. The system must:
+
+1. **Understand the candidate** — profile, skills, experience, interview history
+2. **Understand the target role/company** — requirements, interview style, skill expectations
+3. **Coach the candidate via an AI Mentor** — RAG-powered personalized coaching based on actual past interview performance, not generic topic grids
+4. **Simulate realistic interviews** — adaptive, stateful, role-appropriate, text or voice
+5. **Evaluate deeply** — multi-dimensional structured assessment, not just a score
+6. **Close the loop** — turn evaluation results into the Mentor's next coaching session automatically
+
+The core product loop is the system's heartbeat:
+
+```
+Interview → Evaluate → Report → Talk to Mentor → Improve → Interview Again
+```
+
+---
+
+## Open Questions
+
+> [!IMPORTANT]
+> These questions should be resolved before or during Phase 0. They will influence technical and architectural decisions.
+
+1. ~~**Database choice**~~ ✅ **Resolved**: **Azure Cosmos DB (MongoDB API)**. Flexible JSON documents suit the evolving schema across profiles, sessions, and evaluations.
+2. ~~**Authentication**~~ ✅ **Resolved**: **JWT + simple email/password** authentication. No Microsoft Entra ID.
+3. ~~**Voice streaming**~~ ✅ **Resolved**: **Batch mode first** for Phase 5. Streaming STT/TTS considered as a Phase 5+ upgrade only.
+4. ~~**Question bank seeding**~~ ✅ **Resolved**: Initial question bank covers **Software Engineer + ML Engineer** roles. Additional roles added in Phase 3 and beyond.
+5. ~~**Frontend framework**~~ ✅ **Resolved**: **Next.js (App Router) + JavaScript + Tailwind CSS**. No TypeScript.
+
+6. ~~**Code execution backend**~~ ✅ **Resolved**: **Piston**, self-hosted on an Azure VM (python, c, c++, java, javascript). Replaces Azure Code Interpreter + Judge0.
+7. ~~**Mentor RAG store**~~ ✅ **Resolved**: the built **`rag_tool`** (Chroma + Hugging Face embeddings + Groq chat) now, behind the AI Gateway. Azure AI Search later without changing callers.
+8. ~~**Question source**~~ ✅ **Resolved**: **hybrid**. Cosmos `question_bank` (seeded) first, with LLM generation as a fallback. The research engine is a later add-on that adds questions to the bank.
+9. ~~**Agent loop framework**~~ ✅ **Resolved**: a hand-rolled ReAct loop on `AIGateway.generate_with_tools()`.
+10. ~~**LLM provider**~~ ✅ **Resolved (2026-09-26)**: **Groq for every LLM call** (interviewer, evaluators, reports, Mentor). No Azure OpenAI. Embeddings stay on Hugging Face because Groq has no embedding models.
+
+> [!NOTE]
+> All open questions are resolved. See `plan-review.md` for what changed from the previous version of this plan and why.
+
+---
+
+## Built Modules
+
+Two parts of this plan already exist and are wired in as modules rather than built from scratch:
+
+| Module | Location | Covers | Status |
+|---|---|---|---|
+| **`rag_tool`** | `backend/app/core/mentor/rag_tool/` | Phase 2: chunking, indexing, intent-routed retrieval, guardrailed Mentor prompt, `[n]` citations | ✅ Built, 12 unit tests. Needs the Cosmos adapter + persistence (Phase 2). Guide: `docs/modules/rag-tool/INTEGRATION.md` |
+| **`sandbox_tool`** | `backend/app/core/coding/sandbox_tool/` + `frontend/prototypes/coding-sandbox/` | Phase 4: `request_coding_question`, `submit_code_for_execution`, Piston client, reference editor UI | ⚠️ Built, needs fixes C1–C5 from `plan-review.md` (Phase 4). Guide: `docs/modules/coding-sandbox.md` |
+
+---
+
+## Proposed Technology Stack
+
+### Frontend
+| Layer | Technology | Reason |
+|---|---|---|
+| Framework | **Next.js 14+ (App Router)** | File-based routing, SSR, modern React patterns |
+| Language | **JavaScript (ES2022+)** | Team's preferred language, no TS compile overhead |
+| Styling | **Tailwind CSS** | Rapid, consistent UI with utility classes |
+| Real-time | **WebSocket / Socket.IO client** | Live interview + live coding communication |
+| Speech | **Web Speech API + Azure SDK** | Browser-side STT/TTS integration |
+| Code Editor | **Monaco Editor** | VS Code-grade in-browser code editor for live coding |
+| State | **Zustand** | Lightweight global state management |
+| Forms | **React Hook Form** | Managed forms with built-in validation |
+| UI Components | **Radix UI primitives** | Accessible, headless components |
+| Charts | **Recharts** | Performance dashboards and score visualization |
+
+### Backend
+| Layer | Technology | Reason |
+|---|---|---|
+| Framework | **Python + FastAPI** | Async, fast, Pydantic-native, great for AI workloads |
+| Language | **Python 3.11+** | Modern async support, excellent AI library ecosystem |
+| Real-time | **FastAPI WebSockets** | Native support, integrates with async architecture |
+| Validation | **Pydantic v2** | Schema enforcement across API and agent boundaries |
+| Task Queue | **Celery + Redis** (later) | Background agent tasks (company research, report gen) |
+| ORM/ODM | **Motor (async Cosmos DB)** or **SQLAlchemy** | Depends on DB choice |
+| Testing | **Pytest + httpx** | Async API testing |
+
+### AI / Azure
+| Layer | Technology | Reason |
+|---|---|---|
+| LLM | **Groq**: `openai/gpt-oss-120b` (interviewer, reports, Mentor) · `openai/gpt-oss-20b` (answer evaluation, high-volume calls) | Every LLM call in the system, one provider and one key. Free tier; the Mentor is already calibrated on it. |
+| Code Execution | **Piston (self-hosted, Azure VM)** | Sandboxed execution for python, c, c++, java, javascript. Candidate code never runs on the app server. |
+| STT | **Azure AI Speech SDK** | Speech-to-text for voice interviews |
+| TTS | **Azure AI Speech SDK** | Text-to-speech for AI interviewer voice |
+| Mentor RAG | **Chroma + HF `all-MiniLM-L6-v2`** (via `rag_tool`) | Interview-history retrieval for the Mentor. Moves to Azure AI Search later behind `gateway.search()`. |
+| Search/Retrieval | **Azure AI Search** (Phase 3) | Company knowledge and JD indexes |
+| Agent loop | **Hand-rolled ReAct on Groq tool calling** | Interview agent + prep agents; no agent framework |
+
+### Data / Infrastructure
+| Layer | Technology | Reason |
+|---|---|---|
+| Primary DB | **Azure Cosmos DB (MongoDB API)** | Flexible document schema, evolving data model |
+| File Storage | **Azure Blob Storage** | Resumes, JDs, audio, generated reports |
+| Secrets | **Azure Key Vault** | API keys, DB credentials |
+| Hosting (BE) | **Azure App Service** | Simple FastAPI deployment, no container orchestration needed |
+| Hosting (FE) | **Azure Static Web Apps** | Next.js deployment with CDN |
+
+### Developer Tooling
+| Tool | Purpose |
+|---|---|
+| Git + GitHub | Version control |
+| GitHub Actions | CI/CD pipelines |
+| `.env` files + Azure Key Vault | Configuration management |
+| `pytest` | Backend testing |
+| `jest` + `testing-library` | Frontend testing |
+
+---
+
+## Project Structure (Repository Layout)
+
+```text
+Agentic Interview Coach/
+│
+├── frontend/                          # Next.js App (initialised in Phase 0)
+│   ├── prototypes/coding-sandbox/     # Built: vanilla sandbox UI, reference for CodingLayout
+│   ├── app/                           # App Router pages
+│   │   ├── (auth)/                    # Auth group: login, register
+│   │   ├── (app)/                     # Protected group
+│   │   │   ├── dashboard/
+│   │   │   ├── mentor/                # AI Mentor chat (replaces preparation)
+│   │   │   ├── interview/
+│   │   │   │   ├── configure/
+│   │   │   │   ├── session/[sessionId]/
+│   │   │   │   └── report/[reportId]/
+│   │   │   └── profile/
+│   │   ├── layout.js
+│   │   └── page.js                    # Landing page
+│   ├── components/                    # Reusable UI components
+│   │   ├── ui/                        # Primitive components (buttons, inputs)
+│   │   ├── interview/                 # Interview-specific components
+│   │   ├── mentor/                    # AI Mentor chat components
+│   │   ├── voice/                     # Voice UI components
+│   │   └── charts/                    # Score/progress charts
+│   ├── hooks/                         # Custom React hooks
+│   ├── lib/                           # Utility functions, API client
+│   ├── store/                         # Zustand state stores (authStore, interviewStore, mentorStore)
+│   └── public/                        # Static assets
+│
+├── backend/                           # FastAPI Application
+│   ├── app/
+│   │   ├── main.py                    # FastAPI app entry point
+│   │   ├── config.py                  # Settings and environment config
+│   │   ├── dependencies.py            # FastAPI dependency injection
+│   │   │
+│   │   ├── api/                       # Route handlers
+│   │   │   ├── v1/
+│   │   │   │   ├── auth.py
+│   │   │   │   ├── users.py
+│   │   │   │   ├── profiles.py
+│   │   │   │   ├── mentor.py          # /mentor/message, /mentor/conversations
+│   │   │   │   ├── interviews.py
+│   │   │   │   ├── questions.py
+│   │   │   │   ├── reports.py
+│   │   │   │   ├── code.py            # /code/execute (practice runs, ungraded)
+│   │   │   │   └── ws.py              # WebSocket endpoints
+│   │   │
+│   │   ├── core/                      # Core domain logic
+│   │   │   ├── interview/
+│   │   │   │   ├── engine.py          # Interview orchestrator
+│   │   │   │   ├── state_machine.py   # Interview state management
+│   │   │   │   ├── question_engine.py # Question selection (bank + LLM)
+│   │   │   │   ├── adaptation_engine.py
+│   │   │   │   ├── context_builder.py # Build context for LLM calls
+│   │   │   │   └── report_generator.py
+│   │   │   │
+│   │   │   ├── mentor/                # AI Mentor + RAG engine
+│   │   │   │   ├── rag_tool/          # ✅ Built: chunking, retrieval, Mentor prompt, citations
+│   │   │   │   ├── mentor_agent.py    # Loads conversation, calls RagService.answer(), persists turn
+│   │   │   │   └── indexer.py         # to_rag_report() adapter + index on REPORT_READY
+│   │   │   │
+│   │   │   ├── coding/                # Live coding
+│   │   │   │   ├── sandbox_tool/      # ✅ Built: coding tools + Piston client (fixes in Phase 4)
+│   │   │   │   ├── sandbox_client.py  # Single Piston client, called via gateway.execute_code()
+│   │   │   │   └── test_harness.py    # Wraps candidate code with test cases (Python first)
+│   │   │   │
+│   │   │   └── evaluation/
+│   │   │       ├── answer_evaluator.py
+│   │   │       ├── technical_evaluator.py
+│   │   │       ├── behavioral_evaluator.py
+│   │   │       └── code_evaluator.py
+│   │   │
+│   │   ├── agents/                    # Agentic workflows
+│   │   │   ├── interview_agent.py     # ReAct loop (see interview-agent-implementation-plan.md)
+│   │   │   ├── interview_tools.py
+│   │   │   ├── interview_agent_schemas.py
+│   │   │   ├── orchestrator.py        # Company prep orchestrator
+│   │   │   ├── company_research.py    # Company research agent
+│   │   │   ├── jd_analyzer.py        # JD analysis agent
+│   │   │   ├── candidate_profiler.py  # Profile retrieval agent
+│   │   │   ├── gap_analyzer.py        # Gap analysis agent
+│   │   │   └── prep_planner.py       # Preparation plan agent
+│   │   │
+│   │   ├── gateway/                   # AI Gateway (central abstraction)
+│   │   │   ├── ai_gateway.py          # Main AI gateway class
+│   │   │   ├── llm_client.py          # Groq client wrapper (chat, tools, JSON output)
+│   │   │   ├── speech_client.py       # Azure Speech SDK wrapper
+│   │   │   ├── search_client.py       # Azure AI Search wrapper
+│   │   │   └── embedding_client.py    # Embedding generation
+│   │   │
+│   │   ├── voice/                     # Voice processing
+│   │   │   ├── stt.py                 # Speech-to-text
+│   │   │   ├── tts.py                 # Text-to-speech
+│   │   │   ├── streaming.py           # Real-time audio streaming
+│   │   │   └── turn_detector.py       # Voice activity detection
+│   │   │
+│   │   ├── db/                        # Database layer
+│   │   │   ├── client.py              # DB connection
+│   │   │   ├── repositories/          # Data access objects
+│   │   │   │   ├── user_repo.py
+│   │   │   │   ├── profile_repo.py
+│   │   │   │   ├── interview_repo.py
+│   │   │   │   └── mentor_repo.py
+│   │   │   └── models/                # Pydantic/DB models
+│   │   │
+│   │   └── utils/                     # Shared utilities
+│   │       ├── security.py            # JWT, password hashing
+│   │       ├── logging.py             # Structured logging
+│   │       └── exceptions.py          # Custom exception types
+│   │
+│   ├── scripts/                       # Dev scripts (sandbox_demo.py)
+│   ├── tests/                         # Backend tests
+│   │   ├── unit/                      # unit/mentor/ holds the rag_tool tests
+│   │   ├── integration/
+│   │   └── e2e/
+│   ├── requirements.txt
+│   └── pytest.ini
+│
+├── prompts/                           # Version-controlled prompts
+│   ├── interviewer/
+│   │   ├── technical_v1.txt
+│   │   └── personal_v1.txt
+│   ├── evaluator/
+│   │   ├── technical_v1.txt
+│   │   └── behavioral_v1.txt
+│   ├── mentor/
+│   │   ├── mentor_v1.txt              # Mentor chat agent system prompt
+│   │   └── rag_indexer_v1.txt         # Chunk formatting for indexing
+│   ├── company/
+│   │   ├── research_v1.txt
+│   │   └── gap_analysis_v1.txt
+│   └── report/
+│       └── report_generator_v1.txt
+│
+├── data/                              # Seed data (committed) + local runtime data (ignored)
+│   ├── seed/                          # question_bank JSON (incl. coding problems + test cases)
+│   └── chroma/                        # Mentor RAG index (runtime, gitignored)
+│
+├── evaluation/                        # AI system evaluation
+│   ├── datasets/
+│   ├── agent_eval/
+│   └── interview_eval/
+│
+├── docs/                              # Project documentation
+│   ├── implementation_plan.md  architecture.md  flow.md
+│   ├── interview-agent-implementation-plan.md
+│   ├── plan-review.md                 # What changed vs the previous plan
+│   ├── api.md  prompts.md  data_models.md   (to be written)
+│   ├── modules/                       # Guides for built modules (rag-tool/, coding-sandbox.md)
+│   └── archive/                       # Superseded designs
+│
+├── .github/
+│   └── workflows/
+│
+├── .env.example
+└── README.md
+```
+
+---
+
+## Feature Requirements
+
+### Core Features (Must Have — All Phases)
+
+| Feature | Priority | Phase |
+|---|---|---|
+| Candidate profile creation and management | 🔴 Critical | Phase 0 |
+| Authentication and session management | 🔴 Critical | Phase 0 |
+| Technical interview engine (text mode) | 🔴 Critical | Phase 1 |
+| Interview state machine | 🔴 Critical | Phase 1 |
+| Adaptive question selection | 🔴 Critical | Phase 1 |
+| Structured answer evaluation | 🔴 Critical | Phase 1 |
+| Interview report generation | 🔴 Critical | Phase 1 |
+| **AI Mentor (RAG-powered chat)** | 🔴 Critical | Phase 2 |
+| **Post-interview RAG indexing pipeline** | 🔴 Critical | Phase 2 |
+| **Interview history retrieval (`rag_tool`: Chroma now, Azure AI Search later)** | 🔴 Critical | Phase 2 |
+| **Resumable sessions (`SESSION_SNAPSHOT` on reconnect)** | 🔴 Critical | Phase 1 |
+| **Graded coding with per-test results** | 🟠 High | Phase 4 |
+| **Weak-Area Drill interview (loop closure)** | 🟠 High | Phase 2 / 4 |
+| Company research agent | 🟠 High | Phase 3 |
+| JD analysis and skill extraction | 🟠 High | Phase 3 |
+| Gap analysis | 🟠 High | Phase 3 |
+| Company prep plan (surfaced via Mentor) | 🟠 High | Phase 3 |
+| Serious Interview mode (Interviewer + Evaluator separation) | 🔴 Critical | Phase 4 |
+| Personal/behavioral interview | 🟠 High | Phase 4 |
+| STAR evaluation framework | 🟠 High | Phase 4 |
+| **Live coding interview with code execution** | 🟠 High | Phase 4 |
+| Voice STT integration | 🟡 Medium | Phase 5 |
+| Voice TTS integration | 🟡 Medium | Phase 5 |
+| Real-time voice turn detection | 🟡 Medium | Phase 5 |
+
+### Enhanced Features (Should Have)
+
+| Feature | Priority | Phase |
+|---|---|---|
+| Dashboard with performance overview | 🟠 High | Phase 1–2 |
+| Practice mode with coaching | 🟠 High | Phase 1 |
+| Hybrid question bank + LLM generation | 🟠 High | Phase 1 |
+| Mentor-driven next-steps recommendation (post-interview) | 🟠 High | Phase 2 |
+| Mentor conversation history | 🟡 Medium | Phase 2 |
+| Mentor "Talk to Mentor" CTA on report page | 🟠 High | Phase 2 |
+| Mentor citation chips (`[n]` → session report link) | 🟠 High | Phase 2 |
+| Per-session token budget in the AI Gateway | 🟡 Medium | Phase 1 (hook) / Phase 6 |
+| Company knowledge indexing (Azure AI Search) | 🟡 Medium | Phase 3 |
+| Monaco Editor syntax highlighting + multi-language support | 🟠 High | Phase 4 |
+| Code execution result shown to candidate in practice mode | 🟡 Medium | Phase 4 |
+| Audio retention consent flow | 🟡 Medium | Phase 5 |
+| Agent observability and logging | 🟡 Medium | Phase 6 |
+
+### Future / Nice-to-Have Features
+
+| Feature | Phase |
+|---|---|
+| Streaming real-time STT (low-latency voice) | Phase 5+ |
+| Voice + live coding combined (speak while coding) | Future |
+| Resume parsing and auto-profile | Future |
+| Collaborative real-time coding (Yjs CRDT) | Future |
+| Group/peer interview simulation | Future |
+| Mentor-assigned structured study plans | Future |
+| Mentor follow-through tracking (did candidate act on advice?) | Future |
+| Mobile app | Future |
+
+---
+
+## Phase-by-Phase Execution Plan
+
+### Execution Order & MVP Cut
+
+Phase numbers are kept stable so references across docs stay valid, but phases are **built in this order**:
+
+```
+Phase 0 → Phase 1 (starting with the walking skeleton, 1.0) → Phase 2 → Phase 4 → Phase 3 → Phase 5 → Phase 6
+```
+
+- **Phase 4 comes before Phase 3.** Coding is mostly built already (`sandbox_tool`) and is a strong demo feature. Company prep is the least essential and most expensive phase. Building 0 → 1 → 2 → 4 closes the full loop (Interview → Report → Mentor → Drill → Interview again) sooner.
+- **MVP = Phases 0, 1, 2 and 4, text mode only.** Voice (Phase 5) and company prep (Phase 3) come after the MVP. Voice is the riskiest phase (latency, end-of-speech detection), so it stays off the critical path.
+- Phase 6's *upgrade* work comes last, but its foundations (session-ID logging, fake Gateway, evaluator test set) start in Phases 0–1.
+
+---
+
+### Phase 0 — Foundations & Infrastructure
+**Goal**: Establish the project structure, core configuration, authentication, candidate profile system, and database. No AI features yet. Everything else builds on this.
+
+**Duration Estimate**: 1–2 weeks
+
+#### Tasks
+
+**0.1 Repository and Project Setup**
+- Initialize Git repository on GitHub
+- Set up monorepo structure: `frontend/`, `backend/`, `prompts/`, `data/`, `docs/`
+- Set up `.env.example` with all required environment variable keys
+- Create `README.md` with project overview and setup instructions
+- **Local dev without Azure:** `docker-compose.yml` with the Cosmos DB emulator (or plain MongoDB), the backend and the frontend. With `APP_ENV=local`, the app uses the fake Gateway (0.2) and a local Chroma directory, so `docker-compose up` runs the whole app with no cloud keys.
+
+**0.2 Backend Foundation**
+- Initialize FastAPI project with async support
+- Configure Pydantic v2 settings (environment-based config)
+- Set up structured logging with context (request ID, user ID, **session ID**) **from day one**. Every log line during an interview carries its `session_id`; debugging the agent loop without it is painful.
+- Create `custom exception handlers` and standard error response schema
+- Implement `AI Gateway` stub (generate, stream, embed, transcribe, synthesize — all stubbed initially)
+- **Fake Gateway for tests and local dev:** `FakeAIGateway` implements the same interface and returns scripted replies (LLM text, structured JSON, tool calls, `ExecutionResult`s), like `rag_tool`'s `FakeEmbeddings`. Agent loops, the state machine and whole interviews can then be tested quickly, for free and deterministically. Keep a few real-model runs for prompt quality only.
+- Set up Azure Key Vault integration for secrets (or `.env` for local)
+
+**0.3 Database Setup**
+- Connect to Azure Cosmos DB (MongoDB API)
+- Create all core collections:
+  - `users`, `candidate_profiles`, `roles`, `companies`
+  - `interview_sessions`, `interview_questions`, `candidate_answers`
+  - `evaluations`, `interview_reports`, `agent_runs`
+  - `mentor_conversations`
+- Implement repository pattern — one repository class per entity
+- Write DB connection health check endpoint
+
+**0.4 Authentication**
+- Implement JWT-based authentication (register, login, refresh token)
+- Password hashing with bcrypt
+- Protected route middleware
+- Role-based access (user, admin)
+
+**0.5 Candidate Profile API**
+- `POST /api/v1/profiles` — create candidate profile
+- `GET /api/v1/profiles/me` — fetch my profile
+- `PUT /api/v1/profiles/me` — update profile
+- Profile schema: name, education, experience level, target role, company, skills, preferences (input/output mode)
+
+**0.6 Frontend Foundation**
+- Initialize Next.js 14 (App Router) with JavaScript and Tailwind CSS
+- Set up design system: color palette, typography, spacing tokens
+- Configure Zustand for global state (auth, user profile, interview session, mentor)
+- Implement API client (`lib/api.js`) with auth token handling
+- Create auth pages: Landing, Login, Register
+- Create profile setup wizard (multi-step form)
+- Create dashboard shell (layout with sidebar navigation)
+
+**0.7 Mentor RAG + Question Bank Seed Setup**
+- Configure `CHROMA_PATH` / `CHROMA_COLLECTION` and create one `RagService` at startup (see `docs/modules/rag-tool/INTEGRATION.md`). The index schema (chunk IDs + metadata) is already fixed by `rag_tool`.
+- Create `data/seed/question_bank/*.json` and a seed script that upserts it into Cosmos `question_bank`. Include the 3 coding problems from `sandbox_tool` (`two_sum`, `reverse_linked_list`, `valid_parentheses`) with their test cases.
+- Azure AI Search `company-knowledge` index is deferred to Phase 3.
+
+**📌 Suggestions for Phase 0**
+- Use `pydantic-settings` for config management — it natively reads `.env` files and validates all required vars at startup. This catches missing secrets early.
+- Define your API response envelope standard early: `{ success, data, error, meta }`. All endpoints should use this.
+- Use `motor` (async MongoDB driver) from day one — you cannot switch to async later without rewriting.
+- Seed the database with a test user and test profile to make frontend development faster.
+- Document the `candidate_profile` schema thoroughly — it is the spine of the entire system. Every agent, interview engine, and evaluator will read from it.
+- Run the existing `rag_tool` tests (`cd backend && pytest -q`) in CI from day one so the built module stays green while everything around it is added.
+
+---
+
+### Phase 1 — Core Interview Engine (Text Mode)
+**Goal**: Build the technical interview engine with text input, adaptive questioning, structured evaluation, and report generation. This is the product's foundation.
+
+**Duration Estimate**: 2–3 weeks
+
+#### Tasks
+
+**1.0 Walking Skeleton (do this first, ~3–4 days)**
+- Before building out 1.1–1.11, get **one text interview working end to end** with the thinnest possible version of each piece:
+  - one hard-coded question → `ANSWER` over the WebSocket → a basic evaluator call → a minimal saved report → `indexer.to_rag_report()` → `rag_tool.index_report()` → one Mentor question that cites that report
+- Use the fake Gateway (0.2) first, then switch to the real one.
+- The goal is to surface integration problems early (WebSocket lifecycle, state persistence, report shape, RAG adapter) rather than at the end of Phase 2. Every later task in this phase replaces one skeleton piece with the real one.
+- ✅ **Done (2026-09-26)**, verified live with Groq + Hugging Face. Thin pieces to replace next:
+
+| Skeleton piece (file) | Replaced by |
+|---|---|
+| ~~Fixed bank question, one question per interview~~ ✅ replaced in 1.1: `core/interview/question_engine.py`, 1–5 questions | ✅ 1.2 full config (type, focus topics, serious mode) |
+| Direct state writes with a compare-and-set guard (`InterviewRepository.transition`) | 1.3 `StateMachine` + `ACTION_TO_STATE` |
+| Bank text used verbatim as the interviewer's message | 1.6 interviewer agent (ReAct loop on `generate_with_tools`) |
+| Technical evaluator only (`core/evaluation/answer_evaluator.py`, `prompts/evaluator/technical_v1.txt`) | 1.7 behavioral evaluator + evaluator test set |
+| Deterministic report, no LLM (`core/interview/report_generator.py`) | 1.10 / Phase 1b Groq-written report |
+| Mentor with client-sent history, no persistence (`core/mentor/mentor_agent.py`) | Phase 2b conversation persistence |
+
+**1.1 Question Bank (Hybrid)**
+- Questions live in the Cosmos `question_bank` collection, seeded from `data/seed/` (Phase 0.7). Coding problems carry `test_cases` (visible + hidden), which the graded harness needs.
+- `question_repo` supports lookup by `type`, `topic`, `difficulty`, `roles`, excluding `asked_question_ids`.
+- On a bank miss, `QuestionEngine` generates a question via `AIGateway.generate_structured()` in the same `Question` schema: `id, type, topic, subtopic, difficulty, roles, expected_concepts, evaluation_rubric, follow_up_possibilities, source`. Good generated questions can be saved back to the bank (`source: llm_generated`).
+- ✅ **Done (2026-09-26)**, together with a thin 1.4:
+  - `QuestionEngine.next_question()` ranks bank candidates by: a topic not yet covered this session, then not asked in the candidate's recent sessions, then closest to the target difficulty, then a random draw seeded per session and turn.
+  - The profile's free-text role maps to a bank role key (`role_key()`). Difficulty is the profile preference, or comes from experience level when set to adaptive.
+  - On a bank miss, Groq (`gpt-oss-120b`, `prompts/interviewer/question_generation_v1.txt`) writes a question on the next uncovered role topic.
+  - Generated questions are kept with the session only. Saving them back to the bank waits for a quality gate (evaluator scores or human review).
+  - Interviews run 1–5 questions through `NEXT_TOPIC`. They wrap up early when the token budget runs low; a failed question fetch mid-interview also ends it, using the answers so far.
+- *Later add-on:* a `QuestionResearcher` agent that finds real-world questions and adds them to the bank. It isn't on the critical path.
+
+**1.2 Interview Configuration API**
+- `POST /api/v1/interviews` — create interview session
+- Configuration schema: interview_type (technical/personal), role, experience_level, company (optional), difficulty, input_mode, output_mode, interview_mode (practice/serious)
+- Validate configuration and store in DB
+- Return `session_id` to frontend
+- ✅ **Done (2026-09-27)**:
+  - `InterviewConfigRequest` (`db/models/interview.py`) takes `interview_type`, `interview_mode`, `role`, `experience_level`, `company`, `difficulty`, `input_mode`, `output_mode`, `question_count` (1–5) and `focus_topics` (≤ 5, for a Weak-Area Drill). Unknown fields are rejected.
+  - Any field left out comes from the profile. `target_difficulty` is stored on the session; "adaptive" starts from the experience level, and 1.8 will move it.
+  - Choices in the schema that aren't built yet (behavioral → 1.7, coding → Phase 4, voice → Phase 5) return 422 `option_unavailable` with a readable reason, so the contract won't change when they ship.
+  - `GET /api/v1/interviews/options?role=` returns the profile defaults, the role's topics (usual topics for the role, then bank topics) and the unavailable choices.
+  - Serious mode: no `EVALUATION` events and no evaluations in the snapshot until `REPORT_READY`. The report always shows them.
+  - The Weak-Area Drill link on the report (`/interview/configure?focus=…&role=…`) is in too, since it's the only entry point for `focus_topics`.
+
+**1.3 Interview State Machine**
+- Implement states: `SETUP → INTRODUCTION → QUESTION → WAITING_FOR_RESPONSE → EVALUATING → FOLLOW_UP_DECISION → NEXT_TOPIC → INTERVIEW_COMPLETE → EVALUATION → REPORT`
+- State transitions are handled by the backend — not the LLM
+- Persist full state to DB on every transition
+- Expose state via `GET /api/v1/interviews/{session_id}/state`
+
+**1.4 Question Engine**
+- `QuestionEngine` class: selects next question based on current state
+- Selection factors: role, difficulty, topics_covered, candidate_performance, previous_questions
+- Approach: bank first (matching topic, difficulty, role, not already asked); on a miss, LLM generation. Either way, the Interviewer Agent phrases the question conversationally.
+- LLM generation: call `AIGateway.generate_structured()` with role, difficulty and topic context. It returns a question in the standard schema.
+
+**1.5 AI Gateway — LLM Integration**
+- Connect `AIGateway.generate()` to Groq (`GROQ_INTERVIEW_MODEL`, default `openai/gpt-oss-120b`; `GROQ_FAST_MODEL` `openai/gpt-oss-20b` for `evaluate_answer`)
+- Implement `generate_structured()` — JSON output via Groq's `response_format`, always validated against the Pydantic schema, one retry on failure (verify which JSON modes the gpt-oss models support on Groq before relying on strict schema mode)
+- Implement token usage logging
+- Handle rate limits and retries with exponential backoff
+- Support temperature configuration per call type
+- Implement `generate_with_tools()` for the Interview Agent's ReAct loop (Groq `tools` parameter)
+- **Token budget hook**: `_log_usage()` adds up tokens per `session_id` and per user. `budget_remaining(session_id)` is read by `AdaptationEngine._should_wrap_up()`, so going over `SESSION_TOKEN_BUDGET` triggers a graceful wrap-up rather than an error.
+
+**1.6 Interviewer Agent**
+- Receives interview context (profile + state + question)
+- Generates conversational introduction to the question
+- Generates natural follow-up questions
+- Does **not** make state decisions — only generates dialogue
+
+**1.7 Answer Evaluation Engine**
+- `TechnicalEvaluator`: evaluates technical answers across dimensions — Problem Understanding, Approach, Correctness, Algorithm, Complexity, Edge Cases, Communication, Follow-up Handling
+- `BehavioralEvaluator`: evaluates behavioral answers — STAR framework (Situation, Task, Action, Result) + Communication, Clarity, Specificity, Ownership
+- Output: structured `EvaluationResult` JSON (scores per dimension + strengths + weaknesses + recommendations)
+- Store evaluation in DB linked to the answer and session
+- **Model answer (practice mode):** the evaluator also returns `model_answer_outline`, a short "a strong answer would cover…" list built from the question's `expected_concepts` and rubric. It's shown after each practice answer and kept out of the context in Serious mode.
+- **Evaluator test set:** `evaluation/datasets/evaluator_golden.jsonl` holds 20–30 answers per evaluator (weak → strong) with scores you set by hand. `evaluation/interview_eval/run_evaluator_eval.py` re-scores them and reports the gap (mean absolute error, rank agreement). Run it on **every** evaluator prompt change; a prompt change that worsens it doesn't ship. Scoring accuracy is what users trust, so this starts now rather than in Phase 6.
+
+**1.8 Adaptive Question Selection**
+- After each evaluation, compute running `performance_score` per topic
+- QuestionEngine uses this to: increase difficulty on strong answers, decrease on weak, trigger follow-up questions on partial answers, avoid repeating topics
+- Implement `AdaptationEngine` as a separate component with unit-testable logic
+
+**1.9 WebSocket Interview Flow**
+- `WebSocket /ws/interview/{session_id}` — real-time communication
+- Message types: see `architecture.md` §13 (single source of truth for event names)
+- Frontend sends `ANSWER` event → backend processes → sends `EVALUATION` (practice only) + `QUESTION`
+- State is stored in DB, not in WebSocket connection — reconnection-safe
+- **On every (re)connect** the server sends `SESSION_SNAPSHOT { state, current_question, transcript, coding_problem?, draft_code? }` so the UI rebuilds exactly where it left off. The frontend saves the editor draft to the session every 10s (debounced) so `draft_code` survives a disconnect.
+
+**1.10 Interview Report Generator**
+- After `INTERVIEW_COMPLETE`, trigger report generation
+- Report structure: Overall Score, Technical Score, Communication Score, Per-topic Breakdown, Strong Areas, Weak Areas, Recommendations, Suggested Next Preparation
+- Store report in DB; expose via `GET /api/v1/reports/{report_id}`
+
+**1.11 Frontend — Interview UI**
+- Interview configuration page (role, type, difficulty, mode selector)
+- Interview session page:
+  - **Practice Mode**: shows question, text input, optional hints, immediate feedback including the **model answer outline**
+  - **Serious Mode**: clean UI — interviewer avatar/name, question display, text area, timer, no scores visible
+- Report page: score cards, charts, breakdown, **"Talk to Mentor"** CTA
+- **Transcript replay** on the report page: each question, the candidate's answer and the evaluator's notes (strengths, weaknesses, model answer outline) side by side. Built from data already stored (`interview_questions`, `candidate_answers`, `evaluations`); no new AI calls.
+
+**📌 Suggestions for Phase 1**
+- Do the walking skeleton (1.0) before anything else. It's the cheapest way to find integration problems.
+- Build the `InterviewStateMachine` as a pure class first — test it independently with no AI calls. State transitions should be deterministic and fully tested before LLM is involved.
+- Separate `InterviewerAgent` (what to ask) from `EvaluatorAgent` (how they did). Two prompts, two responsibilities. This is the key architectural decision.
+- For the Question Engine, implement a simple heuristic selection first (rule-based difficulty scaling), then upgrade to LLM-assisted selection in Phase 4. Don't over-engineer it in Phase 1.
+- Use `structured outputs` / `function calling` for all evaluation calls. Never ask the LLM to "return a JSON" in free text — it will break.
+- Store every raw LLM response alongside the parsed result in DB for debugging. You will need this when evaluating AI quality later.
+- The `context_builder.py` is critical. Define exactly what context each agent receives. Over-stuffing context = inconsistent output + high cost.
+
+---
+
+### Phase 2 — AI Mentor & RAG Engine
+**Goal**: Build the AI Mentor — the RAG-powered coaching assistant that has access to all of the candidate's past interview history. After every completed interview, the report and evaluations are indexed. The Mentor retrieves this data to give genuinely personalized, history-grounded coaching rather than generic advice.
+
+> [!IMPORTANT]
+> This is the core differentiator of the product. The Mentor is what makes the platform feel like a real coach instead of another quiz tool. **Build it immediately after Phase 1** so that there is a complete end-to-end loop: Interview → Report → Mentor → Interview Again.
+
+**Duration Estimate**: ~1 week (the RAG core is already built in `rag_tool`; this phase integrates it)
+
+> [!NOTE]
+> **Already done in `rag_tool`** (`backend/app/core/mentor/rag_tool/`): semantic chunking with deterministic IDs (`{session_id}:summary`, `:question:{id}`, `:recommendations`), idempotent upsert, per-user filtering, intent-routed retrieval (specific → similarity with a 0.8 distance cutoff; vague → 2 most recent sessions; comparison → N most recent sessions), at most 2 chunks per session, a guardrailed Mentor prompt (grounding, prompt-injection resistance, scope limits), and `[n]` citations with `sources`. Tests: `backend/tests/unit/mentor/`.
+
+#### Tasks
+
+**2.1 Report → RAG Adapter + Indexing Trigger**
+- Implement `core/mentor/indexer.py::to_rag_report(report, evaluations, questions) -> rag_tool.InterviewReport`:
+  - `candidate_id` → `user_id`, `generated_at` → `created_at`, `config.interview_type` → `interview_type`
+  - `scores.overall` → `overall_score`; `strong_areas` → `strengths`; `weak_areas[].topic + reason` → `weaknesses`
+  - each evaluation + its question → `QuestionFeedback` (score, strengths, weaknesses, feedback, suggestion = first recommendation)
+  - `recommendations[].action` → `recommended_study_areas`
+- Trigger `rag.index_report(...)` as a **background task** when the session enters `REPORT_READY`. On failure, keep the Cosmos report and retry later (the upsert is idempotent).
+- Store the chunk IDs on the `interview_reports` document for traceability.
+
+**2.2 Gateway Wiring**
+- `gateway.embed()` and `gateway.search()` delegate to `rag_tool`'s HF embeddings and Chroma for now. Moving to Azure AI Search later only changes these two methods.
+- The Mentor's LLM call goes through the gateway (Groq `openai/gpt-oss-120b`), so token logging and budgets apply.
+
+**2.3 Mentor Agent**
+- Implement `mentor_agent.py`:
+  - `chat(candidate_id, user_message, conversation_id)` → `MentorResponse`
+  - Flow: load the last 8 turns from `mentor_conversations` → `RagService.answer(MentorChatRequest(user_id=candidate_id, message, history), invoke_llm=gateway…)` → store the turn with `retrieved_chunks = sources`
+  - `candidate_id` always comes from the JWT, never from the request body
+  - System prompt: `rag_tool.service.SYSTEM_PROMPT` is the current Mentor prompt. Move it to `prompts/mentor/mentor_v1.txt` and load it by version ID (principle 6).
+  - Mentor handles:
+    - "What should I study?" → retrieves weak areas, ranks by frequency + recency
+    - "How did I do overall?" → summarizes performance trends
+    - "I struggle with DSA" → retrieves DSA-specific evaluation chunks
+    - "Prepare me for Google" → triggers Company Prep Agent workflow (Phase 3)
+    - "Drill me on my weak spots" → replies with a **Weak-Area Drill** link (`/interview/configure?topics=…`) built from the latest report's `weak_areas`
+  - First-time (no history): `rag_tool` returns its no-data message. The UI shows `MentorWelcome` with a CTA to take a first interview.
+
+**2.4 Mentor Conversation Persistence**
+- Store every turn in `mentor_conversations` collection:
+  - `role`, `content`, `timestamp`, `retrieved_chunks` (for traceability)
+- Support multi-turn conversation history — Mentor sees last N turns in context
+- New conversation starts fresh but Mentor still has RAG access to all historical data
+
+**2.5 Mentor API**
+- `POST /api/v1/mentor/message` — send message, get Mentor response (streaming optional)
+- `GET /api/v1/mentor/conversations` — list past conversations
+- `GET /api/v1/mentor/conversations/{id}` — get full conversation history
+
+**2.6 Frontend — Mentor Chat UI**
+- Route: `/mentor`
+- Components:
+  - `MentorChat.jsx` — main chat container
+  - `ChatBubble.jsx` — per-message display (user vs. Mentor). Renders `[n]` as **citation chips** (date · topic from `sources[n-1]`) linking to `/interview/report/{reportId}`
+  - `MentorInput.jsx` — text input + send button
+  - `MentorWelcome.jsx` — shown when candidate has no interview history yet
+  - `MentorSidebar.jsx` — list of past conversations
+- First-load behavior:
+  - Has history → Mentor proactively greets with personalized insight from last report
+  - No history → `MentorWelcome` with CTA to take first interview
+- Navigation: "Talk to Mentor" CTA on every report page routes here
+- Mentorstore (Zustand): `conversationId`, `messages`, `isLoading`, `sendMessage()`, `loadHistory()`
+
+**📌 Suggestions for Phase 2**
+- The RAG indexing **must be async** — don't block the report API response waiting for indexing. Trigger it as a background task after `REPORT_READY`.
+- Filtering by `candidate_id` is already enforced on every Chroma query inside `rag_tool` (`where={"user_id": …}`). Keep a cross-user leakage test in the integration suite.
+- Don't retune retrieval without evidence. The 0.8 distance cutoff was calibrated against real MiniLM output; off-topic refusal is enforced by the prompt, not the cutoff.
+- The Mentor system prompt is the most important prompt in the system. The current one in `rag_tool` covers grounding, citations, injection resistance and scope; iterate on it against an eval set in `evaluation/`.
+- Store `retrieved_chunks` in every Mentor response in DB. This gives you explainability and debugging capability from day one.
+- Build the `MentorWelcome` state carefully — a first-time candidate with no history should feel welcomed, not confused. The CTA to take a first interview should be prominent.
+
+---
+
+### Phase 3 — Company Preparation Agent (Surfaced via Mentor)
+**Goal**: Build the company-specific preparation agentic workflow — company research, JD analysis, gap analysis, and personalized preparation plan. The plan is delivered **inside the Mentor chat** rather than as a separate page.
+
+> [!NOTE]
+> **Built after Phase 4 and outside the MVP** (see "Execution Order & MVP Cut"). Nothing in Phases 1, 2 or 4 depends on it.
+
+**Duration Estimate**: 2–3 weeks
+
+#### Tasks
+
+**3.1 Azure AI Search Setup**
+- Create Azure AI Search index for: company information, job descriptions, preparation documents, public interview data
+- Implement `SearchClient` in AI Gateway
+- Seed initial knowledge base with tech company interview info
+- Support both keyword and vector/semantic search
+
+**3.2 Company Research Agent**
+- Tool: `search_company(name)` → Azure AI Search
+- Tool: `search_web(query)` → optional web search tool
+- Agent researches: company overview, team structure, tech stack, interview process, behavioral values
+- Output: structured `CompanyProfile` object
+
+**3.3 JD Analyzer Agent**
+- Input: raw job description text (pasted or uploaded)
+- Tool: `extract_requirements(jd_text)` → structured extraction
+- Output: role, required skills, experience level, technical areas, behavioral requirements, nice-to-have skills
+
+**3.4 Candidate Profiler Agent**
+- Tool: `get_candidate_profile()` → DB retrieval
+- Tool: `get_interview_history()` → past interview performance (via `RagService` retrieval, which reuses the Phase 2 index)
+- Output: structured `CandidateSnapshot` for gap analysis
+
+**3.5 Gap Analyzer**
+- Receives: JD requirements + Candidate Snapshot
+- Computes: skill gaps (required but weak/missing), strength overlaps (required and strong), priority areas (high-impact gaps)
+- Output: `GapAnalysis` object — ranked list of gaps with severity
+
+**3.6 Preparation Planner Agent**
+- Input: GapAnalysis + CandidateProfile + CompanyProfile
+- Output: `PersonalizedPreparationPlan` — priority topics, learning sequence, practice sequence, assessment schedule, recommended interview timing, estimated preparation duration
+- Store plan in DB, display to user
+
+**3.7 Orchestrator**
+- `PrepAgentOrchestrator` coordinates the workflow: Research → Analyze JD → Profile Candidate → Gap Analysis → Plan
+- Triggered by the Mentor Agent when candidate says "Prepare me for Company X"
+- Tracks agent execution in `agent_runs` collection for observability
+- Handles failures gracefully — partial results are better than no results
+- Returns the plan as a structured response to the Mentor, which presents it conversationally in the chat
+
+**3.8 Frontend — No Separate Page Needed**
+- Company prep is now triggered and displayed **inside the Mentor chat** (`/mentor`)
+- Mentor shows agent progress conversationally: "Let me research Google for you…"
+- Plan is displayed as a Mentor message with structured formatting (priority list, focus areas)
+- User can ask follow-up questions in the same chat
+
+**📌 Suggestions for Phase 3**
+- Build each agent as a standalone function first, test it independently, then wire into the orchestrator. This makes debugging much easier.
+- Log every tool call in `agent_runs` — what tool, what input, what output, latency. This is essential for debugging agent behavior.
+- The Orchestrator should handle partial failures. If company research fails, still proceed with JD analysis + candidate profile. A partial plan is better than an error.
+- For the JD Analyzer, use structured output/function calling exclusively. The output must be machine-readable — it feeds directly into gap analysis.
+- Cache company research results in Azure AI Search. Don't re-research the same company on every request.
+- Consider rate limiting company research requests per user — web search tools can be expensive.
+
+---
+
+### Phase 4 — Serious Adaptive Interview & Behavioral Mode
+**Goal**: Build the flagship Serious Interview mode with explicit Interviewer/Evaluator separation, adaptive difficulty, and the Personal/Behavioral interview type.
+
+**Duration Estimate**: 2–3 weeks
+
+#### Tasks
+
+**4.1 Serious Interview Mode**
+- Implement strict mode: no hints, no coaching, no visible scoring
+- UI: clean interview room — interviewer name/avatar, question display only, text input, timer
+- Background evaluation runs silently — scores not shown during interview
+- Full report unlocked only at end
+
+**4.2 Interviewer Agent (Enhanced)**
+- Receives: interview context + question + previous answers + evaluation signals
+- Decides: natural follow-up vs. next topic vs. wrap-up
+- Generates: conversational transitions ("Good, let me follow up on that…", "Let's move to a different area…")
+- Does NOT see raw evaluation scores — receives only high-level signals (strong/weak/partial)
+
+**4.3 Evaluator Agent (Persistent)**
+- Runs after every answer
+- Accumulates per-topic, per-dimension scores throughout the interview
+- Inputs to next-question decision: running performance vector
+- At end: compiles final `InterviewEvaluation` — aggregate of all per-answer evaluations
+
+**4.4 Adaptive Question Selection (Enhanced)**
+- Full implementation of adaptive engine: performance history + current topic + role requirements + prep level
+- Difficulty scaling: Strong answer → harder; Weak answer → easier or follow-up; Partial → targeted follow-up
+- Topic rotation: ensure all required topics are covered within interview time limit
+- Avoid question repetition across sessions (track `asked_questions` per candidate)
+
+**4.5 Personal/Behavioral Interview**
+- Question bank: behavioral questions tagged by STAR component emphasis, leadership, ownership, problem-solving etc.
+- Evaluator: STAR framework evaluation + soft skills assessment
+- Evaluation dimensions: Situation Clarity, Task Definition, Action Description, Result Quantification, Communication, Confidence, Specificity, Professionalism
+- Feedback: explain *why* each STAR component scored high/low
+
+**4.6 Live Coding Interview Engine**
+
+The live coding interview is a **third interview type** alongside Personal and Technical. It gives candidates a real code editor inside the browser, asks coding problems, executes their code, and evaluates both the solution and the problem-solving process.
+
+> [!NOTE]
+> This is one of the most technically ambitious features. The coding execution infrastructure must be completely sandboxed — candidate code must never touch the application server.
+
+> [!NOTE]
+> **Already built in `sandbox_tool`** (`backend/app/core/coding/sandbox_tool/`): `request_coding_question` and `submit_code_for_execution` with the agent's tool signatures, a Piston client, and a 3-problem bank. A vanilla reference UI is in `frontend/prototypes/coding-sandbox/`. **Fix before wiring in** (`plan-review.md` §C): C1 graded harness, C2 remove the Flask server and global question state, C3 one Piston client via the gateway, C4 drop Go and add C, C5 problems move to `question_bank`.
+
+**4.6.1 — Code Execution Architecture**
+
+```text
+Candidate writes code (Monaco Editor)
+         ↓
+   Run   → POST /api/v1/code/execute   (practice run, ungraded, stdin allowed)
+   Submit→ WS CODE_SUBMIT {code, language, is_final}
+         ↓
+   submit_code_for_execution (sandbox_tool)
+         ↓
+   test_harness.wrap(code, problem.test_cases)   ← all tests, incl. hidden
+         ↓
+   AIGateway.execute_code() → sandbox_client → Piston (Azure VM)
+         python 3.12.0 · c 10.2.0 · c++ 10.2.0 · java 15.0.2 · javascript 20.11.1
+         ↓
+   ExecutionResult (status, stdout, stderr, runtime_ms, passed/total, test_results[])
+         ↓
+   WS CODE_RESULT → frontend      CodeEvaluator Agent → Structured Evaluation
+```
+
+The browser **never** reports an execution result. The server always runs the code itself.
+
+**4.6.2 — Frontend: Monaco Editor Integration**
+- Embed `@monaco-editor/react` — the same editor that powers VS Code
+- Language selector: Python, JavaScript, Java, C++, C (matching the Piston runtimes). Use `frontend/prototypes/coding-sandbox/` as the behaviour reference: starter code per language, run/submit, console output.
+- Features: syntax highlighting, auto-indent, bracket matching, basic IntelliSense
+- "Run Code" button → sends code + language + stdin (if any) to backend
+- Output panel: stdout, stderr, runtime, pass/fail status for test cases
+- In **Practice Mode**: output is always visible to candidate
+- In **Serious Mode**: candidate can run code and see their own output, but evaluator scoring remains hidden
+
+**4.6.3 — Piston Execution Client**
+- `core/coding/sandbox_client.py`: the **only** code that talks to Piston. `POST {PISTON_URL}/execute` with `X-API-Key`, body `{language, version, files:[{name, content}], stdin}`. Filenames: `main.py`, `main.c`, `main.cpp`, `Main.java`, `main.js`.
+- Called only via `AIGateway.execute_code(language, code, stdin)` (principle 2), so retries, logging and rate limits apply.
+- `PISTON_URL` / `PISTON_API_KEY` come from `config.py`. There's no hard-coded IP and no `load_dotenv` in module code.
+- Limits: code ≤ 10,000 chars, 30s request timeout, per-user rate limit on `/code/execute`. The VM sits behind TLS, or its firewall only allows the App Service outbound IPs.
+- Map Piston responses to a single `ExecutionStatus` enum: `accepted | wrong_answer | time_limit | runtime_error | compile_error | internal_error`.
+
+**4.6.4 — Graded Test Harness (new)**
+- `core/coding/test_harness.py`: given `problem_id`, load the problem from `question_bank`, wrap the candidate's function with a runner that executes **every** test case (hidden ones too), and print a machine-readable result per test.
+- It returns `passed_tests`, `total_tests` and `test_results[] {input, expected, actual, passed, is_hidden}`. In Serious mode, hidden tests' inputs and outputs are stripped before the result goes to the client; only the count is shown.
+- Python first. Other languages are run-only (stdout, no grading) until each gets a harness; JavaScript is next.
+- This replaces `sandbox_tool`'s current "exit code 0 = accepted" logic (C1).
+
+**4.6.5 — Code Evaluation Agent**
+- `CodeEvaluator` runs after code execution and receives: the problem statement, candidate's code, execution result (pass/fail, output), time taken to write
+- Evaluation dimensions:
+  - **Correctness** — does the code produce correct output?
+  - **Approach** — is the algorithm sound?
+  - **Time Complexity** — did the candidate analyse it correctly?
+  - **Space Complexity** — memory usage awareness
+  - **Code Quality** — readability, variable naming, structure
+  - **Edge Case Handling** — null, empty, boundary values
+  - **Communication** — did the candidate explain their thinking before coding?
+- In Practice Mode: detailed feedback shown immediately
+- In Serious Mode: stored silently, shown in final report
+
+**4.6.6 — Live Coding Interview State Machine Sub-Flow**
+
+```text
+CODING_QUESTION_PRESENTED
+         ↓
+CANDIDATE_THINKING          ← candidate can ask clarifying questions
+         ↓
+CANDIDATE_CODING            ← candidate types code in Monaco Editor
+         ↓
+CODE_SUBMITTED
+         ↓
+EXECUTION                   ← code runs in sandbox
+         ↓
+RESULT_SHOWN (to candidate)
+         ↓
+EVALUATING (background)
+         ↓
+FOLLOW_UP_DECISION
+  ├── Correct + fast → harder problem
+  ├── Correct + slow → complexity discussion follow-up
+  ├── Wrong → hint or simpler variant (practice) / next question (serious)
+  └── Timeout/Error → debugging discussion
+         ↓
+NEXT_PROBLEM or WRAP_UP
+```
+
+**4.6.7 — Frontend: Live Coding Interview UI**
+
+```text
+┌──────────────────────────────────────────────────────────┐
+│ CODING INTERVIEW                   Python ▾    23:41     │
+├────────────────────────┬─────────────────────────────────┤
+│                        │                                  │
+│  PROBLEM               │  CODE EDITOR (Monaco)            │
+│                        │                                  │
+│  Given an array of     │  def two_sum(nums, target):      │
+│  integers, return      │      seen = {}                   │
+│  indices of two        │      for i, num in enumerate...  │
+│  numbers that add      │                                  │
+│  up to target.         │                                  │
+│                        │                                  │
+│  Example:              ├─────────────────────────────────┤
+│  Input: [2,7,11,15]    │  OUTPUT                          │
+│  Output: [0,1]         │  ✓ Passed 3/3 test cases        │
+│                        │  Runtime: 48ms                   │
+│                        │                                  │
+├────────────────────────┴─────────────────────────────────┤
+│       [Run Code]              [Submit]   [End Interview]  │
+└──────────────────────────────────────────────────────────┘
+```
+
+**4.7 Interview Timer and Wrap-up Logic**
+- Track interview duration
+- State machine: after N minutes or N questions, transition to INTERVIEW_COMPLETE
+- Graceful wrap-up: interviewer agent signals closing ("That covers our technical questions, let me wrap up…")
+
+**4.8 Enhanced Report**
+- For Serious Interview: full breakdown — overall, technical, behavioral, coding, per-topic, per-dimension
+- For Live Coding: code quality scores, complexity analysis, approach quality, edge case handling
+- Transcript replay (from 1.11) extended to coding questions: submitted code, language and which tests failed (hidden tests shown as pass/fail only)
+- Highlight weak areas with explanation
+- Specific, actionable recommendations
+- One-click **"Practice Weak Areas"** → opens `/interview/configure?topics=<weak_areas>&difficulty=adaptive` pre-filled (the Weak-Area Drill interview). `QuestionEngine` restricts topic selection to those topics.
+
+**📌 Suggestions for Phase 4**
+- The Interviewer/Evaluator separation is the most important architectural decision in this phase. The Interviewer Agent should be completely blind to numeric scores — it only receives high-level performance signals (e.g., `performance_tier: "strong"|"adequate"|"weak"`). This prevents the interviewer from leaking evaluation to the candidate.
+- For behavioral evaluation, add example good/bad answer examples to the evaluator prompt. STAR evaluation is subjective — anchored examples dramatically improve consistency.
+- Test adaptive difficulty with simulated candidate profiles: "always correct", "always wrong", "improving", "declining". Verify the difficulty curve behaves as expected.
+- The wrap-up logic needs to be in the state machine, not in the LLM. The LLM decides *what to say* during wrap-up, but the state machine decides *when* to wrap up.
+- Consider giving the Serious Interview a distinct visual identity — interview room aesthetic vs. the chat-like practice mode.
+- **For Live Coding**: Start with graded Python via the harness. The other Piston languages work as run-only from day one; add harnesses one language at a time.
+- **Never execute code on the application server**. Always route through Piston. A single unguarded `exec()` call is a severe security vulnerability.
+- **Never trust a client-reported result.** The only coding events from the client are `CODE_SUBMIT` (and `/code/execute` for practice runs); the server always executes.
+- Use hidden test cases for Serious Mode (candidate sees pass/fail count, not the actual test inputs). This mirrors real technical interviews at companies like Google and Amazon.
+- The Monaco Editor should **not** send code to the backend on every keystroke — only on explicit "Run" or "Submit". Debounce aggressively.
+- Save the editor draft to the session (debounced, about every 10s) so `SESSION_SNAPSHOT` can restore it after a disconnect.
+
+---
+
+### Phase 5 — Voice Integration
+**Goal**: Add voice input/output support as an adapter layer on the existing interview engine, without changing core logic.
+
+> [!NOTE]
+> **Outside the MVP.** This is the riskiest phase (end-to-end latency, end-of-speech detection), so it stays off the critical path. Text mode must be complete and stable first.
+
+**Duration Estimate**: 2 weeks
+
+#### Tasks
+
+**5.1 Speech-to-Text (STT)**
+- Integrate Azure AI Speech SDK — streaming STT
+- `STTClient.transcribe_stream(audio_stream)` → partial + final transcripts
+- Handle: different accents, technical terminology, silence detection
+- Fallback: batch transcription if streaming fails
+
+**5.2 Text-to-Speech (TTS)**
+- Integrate Azure AI Speech SDK — neural TTS
+- Choose an interviewer voice (professional, neutral)
+- `TTSClient.synthesize(text)` → audio bytes
+- Support streaming TTS output for lower latency
+
+**5.3 Voice Adapter**
+- `VoiceAdapter` wraps the existing `InterviewEngine`
+- Input path: Audio → STT → Text → InterviewEngine
+- Output path: InterviewEngine → Text → TTS → Audio
+- The core interview engine receives and returns text — voice is purely an I/O adapter
+
+**5.4 Turn Detection**
+- Implement Voice Activity Detection (VAD) using Azure Speech or WebRTC VAD
+- States: `SILENCE → SPEECH → SPEECH_END → PROCESSING`
+- Manual fallback: "Done Speaking" button on UI
+- Avoid premature cutoffs: add configurable silence threshold
+
+**5.5 Real-time Audio WebSocket**
+- Extend WebSocket to support binary audio frames
+- Message types: `AUDIO_START`, `AUDIO_CHUNK`, `AUDIO_END`, `TRANSCRIPT`, `AI_RESPONSE_AUDIO`
+- Handle connection drops gracefully — resume from last state
+
+**5.6 Frontend — Voice UI**
+- Voice interview page: microphone button, speaking indicator (waveform animation), AI response playback
+- Voice mode toggle: text ↔ speech on interview configuration page
+- Recording consent modal (GDPR-compliant)
+- Fallback to text if voice fails
+
+**5.7 All Mode Support**
+- Text → Text (Phase 1 baseline)
+- Text → Speech (AI speaks, candidate types)
+- Speech → Text (candidate speaks, AI types response)
+- Speech → Speech (full voice interview — Phase 5 flagship)
+
+**📌 Suggestions for Phase 5**
+- The biggest risk in voice is latency. Measure STT latency + LLM latency + TTS latency end-to-end. Target: < 3 seconds total from end-of-speech to AI response start.
+- Use streaming TTS — start playing audio as soon as the first sentence is generated, don't wait for the full response. This dramatically reduces perceived latency.
+- Test turn detection extensively — false ends (candidate pausing mid-sentence) and false starts (candidate hasn't started yet) are the two main failure modes.
+- Store audio only if the user explicitly consents. Show a clear recording indicator (red dot or microphone icon) during active recording.
+- Build a "text fallback" that kicks in automatically if voice fails mid-interview. Users should never lose a session due to a voice connectivity issue.
+
+---
+
+### Phase 6 — Observability, Agent Evaluation & Polish
+**Goal**: Add production-grade monitoring, evaluate AI system quality, and polish the entire product for a demo-ready state.
+
+**Duration Estimate**: 1–2 weeks
+
+#### Tasks
+
+**6.1 Structured Logging**
+- Log every agent run: inputs, tool calls, tool outputs, LLM response, decision, latency
+- Log every evaluation: question, answer, evaluation scores, model used
+- Log all LLM token usage per request
+
+**6.2 Azure Monitor + Application Insights**
+- Track: API latency, WebSocket connection duration, LLM latency, STT/TTS latency
+- Alert on: high LLM error rates, evaluation failures, agent timeouts
+- Dashboard: request volume, error rate, p95 latency
+
+**6.3 AI Evaluation System**
+- Question Quality: relevance, difficulty alignment, role alignment, uniqueness
+- Evaluation Quality: consistency, correctness, specificity, actionability. Builds on the evaluator test set from Phase 1.7; this phase grows it and adds trend tracking per prompt version.
+- Agent Quality: tool-call accuracy, routing accuracy, task completion, hallucination rate
+- Voice Quality: STT accuracy, turn detection accuracy, TTS quality
+
+**6.4 Prompt Management**
+- Version all prompts in `prompts/` directory
+- Track which prompt version was used for each LLM call (store in DB)
+- A/B testing infrastructure: route % of traffic to different prompt versions
+- Rollback capability: revert to previous prompt version without code deploy
+
+**6.5 Rate Limiting and Cost Management**
+- Implement per-user rate limiting for AI endpoints
+- Track token usage per user per day
+- Dashboards on top of the Phase 1 token-budget hook: tokens and cost per session and user, and how often budget-forced wrap-ups happen
+- Alert when spending exceeds thresholds (Azure Cost Management alerts)
+
+**6.6 Product Polish**
+- Loading states for all AI operations (with meaningful messages, not just spinners)
+- Error boundaries and user-friendly error pages
+- Empty states for new users (onboarding flow)
+- Responsive design for tablet use
+- Keyboard navigation and accessibility (ARIA)
+
+**📌 Suggestions for Phase 6**
+- Observability doesn't start here: session-ID logging starts in Phase 0.2 and the evaluator test set in Phase 1.7. Phase 6 is for *upgrading* them, not starting from scratch.
+- AI evaluation (measuring AI quality) is what makes this project stand out as an engineering project. Invest time here — it demonstrates mature AI system thinking.
+- For prompt versioning: store the prompt version ID alongside every LLM call in the database. When you debug a bad evaluation, you need to know exactly which prompt was used.
+
+---
+
+## Core Architectural Principles
+
+These principles must be respected across all phases:
+
+### 1. The LLM is a Component, Not the System
+The backend owns: state, rules, persistence, workflow control. The LLM owns: language generation, reasoning within a defined context. Never let the LLM decide interview state transitions.
+
+### 2. The AI Gateway is the Only Door to Azure AI
+All LLM, STT, TTS, and embedding calls go through `AIGateway`. No other component calls Azure APIs directly. This enables: centralized logging, token tracking, easy model swaps, and consistent retry logic.
+
+### 3. State Lives in the Database
+Interview state, preparation progress, evaluation scores — all persisted to DB on every update. The system must survive: WebSocket disconnections, server restarts, LLM timeouts. Reconnecting should resume from the exact last state.
+
+### 4. Interviewer and Evaluator are Separate
+In Serious Interview mode, the Interviewer Agent and Evaluator Agent are strictly separated. The Interviewer receives only performance tier signals (not raw scores). The Evaluator runs independently of the conversational flow.
+
+### 5. Context is Controlled
+Every LLM call receives only the context it needs — no more. Context packages are assembled by `ContextBuilder` and typed with Pydantic models. This prevents prompt bloat and improves consistency.
+
+### 6. Prompts are Versioned Assets
+All prompts live in the `prompts/` directory, are version-controlled, and are referenced by ID in every LLM call. Prompt engineering is treated as part of the development workflow, not an afterthought.
+
+### 7. Voice is an Adapter
+The voice system wraps the text-based interview engine. The core engine is always text-in/text-out. Voice is an I/O layer only. This means: text mode is always the baseline, voice is additive.
+
+### 8. Agents are Observable
+Every agent run is logged: inputs, tool calls, outputs, decisions, latency, errors. This is non-negotiable for debugging agentic behavior.
+
+---
+
+## Guiding Documents to be Created (Following This Plan)
+
+| Document | Purpose | Created In |
+|---|---|---|
+| `docs/flow.md` | User journey flows, interview state machine diagrams, agent workflow diagrams | Phase 0 |
+| `docs/architecture.md` | Full system architecture, component relationships, data flow, Azure service mapping | Phase 0 |
+| `docs/api.md` | REST API reference — all endpoints, request/response schemas | Phase 1 |
+| `docs/prompts.md` | Prompt design guide, version history, evaluation notes | Phase 1 |
+| `docs/data_models.md` | Full DB schema with all collections/tables, field descriptions, relationships | Phase 0 |
+| `docs/agent_guide.md` | How agents are built, tool patterns, orchestration patterns | Phase 3 |
+| `docs/voice_guide.md` | Voice architecture, STT/TTS integration, streaming patterns, VAD | Phase 5 |
+
+---
+
+## Verification Plan
+
+### Per Phase Verification
+
+| Phase | Verification Method |
+|---|---|
+| Phase 0 | Auth works, profile CRUD works, DB connected, dev server runs locally |
+| Phase 0 (local) | `docker-compose up` runs the app with no cloud keys, using the fake Gateway |
+| Phase 1 | Walking skeleton works first (answer → report → Mentor cites it); then a full text interview end-to-end; report with transcript replay; practice mode shows model answers; adaptive difficulty verified with test profiles; the evaluator test set runs and its score is recorded |
+| Phase 2 | Finishing an interview indexes its report into `rag_tool`; the Mentor answers with `[n]` citations that link to the right report; no cross-user leakage; the Weak-Area Drill link opens a pre-filled configure page |
+| Phase 3 | Company prep workflow runs end-to-end; plan generated; agent runs logged |
+| Phase 4 | Serious interview completes; Interviewer blind to scores verified; behavioral STAR evaluation works; a coding submission with the asserts deleted is still graded correctly by the harness; hidden test inputs never reach the client |
+| Phase 5 | Full speech interview completed; STT/TTS pipeline verified; turn detection tested |
+| Phase 6 | AI quality metrics collected; all agent runs logged; prompt versions tracked |
+
+### Automated Tests
+```bash
+# Backend unit tests
+pytest backend/tests/unit/ -v
+
+# Backend integration tests (DB emulator + FakeAIGateway: no cloud keys, deterministic)
+pytest backend/tests/integration/ -v
+
+# API end-to-end tests (scripted full interviews through FakeAIGateway)
+pytest backend/tests/e2e/ -v
+
+# Evaluator test set (real model; run on every evaluator prompt change)
+python evaluation/interview_eval/run_evaluator_eval.py
+
+# Frontend component tests
+cd frontend && npm run test
+```
+
+### Manual Verification
+- Complete a full interview (configure → interview → report) as a user
+- Verify adaptive difficulty: strong answers → harder questions
+- Verify serious mode: no coaching or scores visible during interview
+- Verify voice: complete a voice interview end-to-end
+- Verify company prep: enter a company + JD → receive a preparation plan
+- Verify the core loop: interview → report → "Talk to Mentor" / "Practice Weak Areas" → drill interview → new report
+- Verify resume: kill the WebSocket mid-question and mid-coding; on reconnect, `SESSION_SNAPSHOT` restores the question, transcript and editor draft

@@ -1,0 +1,39 @@
+# Full local stack with no cloud keys:  docker compose up --build
+#   frontend http://localhost:3000 · backend http://localhost:8000/docs · MongoDB localhost:27017
+# Uses plain MongoDB (Cosmos DB's MongoDB API is wire-compatible) and the fake AI Gateway.
+# Then seed:  docker compose exec backend python -m scripts.seed --dev-user
+
+services:
+  mongo:
+    image: mongo:7
+    ports: ["27017:27017"]
+    volumes: [mongo-data:/data/db]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      retries: 10
+
+  backend:
+    build: { context: ., dockerfile: backend/Dockerfile }
+    environment:
+      APP_ENV: local
+      COSMOS_CONNECTION_STRING: mongodb://mongo:27017
+      CORS_ORIGINS: '["http://localhost:3000"]'
+      CHROMA_PATH: /srv/data/chroma
+      SEED_DIR: /srv/data/seed
+    env_file:
+      - path: .env
+        required: false
+    ports: ["8000:8000"]
+    depends_on:
+      mongo: { condition: service_healthy }
+
+  frontend:
+    build:
+      context: frontend
+      args: { NEXT_PUBLIC_API_URL: "http://localhost:8000" }
+    ports: ["3000:3000"]
+    depends_on: [backend]
+
+volumes:
+  mongo-data:
