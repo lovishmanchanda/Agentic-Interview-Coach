@@ -16,7 +16,7 @@ import { DIFFICULTIES, EXPERIENCE_LEVELS, TARGET_ROLES } from "@/lib/profileOpti
 
 const MAX_FOCUS = 5;
 
-/** ?focus=dsa,oops&role=ml_engineer pre-fills a drill (the report's "Practise weak areas" link). */
+/** ?focus=dsa,oops&role=ml_engineer&type=behavioral pre-fills a drill (the report's "Practise weak areas" link). */
 function focusFromUrl(params) {
   return [...new Set((params.get("focus") || "").split(",").map((t) => t.trim()).filter(Boolean))].slice(0, MAX_FOCUS);
 }
@@ -41,8 +41,10 @@ function ConfigureForm() {
   useEffect(() => {
     api.interviews.options()
       .then((options) => {
+        const type = params.get("type");
         setForm({
           ...options.defaults,
+          ...(type === "technical" || type === "behavioral" ? { interview_type: type } : {}),
           role: roleValue(params.get("role") || options.defaults.role),
           company: options.defaults.company || "",
           focus_topics: focusFromUrl(params),
@@ -53,16 +55,17 @@ function ConfigureForm() {
       .catch(setLoadError);
   }, [params]);
 
-  // A different role has different topics.
+  // A different role or interview type has different topics (competencies for behavioral).
   const role = form?.role;
+  const interviewType = form?.interview_type;
   useEffect(() => {
     if (!role) return undefined;
     let current = true;
-    api.interviews.options(role).then((options) => current && setTopics(options.topics)).catch(() => {});
+    api.interviews.options({ role, interviewType }).then((options) => current && setTopics(options.topics)).catch(() => {});
     return () => {
       current = false;
     };
-  }, [role]);
+  }, [role, interviewType]);
 
   if (loadError) {
     return loadError.code === "profile_missing" ? (
@@ -77,6 +80,9 @@ function ConfigureForm() {
   if (!form) return <Spinner label="Loading your defaults…" />;
 
   const set = (key) => (value) => setForm((f) => ({ ...f, [key]: value }));
+  // Topics mean different things per type (dsa vs ownership), so switching type clears the drill.
+  const setType = (value) => setForm((f) => ({ ...f, interview_type: value, focus_topics: value === f.interview_type ? f.focus_topics : [] }));
+  const behavioral = form.interview_type === "behavioral";
   const reasonFor = (field, value) => unavailable.find((u) => u.field === field && u.value === value)?.reason;
   const withAvailability = (field, options) =>
     options.map((o) => ({ ...o, disabled: Boolean(reasonFor(field, o.value)), reason: reasonFor(field, o.value) }));
@@ -110,7 +116,7 @@ function ConfigureForm() {
       <Card title="Interview">
         <div className="space-y-5">
           <ChoiceGroup legend="Type" name="interview_type" size="lg" value={form.interview_type}
-            onChange={set("interview_type")} options={withAvailability("interview_type", INTERVIEW_TYPES)} />
+            onChange={setType} options={withAvailability("interview_type", INTERVIEW_TYPES)} />
           <ChoiceGroup legend="Mode" name="interview_mode" size="lg" value={form.interview_mode}
             onChange={set("interview_mode")} options={INTERVIEW_MODES} />
           <ChoiceGroup legend="Number of questions" name="question_count" value={form.question_count}
@@ -130,8 +136,11 @@ function ConfigureForm() {
         </div>
       </Card>
 
-      <Card title="Focus topics" description="Optional. Pick topics to drill, or leave empty for a mix across your role.">
-        <ChoiceGroup legend="Topics" name="focus_topics" multiple value={form.focus_topics} onChange={set("focus_topics")}
+      <Card title={behavioral ? "Focus competencies" : "Focus topics"}
+        description={behavioral
+          ? "Optional. Pick competencies to practise, or leave empty for a mix."
+          : "Optional. Pick topics to drill, or leave empty for a mix across your role."}>
+        <ChoiceGroup legend={behavioral ? "Competencies" : "Topics"} name="focus_topics" multiple value={form.focus_topics} onChange={set("focus_topics")}
           options={topicOptions}
           hint={form.focus_topics.length ? `${form.focus_topics.length} of up to ${MAX_FOCUS} selected` : `Up to ${MAX_FOCUS}.`} />
       </Card>

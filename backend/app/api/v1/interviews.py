@@ -3,8 +3,9 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, status
 
 from app.core.interview.engine import InterviewEngine
-from app.core.interview.question_engine import topics_for_role
-from app.db.models.interview import UNAVAILABLE, InterviewConfigRequest
+from app.core.interview.question_engine import topics_for
+from app.core.interview.state_machine import allowed_next
+from app.db.models.interview import UNAVAILABLE, InterviewConfigRequest, InterviewType
 from app.db.repositories.interview_repo import InterviewRepository
 from app.db.repositories.profile_repo import ProfileRepository
 from app.dependencies import CurrentUser, get_engine, get_interview_repo, get_profile_repo
@@ -39,15 +40,17 @@ def _summary(session: dict) -> dict:
 
 @router.get("/options")
 async def interview_options(user: CurrentUser, engine: EngineDep, profiles: ProfilesDep,
-                            role: Annotated[str | None, Query(max_length=100)] = None):
-    """What the start page needs: the profile's defaults, the topics for a role, and the choices not built yet."""
+                            role: Annotated[str | None, Query(max_length=100)] = None,
+                            interview_type: Annotated[InterviewType, Query()] = "technical"):
+    """What the start page needs: the profile's defaults, the topics for a role and interview type (competencies
+    for behavioral), and the choices not built yet."""
     profile = await _require_profile(profiles, user["_id"])
-    config = engine.resolve_config(InterviewConfigRequest(role=role), profile)
+    config = engine.resolve_config(InterviewConfigRequest(role=role, interview_type=interview_type), profile)
     return ok({
         "defaults": {k: config[k] for k in ("interview_type", "interview_mode", "role", "experience_level",
                                             "company", "difficulty", "question_count", "input_mode", "output_mode")},
         "role_key": config["role_key"],
-        "topics": await topics_for_role(engine.question_bank, config["role_key"]),
+        "topics": await topics_for(engine.question_bank, interview_type, config["role_key"]),
         "unavailable": [{"field": field, "value": value, "reason": reason} for (field, value), reason in UNAVAILABLE.items()],
     })
 
@@ -70,3 +73,31 @@ async def list_interviews(user: CurrentUser, repo: Annotated[InterviewRepository
 async def get_interview(session_id: str, user: CurrentUser, engine: EngineDep):
     session = await engine.get_owned_session(session_id, user["_id"])
     return ok(await engine.snapshot(session))
+
+
+def _decision_view(decision: dict | None) -> dict | None:
+    if not decision:
+        return None
+    return {**decision, "at": decision["at"].isoformat() if hasattr(decision.get("at"), "isoformat") else decision.get("at")}
+
+
+@router.get("/{session_id}/state")
+async def get_interview_state(session_id: str, user: CurrentUser, engine: EngineDep):
+    """The state machine's view of a session: where it is, where it can go, and how it got here."""
+    session = await engine.get_owned_session(session_id, user["_id"])
+    return ok({
+        "session_id": session_id,
+        "state": session["state"],
+        "allowed_next": allowed_next(session["state"]),
+        "questions_asked": session["questions_asked"],
+        "total_questions": session["config"]["question_count"],
+        "current_question_id": session.get("current_question_id"),
+        "follow_ups_asked": session.get("follow_ups_asked", 0),
+        # Adaptation (1.8): the difficulty the next main question aims for, scores per topic, and why the
+        # engine made its last move.
+        "target_difficulty": session.get("target_difficulty"),
+        "performance_vector": session.get("performance_vector", {}),
+        "last_decision": _decision_view(session.get("last_decision")),
+        "updated_at": session["updated_at"].isoformat(),
+        "state_history": [{"state": h["state"], "at": h["at"].isoformat()} for h in session.get("state_history", [])],
+    })

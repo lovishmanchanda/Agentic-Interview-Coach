@@ -108,7 +108,12 @@ export const api = {
   },
   interviews: {
     create: (data = {}) => request("/api/v1/interviews", { method: "POST", body: data }),
-    options: (role) => request(`/api/v1/interviews/options${role ? `?role=${encodeURIComponent(role)}` : ""}`),
+    options: ({ role, interviewType } = {}) => {
+      const params = new URLSearchParams();
+      if (role) params.set("role", role);
+      if (interviewType) params.set("interview_type", interviewType);
+      return request(`/api/v1/interviews/options${params.size ? `?${params}` : ""}`);
+    },
     list: () => request("/api/v1/interviews"),
     get: (sessionId) => request(`/api/v1/interviews/${encodeURIComponent(sessionId)}`),
   },

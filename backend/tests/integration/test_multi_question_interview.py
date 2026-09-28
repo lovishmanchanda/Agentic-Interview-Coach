@@ -2,6 +2,7 @@
 bank miss, wrap-up on question count or token budget, and resuming between questions."""
 import asyncio
 import copy
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -140,7 +141,7 @@ def test_generation_failure_on_first_question_is_reported(app_client, gateway):
     # Nothing was asked, so reconnecting tries again.
     gateway.script("structured", GENERATED)
     ws = _open(app_client, session_id, token)
-    assert ws.receive_json()["payload"]["state"] == "SETUP"
+    assert ws.receive_json()["payload"]["state"] == "INTRODUCTION"
     assert ws.receive_json()["type"] == "QUESTION"
     ws.__exit__(None, None, None)
 
@@ -181,7 +182,8 @@ def test_reconnect_between_questions_asks_the_next_one(app_client, mock_db):
 
     # Simulate a server that stopped right after evaluating question 1.
     asyncio.run(mock_db["interview_sessions"].update_one(
-        {"session_id": session_id}, {"$set": {"state": "NEXT_TOPIC", "topics_covered": [first["topic"]]}}))
+        {"session_id": session_id}, {"$set": {"state": "NEXT_TOPIC", "topics_covered": [first["topic"]],
+                                              "updated_at": datetime.now(timezone.utc) - timedelta(minutes=5)}}))
     ws = _open(app_client, session_id, token)
     assert ws.receive_json()["payload"]["state"] == "NEXT_TOPIC"
     nxt = ws.receive_json()

@@ -5,7 +5,9 @@ in logs, so the first client message must be {"type": "AUTH", "token": "<access 
 AUTH_TIMEOUT_S. The server then sends SESSION_SNAPSHOT (on every connect, so reconnects resume),
 moves the session forward if needed, and handles ANSWER / PING.
 
-Close codes: 4400 bad handshake · 4401 unauthorized · 4404 session not found · 4408 auth timeout.
+Close codes: 4400 bad handshake · 4401 unauthorized · 4404 session not found · 4408 auth timeout ·
+4429 far too many messages. Messages are validated in ws_protocol.py (size, rate, schema) before the
+engine sees them.
 """
 import json
 import logging
@@ -14,11 +16,21 @@ import uuid
 import anyio
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from app.api.ws_protocol import (
+    MAX_FRAME_CHARS,
+    Answer,
+    AnswerDraft,
+    HintRequest,
+    Ping,
+    ProtocolError,
+    RateLimiter,
+    parse_inbound,
+)
 from app.core.interview.engine import event
 from app.db.repositories.user_repo import UserRepository
 from app.dependencies import build_engine
 from app.utils.exceptions import AppError, AuthError, NotFoundError
-from app.utils.logging import bind_context, clear_context
+from app.utils.logging import bind_context, clear_context, log_event
 from app.utils.security import decode_token
 
 log = logging.getLogger(__name__)
@@ -53,14 +65,32 @@ async def _authenticate(websocket: WebSocket) -> dict | None:
     return user
 
 
+def best_effort_sender(websocket: WebSocket):
+    """An `emit` that never raises. If the browser has gone, the engine must still finish its step (state
+    is in the database and the next connect re-syncs from a snapshot), so a failed send only marks the
+    socket closed and later sends are skipped."""
+    closed = False
+
+    async def emit(evt: dict) -> None:
+        nonlocal closed
+        if closed:
+            return
+        try:
+            await websocket.send_text(json.dumps(evt, default=str))
+        except (WebSocketDisconnect, RuntimeError, OSError):
+            closed = True
+            log_event(log, "ws_send_after_close", event_type=evt.get("type"))
+
+    return emit
+
+
 @router.websocket("/ws/interview/{session_id}")
 async def interview_socket(websocket: WebSocket, session_id: str):
     clear_context()
     bind_context(request_id=uuid.uuid4().hex, session_id=session_id)
     await websocket.accept()
 
-    async def emit(evt: dict) -> None:
-        await websocket.send_text(json.dumps(evt, default=str))
+    emit = best_effort_sender(websocket)
 
     try:
         user = await _authenticate(websocket)
@@ -77,20 +107,39 @@ async def interview_socket(websocket: WebSocket, session_id: str):
         await emit(event("SESSION_SNAPSHOT", session["state"], **await engine.snapshot(session)))
         await engine.start(session, emit)
 
+        limiter = RateLimiter()
         while True:
+            raw = await websocket.receive_text()
+            verdict = limiter.hit()
+            if verdict == "abusive":
+                log_event(log, "ws_rate_abuse", level=logging.WARNING)
+                await websocket.close(code=4429, reason="too_many_messages")
+                return
+            if verdict == "limited":
+                await emit(event("ERROR", "", code="rate_limited", retryable=True,
+                                 message="Too many messages. Slow down a little."))
+                continue
+            if len(raw) > MAX_FRAME_CHARS:
+                await emit(event("ERROR", "", code="message_too_large", message="That message is too large."))
+                continue
             try:
-                message = await websocket.receive_json()
+                message = parse_inbound(json.loads(raw))
             except ValueError:
                 await emit(event("ERROR", "", code="bad_message", message="Messages must be JSON."))
                 continue
-            kind = message.get("type") if isinstance(message, dict) else None
+            except ProtocolError as exc:
+                await emit(event("ERROR", "", code=exc.code, message=exc.message))
+                continue
             try:
-                if kind == "PING":
-                    await emit({"type": "PONG", "state": "", "payload": {}})
-                elif kind == "ANSWER":
-                    await engine.handle_answer(session_id, user["_id"], str(message.get("answer_text", "")), emit)
-                else:
-                    await emit(event("ERROR", "", code="unknown_event", message=f"Unsupported event: {kind!r}"))
+                match message:
+                    case Ping():
+                        await emit({"type": "PONG", "state": "", "payload": {}})
+                    case Answer():
+                        await engine.handle_answer(session_id, user["_id"], message.answer_text, emit)
+                    case AnswerDraft():
+                        await engine.save_draft(session_id, user["_id"], message.answer_text)
+                    case HintRequest():
+                        await engine.handle_hint_request(session_id, user["_id"], message.draft_text, emit)
             except AppError as exc:
                 await emit(event("ERROR", "", code=exc.code, message=exc.message))
             except WebSocketDisconnect:
@@ -101,8 +150,8 @@ async def interview_socket(websocket: WebSocket, session_id: str):
     except WebSocketDisconnect:
         log.info("ws_disconnected")
     except RuntimeError:
-        # Sending after the client went away. Nothing to do: the session state is persisted.
-        log.info("ws_closed_during_send")
+        # Receiving after the client went away. Nothing to do: the session state is persisted.
+        log.info("ws_closed")
     except Exception:  # noqa: BLE001 -- unexpected failure outside the message loop (e.g. snapshot)
         log.exception("ws_fatal_error")
         try:

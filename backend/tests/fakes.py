@@ -14,6 +14,18 @@ GOOD_EVALUATION = {
                              "load factor + resize", "O(1) average, O(n) worst"],
 }
 
+BEHAVIORAL_EVALUATION = {
+    "overall_score": 7.0,
+    "dimensions": {"situation": 8, "task": 7, "action": 7, "result": 5, "specificity": 7, "ownership": 8,
+                   "communication": 7},
+    "strengths": ["Clear context and a personal role"],
+    "weaknesses": ["The result isn't measured"],
+    "feedback": "A real example told in order. Close it with what changed, in numbers if you can.",
+    "suggestion": "End with the outcome and one number that shows it.",
+    "model_answer_outline": ["S: the project and what was at stake", "T: your responsibility",
+                             "A: 2-3 concrete steps you took", "R: measured outcome + what you learned"],
+}
+
 
 class HashEmbeddings(Embeddings):
     """Deterministic, non-zero 32-dim vectors: same text -> same vector, no network."""

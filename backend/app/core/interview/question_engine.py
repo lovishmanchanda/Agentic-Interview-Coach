@@ -5,6 +5,10 @@ data/seed/). When the bank has nothing left for the candidate's role, the LLM wr
 the same shape (`source: llm_generated`). Generated questions are stored with the session's
 interview_questions, not written back to the shared bank: that needs a quality gate first.
 
+Technical and behavioral interviews both go through here. For behavioral questions the competency
+(the bank's `subtopic`: ownership, collaboration, …) becomes the session question's `topic`, so topic
+variety, reports, drills and the Mentor work the same way for both.
+
 A Weak-Area Drill (`session.focus_topics`) restricts both the bank and generation to those topics.
 Selection is a plain heuristic, in this order of preference:
   1. a topic not yet covered in this session
@@ -25,11 +29,13 @@ from app.db.repositories.interview_repo import InterviewRepository
 from app.db.repositories.question_repo import QuestionRepository
 from app.gateway import AIGateway
 from app.gateway.types import CallContext
+from app.utils.exceptions import AppError
 from app.utils.logging import log_event
 
 log = logging.getLogger(__name__)
 
 GENERATION_PROMPT = "interviewer/question_generation_v1"
+BEHAVIORAL_GENERATION_PROMPT = "interviewer/behavioral_question_generation_v1"
 DIFFICULTIES = ("easy", "medium", "hard")
 LEVEL_DIFFICULTY = {"fresher": "easy", "1-2": "medium", "3-5": "medium", "senior": "hard"}
 
@@ -41,6 +47,10 @@ _ROLE_PATTERNS = [
     ("backend", r"\b(back[- ]?end|api|platform|server)\b"),
 ]
 DEFAULT_ROLE = "software_engineer"
+
+# Behavioral competencies, in rough order of how often interviews probe them. Same for every role.
+BEHAVIORAL_COMPETENCIES = ["ownership", "collaboration", "conflict", "growth", "learning", "leadership",
+                           "prioritisation", "communication"]
 
 # Topics to generate on once the bank runs dry, per role, in rough order of interview frequency.
 ROLE_TOPICS = {
@@ -83,16 +93,22 @@ def target_difficulty(preferred: str | None, experience_level: str | None) -> st
 
 
 def rank_candidates(candidates: list[dict], *, topics_covered: list[str], recently_seen: set[str],
-                    difficulty: str, rng: random.Random) -> list[dict]:
-    """Best first. Pure, so the heuristic is unit-tested without a database."""
+                    difficulty: str, rng: random.Random, preferred_topic: str | None = None) -> list[dict]:
+    """Best first. Pure, so the heuristic is unit-tested without a database. `preferred_topic` (the
+    AdaptationEngine's suggestion, e.g. a drill's weakest topic) outranks everything else."""
     target = DIFFICULTIES.index(difficulty) if difficulty in DIFFICULTIES else 1
     covered = set(topics_covered)
 
     def key(q: dict) -> tuple:
         distance = abs(DIFFICULTIES.index(q["difficulty"]) - target) if q["difficulty"] in DIFFICULTIES else 3
-        return (q["topic"] in covered, q["question_id"] in recently_seen, distance, rng.random())
+        return (q["topic"] != preferred_topic if preferred_topic else False,
+                q["topic"] in covered, q["question_id"] in recently_seen, distance, rng.random())
 
     return sorted(candidates, key=key)
+
+
+def _suggested_topic(session: dict) -> str | None:
+    return (session.get("last_decision") or {}).get("suggested_topic")
 
 
 class QuestionEngine:
@@ -104,48 +120,70 @@ class QuestionEngine:
     async def next_question(self, session: dict, *, context: CallContext) -> dict:
         """A question in the bank's shape plus `source` ("bank" | "llm_generated")."""
         config = session["config"]
+        behavioral = config["interview_type"] == "behavioral"
         asked = session.get("asked_question_ids", [])
         focus = session.get("focus_topics") or None
-        candidates = await self.bank.find(type="technical", role=config["role_key"], topic=focus,
+        candidates = await self.bank.find(type=config["interview_type"], role=config["role_key"],
+                                          topic=None if behavioral else focus, subtopic=focus if behavioral else None,
                                           exclude_ids=asked, limit=500)
+        if behavioral:
+            candidates = [{**c, "topic": c.get("subtopic") or "behavioral", "subtopic": ""} for c in candidates]
         if candidates:
             recently_seen = set(await self.repo.recent_bank_question_ids(session["candidate_id"],
                                                                          exclude_session_id=session["session_id"]))
             rng = random.Random(f"{session['session_id']}:{session.get('questions_asked', 0)}")
             best = rank_candidates(candidates, topics_covered=session.get("topics_covered", []),
-                                   recently_seen=recently_seen, difficulty=session["target_difficulty"], rng=rng)[0]
-            return {**best, "source": "bank"}
+                                   recently_seen=recently_seen, difficulty=session["target_difficulty"], rng=rng,
+                                   preferred_topic=_suggested_topic(session))[0]
+            if best["difficulty"] == session["target_difficulty"]:
+                return {**best, "source": "bank"}
+            # The bank has nothing left at this difficulty (e.g. adaptation moved up to "hard"): that is a
+            # miss too, so write one at the right level. If that fails, the closest level beats no question.
+            try:
+                return await self._generate(session, context=context)
+            except AppError as exc:
+                log_event(log, "generation_failed_using_closest_bank_question", level=logging.WARNING,
+                          code=exc.code, wanted=session["target_difficulty"], used=best["difficulty"])
+                return {**best, "source": "bank"}
         return await self._generate(session, context=context)
 
     async def _generate(self, session: dict, *, context: CallContext) -> dict:
         config = session["config"]
+        behavioral = config["interview_type"] == "behavioral"
         covered = set(session.get("topics_covered", []))
-        topics = session.get("focus_topics") or ROLE_TOPICS.get(config["role_key"], ROLE_TOPICS[DEFAULT_ROLE])
-        topic = next((t for t in topics if t not in covered), topics[session.get("questions_asked", 0) % len(topics)])
+        default_topics = BEHAVIORAL_COMPETENCIES if behavioral else ROLE_TOPICS.get(config["role_key"], ROLE_TOPICS[DEFAULT_ROLE])
+        topics = session.get("focus_topics") or default_topics
+        topic = _suggested_topic(session) or next(
+            (t for t in topics if t not in covered), topics[session.get("questions_asked", 0) % len(topics)])
         already_asked = [q["question_text"] for q in await self.repo.session_questions(session["session_id"])]
+        prompt_id = BEHAVIORAL_GENERATION_PROMPT if behavioral else GENERATION_PROMPT
         prompt = render_prompt(
-            GENERATION_PROMPT,
+            prompt_id,
             role=config["role"],
             experience_level=config["experience_level"],
             topic=topic,
             difficulty=session["target_difficulty"],
             already_asked="\n".join(f"- {text}" for text in already_asked) or "- (none yet)",
         )
-        context.prompt_version = GENERATION_PROMPT
+        context.prompt_version = prompt_id
         generated = await self.gateway.generate_structured(prompt, GeneratedQuestion, context=context)
         log_event(log, "question_generated", topic=topic, difficulty=session["target_difficulty"])
         return {
             **generated,
             "question_id": f"gen_{uuid.uuid4().hex[:12]}",
-            "type": "technical",
+            "type": config["interview_type"],
             "topic": topic,  # keep our label even if the model rephrased it, so topic coverage stays consistent
+            "subtopic": "" if behavioral else generated.get("subtopic", ""),
             "difficulty": session["target_difficulty"],
             "roles": [config["role_key"]],
             "source": "llm_generated",
         }
 
 
-async def topics_for_role(bank: QuestionRepository, role: str) -> list[str]:
-    """Topics a candidate can pick for a drill: the usual ones for the role first, then anything else the bank has."""
+async def topics_for(bank: QuestionRepository, interview_type: str, role: str) -> list[str]:
+    """Topics a candidate can pick for a drill: the usual ones first, then anything else the bank has.
+    For behavioral interviews these are competencies."""
+    if interview_type == "behavioral":
+        return list(dict.fromkeys([*BEHAVIORAL_COMPETENCIES, *await bank.subtopics(type="behavioral", role=role)]))
     return list(dict.fromkeys([*ROLE_TOPICS.get(role, ROLE_TOPICS[DEFAULT_ROLE]),
                                *await bank.topics(type="technical", role=role)]))

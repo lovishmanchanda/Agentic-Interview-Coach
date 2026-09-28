@@ -36,6 +36,7 @@ Copy `.env.example` → `.env` (repo root) and `frontend/.env.example` → `fron
 ```bash
 cd backend && pytest -q                  # unit + integration, in-memory DB + fake gateway, no keys
 cd backend && python -m scripts.seed --check   # validate question-bank seed JSON
+cd backend && .venv/bin/python ../evaluation/interview_eval/run_evaluator_eval.py   # evaluator accuracy vs hand scores (live Groq, ~10 min)
 cd frontend && npm run lint && npm run build
 ```
 
@@ -66,10 +67,17 @@ CI runs all of these on every push/PR (`.github/workflows/ci.yml`).
 | Local dev without Azure, Docker Compose, CI | `docker-compose.yml`, `.github/workflows/ci.yml` | ✅ |
 | Mentor RAG (`rag_tool`) | `backend/app/core/mentor/rag_tool/` | ✅ Built. Starts when `HF_TOKEN` is set; chat wiring in Phase 2. [Guide](docs/modules/rag-tool/INTEGRATION.md) |
 | Coding sandbox (`sandbox_tool`) | `backend/app/core/coding/sandbox_tool/` (local only for now) | ⚠️ Built, not in Git yet: it joins the repo in Phase 4 with the fixes in `plan-review.md` §C (Piston URL from config instead of hard-coded). [Guide](docs/modules/coding-sandbox.md) |
-| **Phase 1 — Interview engine** | | 🔨 In progress |
+| **Phase 1 — Interview engine** | | ✅ Done |
 | 1.0 Walking skeleton: one question → Groq evaluation → report → RAG index → Mentor cites it | `backend/app/core/interview/engine.py`, `app/api/ws.py`, `frontend/app/(app)/interview/` | ✅ Verified live on Groq + HF |
 | Groq AI Gateway (`gpt-oss-120b` / `gpt-oss-20b`, JSON validation, tool calls, token budget) | `backend/app/gateway/groq_gateway.py` | ✅ (`python -m scripts.check_groq` for a live check) |
 | 1.1 Question bank + question engine: 1–5 questions per interview, picked for role and level; Groq writes one when the bank runs dry | `backend/app/core/interview/question_engine.py`, `prompts/interviewer/` | ✅ |
+| 1.10 Report generator: Groq writes the summary, weak areas, recommendations and study plan; the numbers are always computed | `backend/app/core/interview/report_generator.py`, `prompts/report/` | ✅ |
+| 1.11 Interview UI: serious-mode room, question timer, report score cards and charts | `frontend/app/(app)/interview/`, `frontend/components/charts/ScoreBars.jsx` | ✅ |
+| 1.9 WebSocket flow: validated protocol + contract test, draft autosave, practice hints, heartbeat and resilient reconnects | `backend/app/api/ws_protocol.py`, `frontend/lib/interviewSocket.js` | ✅ |
+| 1.6 Interviewer agent: opening, follow-ups written from your answer, transitions and closing on Groq `gpt-oss-120b`; every move validated by the engine | `backend/app/agents/interview_agent.py` | ✅ |
+| 1.8 Adaptation engine: difficulty follows performance, one follow-up on partial answers, per-topic scores, drills revisit the weakest topic | `backend/app/core/interview/adaptation_engine.py` | ✅ |
+| 1.7 Evaluators: technical + behavioral (STAR), behavioral interviews, 48-answer evaluator test set (`evaluation/`) | `backend/app/core/evaluation/`, `evaluation/interview_eval/run_evaluator_eval.py` | ✅ |
+| 1.3 Interview state machine: validated transitions, state history, crash/reconnect recovery, `GET /interviews/{id}/state` | `backend/app/core/interview/state_machine.py` | ✅ |
 | 1.2 Interview configuration: type, practice/serious mode, role, level, difficulty, company, question count, focus topics (Weak-Area Drill) | `backend/app/db/models/interview.py`, `frontend/app/(app)/interview/configure/` | ✅ |
 | Mentor: generic "where am I weakest?" questions answered from recent sessions; markdown replies | `core/mentor/rag_tool/service.py`, `frontend/components/mentor/` | ✅ |
 

@@ -42,3 +42,6 @@ backend/scripts/sandbox_demo.py
 frontend/prototypes/
 # - superseded designs
 docs/archive/
+
+# Evaluator eval runs (evaluation/interview_eval/run_evaluator_eval.py)
+evaluation/results/

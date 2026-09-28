@@ -1,11 +1,14 @@
 """FastAPI dependency injection (architecture.md §4.2)."""
+from datetime import timedelta
 from typing import Annotated
 
 from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.config import Settings
+from app.agents.interview_agent import InterviewAgent
 from app.core.interview.engine import InterviewEngine
+from app.db.repositories.agent_run_repo import AgentRunRepository
 from app.db.repositories.interview_repo import InterviewRepository
 from app.db.repositories.profile_repo import ProfileRepository
 from app.db.repositories.question_repo import QuestionRepository
@@ -58,7 +61,12 @@ def get_interview_repo(db: DbDep) -> InterviewRepository:
 def build_engine(state) -> InterviewEngine:
     """Also used by the WebSocket handler, which has app.state but no Request."""
     return InterviewEngine(repo=InterviewRepository(state.db), question_bank=QuestionRepository(state.db),
-                           gateway=state.gateway, rag=state.rag, max_answer_chars=state.settings.max_answer_chars)
+                           gateway=state.gateway, rag=state.rag, max_answer_chars=state.settings.max_answer_chars,
+                           stale_work=timedelta(seconds=state.settings.stale_work_seconds),
+                           follow_ups=state.settings.interview_follow_ups,
+                           agent=InterviewAgent(state.gateway, AgentRunRepository(state.db))
+                           if state.settings.interview_agent else None,
+                           report_writer=state.settings.report_writer)
 
 
 def get_engine(request: Request) -> InterviewEngine:

@@ -29,7 +29,8 @@ export default function EvaluationCard({ evaluation }) {
         <Badge tone={TIER_TONE[performance_tier] || "neutral"}>{performance_tier}</Badge>
         {dimensions && (
           <span className="text-xs text-muted">
-            correctness {dimensions.correctness} · depth {dimensions.depth} · communication {dimensions.communication}
+            {/* technical: correctness · depth · communication; behavioral: the STAR parts, specificity, ownership… */}
+            {Object.entries(dimensions).map(([name, score]) => `${name} ${score}`).join(" · ")}
           </span>
         )}
       </div>

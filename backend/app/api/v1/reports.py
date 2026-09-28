@@ -33,6 +33,7 @@ async def get_report(report_id: str, user: CurrentUser, repo: RepoDep,
         raise NotFoundError("Report not found", code="report_not_found")
     # Transcript replay: question · answer · evaluator notes (incl. model answer outline). A report always shows
     # the evaluations, including a serious-mode interview's, which were hidden while it ran.
-    transcript = await engine.transcript(report["session_id"], include_evaluations=True)
     session = await repo.get_session(report["session_id"])
+    transcript = await engine.transcript(report["session_id"], include_evaluations=True,
+                                         closing_message=(session or {}).get("closing_message"))
     return ok({**_public(report), "transcript": transcript, "config": session["config"] if session else None})

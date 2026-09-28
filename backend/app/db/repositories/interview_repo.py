@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from pymongo import ASCENDING, DESCENDING, ReturnDocument
 
 _NO_ID = {"_id": 0}
+STATE_HISTORY_LIMIT = 100
 
 
 def utcnow() -> datetime:
@@ -47,9 +48,12 @@ class InterviewRepository:
         (e.g. a duplicate ANSWER while the first one is still being evaluated)."""
         # No projection here: the in-memory test double returns None for find_one_and_update when a
         # projection is combined with a filter on the field being updated. `_id` is dropped in Python.
+        now = utcnow()
         doc = await self.sessions.find_one_and_update(
             {"session_id": session_id, "state": {"$in": from_states}},
-            {"$set": {"state": to_state, "updated_at": utcnow(), **(extra or {})}},
+            {"$set": {"state": to_state, "updated_at": now, **(extra or {})},
+             # Every state entered, for debugging and the /state endpoint. Capped so it can't grow unbounded.
+             "$push": {"state_history": {"$each": [{"state": to_state, "at": now}], "$slice": -STATE_HISTORY_LIMIT}}},
             return_document=ReturnDocument.AFTER)
         return _strip_id(doc)
 
@@ -63,6 +67,26 @@ class InterviewRepository:
     async def add_question(self, doc: dict) -> dict:
         await self.questions.insert_one({**doc})
         return doc
+
+    async def save_draft(self, session_id: str, question_id: str, text: str) -> bool:
+        """Autosave of the answer being typed. Only while that question is still waiting for its answer, so a
+        late draft can't land on the next question."""
+        result = await self.sessions.update_one(
+            {"session_id": session_id, "state": "WAITING_FOR_RESPONSE", "current_question_id": question_id},
+            {"$set": {"draft_answer": {"question_id": question_id, "text": text, "saved_at": utcnow()}}})
+        return result.modified_count == 1
+
+    async def push_hint(self, question_id: str, hint: dict, *, max_hints: int) -> bool:
+        """Adds a hint unless the question already has `max_hints` (checked in the same write, so two
+        requests at once can't both get one)."""
+        result = await self.questions.update_one(
+            {"question_id": question_id, f"hints.{max_hints - 1}": {"$exists": False}},
+            {"$push": {"hints": hint}})
+        return result.modified_count == 1
+
+    async def delete_question(self, question_id: str) -> None:
+        """Only for a question written by a connection that then lost the race to ask it."""
+        await self.questions.delete_one({"question_id": question_id})
 
     async def get_question(self, question_id: str) -> dict | None:
         return await self.questions.find_one({"question_id": question_id}, _NO_ID)
@@ -83,6 +107,9 @@ class InterviewRepository:
         await self.answers.insert_one({**doc})
         return doc
 
+    async def get_answer(self, answer_id: str) -> dict | None:
+        return await self.answers.find_one({"answer_id": answer_id}, _NO_ID)
+
     async def session_answers(self, session_id: str) -> list[dict]:
         return await self.answers.find({"session_id": session_id}, _NO_ID).sort("submitted_at", ASCENDING).to_list(length=200)
 
@@ -93,10 +120,18 @@ class InterviewRepository:
     async def session_evaluations(self, session_id: str) -> list[dict]:
         return await self.evaluations.find({"session_id": session_id}, _NO_ID).sort("evaluated_at", ASCENDING).to_list(length=200)
 
+    async def latest_evaluation(self, session_id: str, question_id: str) -> dict | None:
+        cursor = self.evaluations.find({"session_id": session_id, "question_id": question_id}, _NO_ID)
+        docs = await cursor.sort("evaluated_at", DESCENDING).to_list(length=1)
+        return docs[0] if docs else None
+
     # ── reports ──
     async def save_report(self, doc: dict) -> dict:
         await self.reports.insert_one({**doc})
         return doc
+
+    async def report_for_session(self, session_id: str) -> dict | None:
+        return await self.reports.find_one({"session_id": session_id}, _NO_ID)
 
     async def get_report(self, report_id: str) -> dict | None:
         return await self.reports.find_one({"report_id": report_id}, _NO_ID)

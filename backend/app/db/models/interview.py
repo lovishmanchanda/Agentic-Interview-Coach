@@ -21,7 +21,6 @@ TOPIC_PATTERN = r"^[a-z][a-z0-9_]{1,39}$"
 
 # What isn't built yet, and when it arrives (shown to the candidate, so no task numbers).
 UNAVAILABLE = {
-    ("interview_type", "behavioral"): "Behavioral interviews are coming soon.",
     ("interview_type", "coding"): "Coding interviews are coming soon.",
     ("input_mode", "voice"): "Voice answers are coming soon. Use text for now.",
     ("output_mode", "voice"): "Spoken questions are coming soon. Use text for now.",
@@ -40,7 +39,7 @@ class InterviewConfigRequest(BaseModel):
     input_mode: IOMode = "text"
     output_mode: IOMode = "text"
     question_count: int = Field(default=DEFAULT_QUESTION_COUNT, ge=1, le=5)
-    # Weak-Area Drill: the question engine sticks to these topics.
+    # Weak-Area Drill: the question engine sticks to these topics (competencies for a behavioral interview).
     focus_topics: list[str] = Field(default_factory=list, max_length=MAX_FOCUS_TOPICS)
 
     @field_validator("role", "company", mode="before")

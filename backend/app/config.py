@@ -63,6 +63,18 @@ class Settings(BaseSettings):
     speech_key: str = ""
     speech_region: str = ""
 
+    # ── Interview engine ──
+    # Evaluation or report work older than this is presumed abandoned (worker crashed) and taken over.
+    stale_work_seconds: int = Field(default=120, ge=1)
+    # One follow-up after a partial answer (AdaptationEngine). Off switch, e.g. to save tokens.
+    interview_follow_ups: bool = True
+    # The interviewer agent (Groq gpt-oss-120b) writes the dialogue and proposes each move. Off: plain wording
+    # and AdaptationEngine decisions only (fewer LLM calls).
+    interview_agent: bool = True
+    # Groq writes the report's summary, weak areas, recommendations and study plan (scores are always computed).
+    # Off: the deterministic report stitched from the evaluator's notes.
+    report_writer: bool = True
+
     # ── Input limits (architecture.md §12.3) ──
     max_answer_chars: int = 5_000
     max_code_chars: int = 10_000

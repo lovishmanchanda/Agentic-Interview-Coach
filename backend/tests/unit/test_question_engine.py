@@ -78,3 +78,10 @@ def test_ties_are_broken_reproducibly():
     again = [q["question_id"] for q in rank_candidates(candidates, topics_covered=[], recently_seen=set(),
                                                        difficulty="medium", rng=random.Random("s:0"))]
     assert first == again
+
+
+def test_suggested_topic_outranks_coverage_recency_and_difficulty():
+    candidates = [_q("a", "dbms", "medium"), _q("b", "dsa", "hard")]
+    # dsa is covered, seen recently and the wrong difficulty, but the adaptation engine asked for it.
+    assert _best(candidates, topics_covered=["dsa"], recently_seen={"b"}, preferred_topic="dsa") == "b"
+    assert _best(candidates, topics_covered=["dsa"], recently_seen={"b"}) == "a"

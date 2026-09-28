@@ -441,10 +441,10 @@ Phase 0 → Phase 1 (starting with the walking skeleton, 1.0) → Phase 2 → Ph
 | Skeleton piece (file) | Replaced by |
 |---|---|
 | ~~Fixed bank question, one question per interview~~ ✅ replaced in 1.1: `core/interview/question_engine.py`, 1–5 questions | ✅ 1.2 full config (type, focus topics, serious mode) |
-| Direct state writes with a compare-and-set guard (`InterviewRepository.transition`) | 1.3 `StateMachine` + `ACTION_TO_STATE` |
-| Bank text used verbatim as the interviewer's message | 1.6 interviewer agent (ReAct loop on `generate_with_tools`) |
-| Technical evaluator only (`core/evaluation/answer_evaluator.py`, `prompts/evaluator/technical_v1.txt`) | 1.7 behavioral evaluator + evaluator test set |
-| Deterministic report, no LLM (`core/interview/report_generator.py`) | 1.10 / Phase 1b Groq-written report |
+| ~~Direct state writes with a compare-and-set guard~~ ✅ replaced in 1.3: `core/interview/state_machine.py` | 1.6 feeds agent actions through `next_state_for_action()` |
+| ~~Bank text used verbatim as the interviewer's message~~ ✅ replaced in 1.6: the interviewer agent writes the opening, transitions, follow-ups and closing | — |
+| ~~Technical evaluator only~~ ✅ replaced in 1.7: technical + behavioral (STAR) evaluators, evaluator test set | Phase 4 coding evaluator |
+| ~~Deterministic report, no LLM~~ ✅ replaced in 1.10: Groq writes the words, the numbers stay computed, and the deterministic report is the fallback | — |
 | Mentor with client-sent history, no persistence (`core/mentor/mentor_agent.py`) | Phase 2b conversation persistence |
 
 **1.1 Question Bank (Hybrid)**
@@ -477,6 +477,13 @@ Phase 0 → Phase 1 (starting with the walking skeleton, 1.0) → Phase 2 → Ph
 - State transitions are handled by the backend — not the LLM
 - Persist full state to DB on every transition
 - Expose state via `GET /api/v1/interviews/{session_id}/state`
+- ✅ **Done (2026-09-27)**:
+  - `core/interview/state_machine.py`: `State` enum, `TRANSITIONS`, pure `can_transition()` / `allowed_next()` / `next_state_for_action()` (`ACTION_TO_STATE` + the wrap-up override), and `InterviewStateMachine.transition()`, which validates every move and then persists it with compare-and-set.
+  - The table adds two failure paths to architecture.md §8.2: `EVALUATING → WAITING_FOR_RESPONSE` (the evaluation failed) and `NEXT_TOPIC → INTERVIEW_COMPLETE` (no next question). The documented `EVALUATION → REPORT` tail is `GENERATING_REPORT → REPORT_READY`.
+  - The engine walks every state, and each one is saved with a capped `state_history`.
+  - `_drive()` moves a session forward from any state. States fall into three groups: SETTLED, WORKING (another worker may be busy: wait, and take over once it is stale after `STALE_WORK_SECONDS`, default 120 s) and DRIVEN (safe to redo, because the losing connection just loses the compare-and-set).
+  - A connection that loses a race waits, then re-syncs with a fresh `SESSION_SNAPSHOT`.
+  - WebSocket sends are best-effort, so the engine finishes its step even when the browser has gone.
 
 **1.4 Question Engine**
 - `QuestionEngine` class: selects next question based on current state
@@ -498,6 +505,13 @@ Phase 0 → Phase 1 (starting with the walking skeleton, 1.0) → Phase 2 → Ph
 - Generates conversational introduction to the question
 - Generates natural follow-up questions
 - Does **not** make state decisions — only generates dialogue
+- ✅ **Done (2026-09-28)** in `app/agents/interview_agent.py`:
+  - **Opening:** one `gpt-oss-120b` call writes the introduction. The bank or generated question follows word for word, so the evaluator grades exactly what was asked.
+  - **After each answer**, the agent runs a ReAct loop on `generate_with_tools(tool_choice="required")`: at most 4 steps, read-only `get_performance_summary` / `get_question_details`, ending in `submit_decision`. It proposes `deliver_follow_up`, `deliver_question` or `wrap_up`, with a lead-in line, a follow-up it writes from the actual answer, and the points that follow-up should be graded on.
+  - **Validation.** The engine offers only the moves `allowed_actions()` permits and checks the proposal with `next_state_for_action()`. An invalid proposal is sent back once; if the second is also invalid, the engine falls back to the AdaptationEngine. The adaptation engine still sets difficulty and drill topics. An agent outage falls back to plain wording.
+  - **No scores reach the agent.** `core/interview/context_builder.py` passes only tiers and qualitative notes, and the adaptation reasons (which contain scores) are rewritten first.
+  - **Recorded runs.** Every run goes into `agent_runs`: outcome, steps, tool calls, rejections, latency.
+  - **Setting.** `INTERVIEW_AGENT` switches the agent on or off.
 
 **1.7 Answer Evaluation Engine**
 - `TechnicalEvaluator`: evaluates technical answers across dimensions — Problem Understanding, Approach, Correctness, Algorithm, Complexity, Edge Cases, Communication, Follow-up Handling
@@ -506,11 +520,35 @@ Phase 0 → Phase 1 (starting with the walking skeleton, 1.0) → Phase 2 → Ph
 - Store evaluation in DB linked to the answer and session
 - **Model answer (practice mode):** the evaluator also returns `model_answer_outline`, a short "a strong answer would cover…" list built from the question's `expected_concepts` and rubric. It's shown after each practice answer and kept out of the context in Serious mode.
 - **Evaluator test set:** `evaluation/datasets/evaluator_golden.jsonl` holds 20–30 answers per evaluator (weak → strong) with scores you set by hand. `evaluation/interview_eval/run_evaluator_eval.py` re-scores them and reports the gap (mean absolute error, rank agreement). Run it on **every** evaluator prompt change; a prompt change that worsens it doesn't ship. Scoring accuracy is what users trust, so this starts now rather than in Phase 6.
+- ✅ **Done (2026-09-27)**:
+  - **Two evaluators.** `core/evaluation/answer_evaluator.py` picks the evaluator from the question type and gives both the same result shape.
+    - Technical keeps `technical_v1` (correctness, depth, communication) for conceptual questions. The problem-solving dimensions listed above (approach, algorithm, complexity, edge cases) belong to the Phase 4 coding evaluator.
+    - Behavioral uses `prompts/evaluator/behavioral_v1.txt`: situation, task, action, result, specificity, ownership and communication (clarity folded into communication). It is calibrated to mark down hypothetical answers, disguised strengths and blame.
+  - **Behavioral interviews are enabled.** Competencies (ownership, collaboration, …) are the topics, so drills, reports and the Mentor work unchanged. Groq writes a behavioral question when the bank runs out (`prompts/interviewer/behavioral_question_generation_v1.txt`).
+  - **Test set.** 48 hand-scored answers (24 per evaluator, 8 per question) run from "I don't know" and injection attempts up to excellent answers, each with a note explaining its score. The runner reports MAE, bias, Spearman, same-question pairwise order and tier agreement, and exits 1 past `--max-mae 1.5` / `--min-spearman 0.8`.
+  - **Baseline** on `gpt-oss-20b`:
+
+    | Evaluator | MAE | Bias | Spearman | Pairwise order | Tier agreement |
+    |---|---|---|---|---|---|
+    | technical | 0.62 | +0.21 | 0.975 | 0.96 | 0.96 |
+    | behavioral | 0.75 | +0.17 | 0.94 | 0.91 | 0.83 |
 
 **1.8 Adaptive Question Selection**
 - After each evaluation, compute running `performance_score` per topic
 - QuestionEngine uses this to: increase difficulty on strong answers, decrease on weak, trigger follow-up questions on partial answers, avoid repeating topics
 - Implement `AdaptationEngine` as a separate component with unit-testable logic
+- ✅ **Done (2026-09-28)**:
+  - **`core/interview/adaptation_engine.py`** (pure) exposes `decide_next_action(evaluation, question, session, budget_remaining, …)` and returns a `NextAction`: follow_up, next_topic or complete, plus a difficulty delta, target difficulty, suggested topic, reason and follow-up text. Rules, in order:
+    1. Token budget nearly spent → complete.
+    2. A partial (adequate) answer to a main question → one follow-up, taken from the question's `follow_up_possibilities`.
+    3. Question count reached → complete.
+    4. Otherwise, next topic.
+  - **Difficulty:** in adaptive mode, strong → +1 and weak → −1, bounded at easy and hard; a fixed difficulty stays fixed. It applies from the next main question.
+  - **`performance_vector`** keeps a running mean per topic. In a drill, once every focus topic is covered, the weakest comes back via `suggested_topic`, which `QuestionEngine` ranks first.
+  - **Engine:** `_decide()` feeds the decision through `next_state_for_action()`. A follow-up is `FOLLOW_UP_DECISION → QUESTION`, graded against the parent question's concepts, and it does not count towards `question_count`.
+  - **State and settings:** `last_decision`, `target_difficulty`, `performance_vector` and `follow_ups_asked` appear on `/state`. `INTERVIEW_FOLLOW_UPS` is an off switch.
+  - **Difficulty misses:** a bank that lacks the target difficulty now counts as a miss, so Groq writes a question at that level. If generation fails, the closest bank question is used.
+  - **Not yet:** a time limit (the config has none) and follow-ups written from the actual answer (1.6 interviewer agent).
 
 **1.9 WebSocket Interview Flow**
 - `WebSocket /ws/interview/{session_id}` — real-time communication
@@ -518,11 +556,25 @@ Phase 0 → Phase 1 (starting with the walking skeleton, 1.0) → Phase 2 → Ph
 - Frontend sends `ANSWER` event → backend processes → sends `EVALUATION` (practice only) + `QUESTION`
 - State is stored in DB, not in WebSocket connection — reconnection-safe
 - **On every (re)connect** the server sends `SESSION_SNAPSHOT { state, current_question, transcript, coding_problem?, draft_code? }` so the UI rebuilds exactly where it left off. The frontend saves the editor draft to the session every 10s (debounced) so `draft_code` survives a disconnect.
+- ✅ **Done (2026-09-28)** for text mode; coding and voice events arrive with Phases 4 and 5:
+  - **Protocol:** `app/api/ws_protocol.py` has typed inbound messages, a 64,000-character frame limit, a per-connection rate limit (ERROR at 30 messages per 10 s, close `4429` at 90), and outbound payload models.
+  - **Contract test:** replays practice and serious interviews and checks every server event against those models.
+  - **Drafts:** `ANSWER_DRAFT` autosaves the answer being typed; it is restored from the snapshot after a reload or drop and cleared on submit.
+  - **Hints:** `HINT_REQUEST` → `HINT` in practice mode, one per question. The interviewer agent writes it on the fast model (`prompts/interviewer/hint_v1.txt`), built on the draft; otherwise a deterministic nudge points at a concept the draft hasn't touched. Hints appear in the transcript and the report.
+  - **Client:** heartbeat (a PING every 25 s; the connection is replaced after 10 s of silence), reconnects with backoff that never give up, waiting while offline and resuming when the network or tab returns, and a "Try again" button for fatal failures.
 
 **1.10 Interview Report Generator**
 - After `INTERVIEW_COMPLETE`, trigger report generation
 - Report structure: Overall Score, Technical Score, Communication Score, Per-topic Breakdown, Strong Areas, Weak Areas, Recommendations, Suggested Next Preparation
 - Store report in DB; expose via `GET /api/v1/reports/{report_id}`
+- ✅ **Done (2026-09-28), completing Phase 1:**
+  - **Two layers in `core/interview/report_generator.py`:**
+    - `build_report()` is deterministic: every score (overall plus technical/communication or STAR story/communication), per-topic and per-question scores, dimension averages, stats, and a fallback narrative.
+    - `write_narrative()` has Groq `gpt-oss-120b` (`prompts/report/report_v1.txt`) write the summary, strong areas, weak areas with reasons, concrete recommendations, and an estimated-days study plan. It sees the evaluator's notes per answer, never the answers.
+  - **`apply_narrative()` validates the result:** topics must be ones covered (recommendations may say `general`); severity and priority come from the real topic scores; if every weak area names a wrong topic, the evaluator-based ones stay.
+  - **Fallback:** a writer failure or invalid output leaves the deterministic report (`narrative_source: fallback`).
+  - **Setting:** `REPORT_WRITER` switches the writer on or off.
+  - **Report page:** the sub-scores under the hero number, recommendations with topic tags, a "Next steps" card, and a note on what AI wrote.
 
 **1.11 Frontend — Interview UI**
 - Interview configuration page (role, type, difficulty, mode selector)
@@ -531,6 +583,17 @@ Phase 0 → Phase 1 (starting with the walking skeleton, 1.0) → Phase 2 → Ph
   - **Serious Mode**: clean UI — interviewer avatar/name, question display, text area, timer, no scores visible
 - Report page: score cards, charts, breakdown, **"Talk to Mentor"** CTA
 - **Transcript replay** on the report page: each question, the candidate's answer and the evaluator's notes (strengths, weaknesses, model answer outline) side by side. Built from data already stored (`interview_questions`, `candidate_answers`, `evaluations`); no new AI calls.
+- ✅ **Done (2026-09-28)**:
+  - **Serious room:** interviewer avatar and name, role and company, progress and total elapsed time. Only the current question is on stage (follow-ups labelled); earlier turns fold into "Earlier in this interview". A timer, no scores, no hints.
+  - **Question timer** (both modes; compact in practice): it runs from the server's `asked_at`, corrected by `server_time`, so it survives a reload. Suggested time: ~3 min technical, ~4 min behavioral, +1 min hard, 2 min follow-up. Past it, the timer says so in words as well as colour.
+  - **Answers** record `time_taken_s`.
+  - **Report:**
+    - the overall score as the hero number, with its tier
+    - stat tiles: answers (and follow-ups), average time per answer, hints used, interview length
+    - three `ScoreBars` charts: by question, by topic, by dimension (technical dimensions or STAR parts)
+    - the existing summary, strengths and weaknesses, recommendations and transcript
+    - **new report fields:** `question_scores`, `dimension_scores` and `stats` (Phase 1b keeps them)
+  - **Charts** follow the dataviz rules: one validated hue per theme (`--chart-mark` `#5b5bd6` light / `#7a7aee` dark; the dark primary failed the lightness band), thin rounded bars, hairline grid, tier guide lines named in a caption, the value at the tip in text colour, a tooltip on hover and keyboard focus, and a table view.
 
 **📌 Suggestions for Phase 1**
 - Do the walking skeleton (1.0) before anything else. It's the cheapest way to find integration problems.

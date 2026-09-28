@@ -37,7 +37,9 @@ class AIGateway:
         return await self._not_configured("structured")
 
     async def generate_with_tools(self, messages: list[dict], tools: list[dict], *,
-                                  context: CallContext | None = None, tier: ModelTier = "default") -> ToolCall | FinalMessage:
+                                  context: CallContext | None = None, tier: ModelTier = "default",
+                                  tool_choice: str = "auto") -> ToolCall | FinalMessage:
+        """One step of a tool loop. tool_choice "required" forces a tool call (e.g. a terminal submit tool)."""
         return await self._not_configured("tools")
 
     # ── Embeddings / search (Mentor: rag_tool until Azure AI Search) ─────────

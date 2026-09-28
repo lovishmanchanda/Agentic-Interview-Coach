@@ -426,6 +426,20 @@ The agent does **not** own the state machine. It returns an `action`; the engine
 
 ---
 
+## As built (1.6, 2026-09-28)
+
+- **Scope.** The agent writes the dialogue and proposes the move after each answer. Question *selection* stays in `QuestionEngine` (bank → generation) and *evaluation* stays in the evaluators, so the engine calls them directly rather than through agent tools. That saves an LLM round-trip per turn, and the agent still sees their results.
+- **Files:**
+  - `app/agents/interview_agent.py` (`opening()`, `decide()`)
+  - `app/agents/interview_agent_schemas.py` (`AgentDecision` with `lead_in`, `follow_up_question`, `follow_up_expected_points`; tool definitions)
+  - `app/core/interview/context_builder.py` (the score-free view)
+  - `prompts/interviewer/interviewer_v1.txt`, `prompts/interviewer/opening_v1.txt`
+  - `app/db/repositories/agent_run_repo.py`
+- **Tools:** `get_performance_summary` (tiers per topic, progress) and `get_question_details` (expected concepts, example follow-ups), each at most once, plus the terminal `submit_decision`.
+- **Validation (manual check 9 above):** `wrap_up` on question 1 with budget left is rejected, re-prompted once, then the engine falls back to the AdaptationEngine. This is tested with an answer that tries to end the interview.
+- **Grading follow-ups:** an agent-written follow-up is graded against the agent's `follow_up_expected_points`. A canned bank follow-up is graded against the parent question's concepts.
+- **Not yet:** hints (`deliver_hint`) and coding tools, which arrive with the practice UI and Phase 4.
+
 ## Open Questions
 
 > [!IMPORTANT]

@@ -75,10 +75,13 @@ class FakeAIGateway(AIGateway):
         self._account("structured", prompt, context, started)
         return validated
 
-    async def generate_with_tools(self, messages, tools, *, context=None, tier="default") -> ToolCall | FinalMessage:
+    async def generate_with_tools(self, messages, tools, *, context=None, tier="default",
+                                  tool_choice="auto") -> ToolCall | FinalMessage:
         started = time.perf_counter()
-        out = self._next("tools", {"messages": messages, "tools": tools, "context": context, "tier": tier},
-                         default=None)
+        # Copy: callers (the agent loop) keep appending to the same list, and a recording should show
+        # what was sent at the time.
+        out = self._next("tools", {"messages": [dict(m) for m in messages], "tools": tools, "context": context, "tier": tier,
+                                   "tool_choice": tool_choice}, default=None)
         if not isinstance(out, (ToolCall, FinalMessage)):
             raise TypeError("scripted 'tools' responses must be ToolCall or FinalMessage")
         self._account("tools", " ".join(str(m.get("content", "")) for m in messages), context, started)

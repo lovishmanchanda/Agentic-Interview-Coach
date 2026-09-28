@@ -18,6 +18,7 @@ const STATE_LABEL = {
   EVALUATING: { text: "In progress", tone: "primary" },
   SETUP: { text: "Not started", tone: "neutral" },
 };
+const IN_PROGRESS = { text: "In progress", tone: "primary" };
 
 function InterviewHistory() {
   const [sessions, setSessions] = useState(null);
@@ -40,7 +41,7 @@ function InterviewHistory() {
   return (
     <ul className="divide-y divide-border">
       {sessions.map((s) => {
-        const label = STATE_LABEL[s.state] || { text: s.state, tone: "neutral" };
+        const label = STATE_LABEL[s.state] || IN_PROGRESS;
         const href = s.report_id ? `/interview/report/${s.report_id}` : `/interview/session/${s.session_id}`;
         return (
           <li key={s.session_id}>

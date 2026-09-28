@@ -92,9 +92,10 @@ class GroqAIGateway(AIGateway):
         raise LLMOutputError("The AI returned an unexpected format. Please try again.", details=last_error)
 
     async def generate_with_tools(self, messages: list[dict], tools: list[dict], *,
-                                  context: CallContext | None = None, tier: ModelTier = "default") -> ToolCall | FinalMessage:
+                                  context: CallContext | None = None, tier: ModelTier = "default",
+                                  tool_choice: str = "auto") -> ToolCall | FinalMessage:
         response = await self._chat(messages, call_type="tools", tier=tier, context=context,
-                                    tools=tools, tool_choice="auto", temperature=0.3, max_completion_tokens=2_000)
+                                    tools=tools, tool_choice=tool_choice, temperature=0.3, max_completion_tokens=2_000)
         message = response.choices[0].message
         if message.tool_calls:
             call = message.tool_calls[0]

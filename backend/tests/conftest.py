@@ -9,8 +9,13 @@ from app.main import create_app
 
 @pytest.fixture
 def settings() -> Settings:
-    # _env_file=None: tests never read the developer's .env
-    return Settings(_env_file=None, app_env="test", hf_token="", log_level="WARNING")
+    # _env_file=None: tests never read the developer's .env.
+    # Follow-ups off by default so each flow test scripts exactly the turns it cares about; the adaptation
+    # tests (test_adaptation_flow.py) switch them on.
+    # The interviewer agent is off for the same reason; test_interviewer_agent*.py switch it on.
+    # So is the report writer (test_report_writer.py switches it on).
+    return Settings(_env_file=None, app_env="test", hf_token="", log_level="WARNING", interview_follow_ups=False,
+                    interview_agent=False, report_writer=False)
 
 
 @pytest.fixture

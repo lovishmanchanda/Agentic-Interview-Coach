@@ -52,7 +52,6 @@ def test_overrides_drive_question_choice_and_evaluation(app_client, gateway, moc
 
 
 @pytest.mark.parametrize("config, message", [
-    ({"interview_type": "behavioral"}, "Behavioral interviews are coming soon."),
     ({"interview_type": "coding"}, "Coding interviews are coming soon."),
     ({"input_mode": "voice"}, "Voice answers are coming soon. Use text for now."),
     ({"output_mode": "voice"}, "Spoken questions are coming soon. Use text for now."),
@@ -86,10 +85,12 @@ def test_focus_topics_are_normalised(app_client, mock_db):
 
 
 def test_weak_area_drill_sticks_to_focus_topics(app_client, gateway, mock_db):
-    # The bank has two dbms questions for software_engineer; the third is generated on dbms.
-    gateway.script("structured", GOOD_EVALUATION, GOOD_EVALUATION, {**GENERATED, "topic": "dbms"}, GOOD_EVALUATION)
+    # The bank has two dbms questions for software_engineer, both "easy" or "medium". At a fixed easy
+    # difficulty: the easy one, then (no easy dbms left) two generated on dbms.
+    dbms = {**GENERATED, "topic": "dbms"}
+    gateway.script("structured", GOOD_EVALUATION, dbms, GOOD_EVALUATION, dbms, GOOD_EVALUATION)
     token, headers = _signup(app_client)
-    session_id = _create(app_client, headers, focus_topics=["dbms"], question_count=3)["session_id"]
+    session_id = _create(app_client, headers, focus_topics=["dbms"], difficulty="easy", question_count=3)["session_id"]
 
     ws = _open(app_client, session_id, token)
     assert ws.receive_json()["payload"]["focus_topics"] == ["dbms"]
@@ -101,8 +102,9 @@ def test_weak_area_drill_sticks_to_focus_topics(app_client, gateway, mock_db):
 
     assert topics == ["dbms", "dbms", "dbms"]
     stored = asyncio.run(mock_db["interview_questions"].find({"session_id": session_id}).sort("asked_at", 1).to_list(length=5))
-    assert [q["source"] for q in stored] == ["bank", "bank", "llm_generated"]
-    assert "- Topic: dbms" in gateway.calls_of("structured")[2]["prompt"]
+    assert [q["source"] for q in stored] == ["bank", "llm_generated", "llm_generated"]
+    assert stored[0]["bank_question_id"] == "swe_sql_joins"
+    assert "- Topic: dbms" in gateway.calls_of("structured")[1]["prompt"]
 
 
 def test_serious_mode_hides_scores_until_the_report(app_client, gateway):
@@ -142,7 +144,8 @@ def test_options_endpoint(app_client):
     assert data["defaults"]["role"] == "Software Engineer" and data["defaults"]["difficulty"] == "adaptive"
     assert data["role_key"] == "software_engineer"
     assert data["topics"][:2] == ["dsa", "system_design"] and "python" in data["topics"]  # role topics, then bank topics
-    assert {"field": "interview_type", "value": "behavioral", "reason": "Behavioral interviews are coming soon."} in data["unavailable"]
+    assert {"field": "interview_type", "value": "coding", "reason": "Coding interviews are coming soon."} in data["unavailable"]
+    assert all(u["value"] != "behavioral" for u in data["unavailable"])
 
     ml = app_client.get("/api/v1/interviews/options", params={"role": "Data Scientist"}, headers=headers).json()["data"]
     assert ml["role_key"] == "ml_engineer" and ml["topics"][0] == "machine_learning"

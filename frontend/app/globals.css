@@ -18,6 +18,9 @@
   --danger-soft: #fdecee;
   --warning: #a15c07;
   --warning-soft: #fdf4e3;
+  /* Chart marks: validated (dataviz validate_palette.js) against --surface in each mode. */
+  --chart-mark: #5b5bd6;
+  --chart-mark-hover: #4a4ac2;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -38,6 +41,8 @@
     --danger-soft: #3a1a1f;
     --warning: #fbbf24;
     --warning-soft: #372a12;
+    --chart-mark: #7a7aee; /* --primary (#8b8bf5) is too light for marks on the dark surface */
+    --chart-mark-hover: #9595f3;
   }
 }
 
@@ -58,6 +63,8 @@
   --color-danger-soft: var(--danger-soft);
   --color-warning: var(--warning);
   --color-warning-soft: var(--warning-soft);
+  --color-chart-mark: var(--chart-mark);
+  --color-chart-mark-hover: var(--chart-mark-hover);
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 

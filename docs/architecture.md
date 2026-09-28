@@ -627,13 +627,22 @@ erDiagram
   ],
   "suggested_preparation_plan": {
     "priority_topics": ["string"],        // feeds the "Practice Weak Areas" drill link
-    "estimated_days": "number"
+    "estimated_days": "number",
+    "steps": ["string"]                   // as built (1.10): the ordered study plan
   },
   "rag_chunk_ids": ["string"],            // set by indexer.py after rag_tool.index_report()
   "generated_at": "datetime",
   "prompt_version_used": "string"
 }
 ```
+
+**As built (1.10):**
+- **Scores are always computed, never written by the model.** `scores` is `{overall, technical, communication}` for technical interviews and `{overall, story, communication}` for behavioral ones (story = the mean of the STAR, specificity and ownership dimensions). `coding` arrives in Phase 4.
+- **Chart data (1.11):** `question_scores`, `dimension_scores` and `stats` are stored with the report.
+- **The words** (`summary`, `strong_areas`, `weak_areas`, `recommendations`, and the plan's `estimated_days` / `steps`) come from Groq (`prompts/report/report_v1.txt`), given the evaluator's notes per answer rather than the answers. They are validated on merge:
+  - topics must be ones covered (recommendations may also be `general`)
+  - severity and priority come from the topic's real score
+- `narrative_source` is `llm`, or `fallback` for the deterministic narrative stitched from the evaluator's notes; `prompt_version_used` records which.
 
 #### `mentor_conversations`
 ```json
@@ -946,6 +955,9 @@ flowchart TD
     EVAL_ROUTER --> BEH_EV["BehavioralEvaluator"]
     EVAL_ROUTER --> CODE_EV["CodeEvaluator"]
     TECH_EV & BEH_EV & CODE_EV --> GATEWAY_EV["AI Gateway\ngenerate_structured()"]
+    %% As built (1.7): answer_evaluator.evaluator_for(question) picks technical_v1 or behavioral_v1 by
+    %% question type; both return one shape (overall_score, dimensions{}, strengths, weaknesses, feedback,
+    %% suggestion, model_answer_outline). CodeEvaluator arrives in Phase 4.
 
     AE --> DECISION["NextActionDecision\nfollow_up | next_topic | complete"]
 
@@ -985,6 +997,22 @@ class InterviewStateMachine:
 1. maps the action to a target state (`ACTION_TO_STATE`, a static table)
 2. checks it with `can_transition()`. An invalid action is rejected and the agent is re-prompted once, then falls back to `AdaptationEngine.decide_next_action()`
 3. applies the overrides: if `AdaptationEngine._should_wrap_up()` is true (question count, time limit or token budget), the target becomes `INTERVIEW_COMPLETE` whatever the agent proposed.
+
+**As built (1.3)** — `app/core/interview/state_machine.py`:
+- Two failure transitions are added to the table above: `EVALUATING → WAITING_FOR_RESPONSE` (evaluation failed or its worker died; the candidate resubmits) and `NEXT_TOPIC → INTERVIEW_COMPLETE` (no next question could be prepared; finish with the answers so far).
+- `ACTION_TO_STATE`:
+  - `deliver_question` → `NEXT_TOPIC`
+  - `deliver_follow_up` → `QUESTION`
+  - `request_coding_challenge` → `NEXT_TOPIC`
+  - `wrap_up` → `INTERVIEW_COMPLETE`
+  - `deliver_hint` and `deliver_feedback` cause no state change and are only valid in `WAITING_FOR_RESPONSE`.
+- Every move is validated, then persisted with compare-and-set. `state_history` (capped at 100) records each state entered.
+- **Reconnects and races.** States fall into three groups:
+  - **SETTLED** (`WAITING_FOR_RESPONSE`, `REPORT_READY`): nothing to do.
+  - **WORKING** (`EVALUATING`, `GENERATING_REPORT`): LLM work another worker may be doing. A connection waits, and takes over only when the session is older than `STALE_WORK_SECONDS` (default 120).
+  - **DRIVEN** (the rest): the engine redoes the step. A connection that loses the compare-and-set waits until the session settles, then sends a fresh `SESSION_SNAPSHOT`.
+  - Taking over a stale `EVALUATING` session sends `ERROR evaluation_interrupted` (retryable). Taking over `GENERATING_REPORT` reuses a report that was already saved.
+- **Sends are best-effort.** A failed WebSocket send marks the socket closed and never interrupts the engine, so a turn always completes in the database.
 
 The coding sub-flow (`CODING_QUESTION_PRESENTED → CANDIDATE_CODING → CODE_SUBMITTED → EXECUTION → RESULT_SHOWN → EVALUATING`) runs inside the `WAITING_FOR_RESPONSE` state, stored as `interview_sessions.current_coding_problem`.
 
@@ -1037,6 +1065,17 @@ class AdaptationEngine:
         """Check time limit, question count and token budget (gateway.budget_remaining)"""
 ```
 
+**As built (1.8)** — `app/core/interview/adaptation_engine.py`, pure functions:
+- `decide_next_action(evaluation, question, session, *, budget_remaining, token_reserve, follow_ups_enabled)` → `NextAction(action, difficulty_delta, target_difficulty, suggested_topic, reason, follow_up_text)`. It checks, in order:
+  1. token budget → `complete`
+  2. adequate answer to a main question with a follow-up available → `follow_up` (at most one per question)
+  3. question count reached → `complete`
+  4. otherwise `next_topic`
+- **Difficulty:** strong → +1 and weak → −1, only when `config.difficulty == "adaptive"`, bounded at easy and hard.
+- `update_performance()` maintains `performance_vector` as `{topic: {mean, n}}`. `weakest_focus_topic()` brings a drill's weakest topic back once every focus topic has been covered.
+- `NextAction.agent_action` maps to the state machine's vocabulary (`deliver_follow_up` / `deliver_question` / `wrap_up`), so the engine validates it with `next_state_for_action()`, the same check the interviewer agent's proposals will go through in 1.6.
+- A bank that has no question at the target difficulty counts as a miss: `QuestionEngine` generates one at that level and falls back to the closest bank level if generation fails.
+
 ### 8.5 ContextBuilder
 
 The ContextBuilder controls **exactly what context each LLM call receives**. This is critical for prompt efficiency and output consistency.
@@ -1067,6 +1106,10 @@ class ContextBuilder:
         - interview_type
         NOTE: Never includes previous evaluation scores (prevents anchoring bias)
         """
+
+    # As built (1.6): app/core/interview/context_builder.py — evaluation_summary() (tier + strengths +
+    # weaknesses, no numbers), performance_summary() (per-topic tiers from performance_vector), and
+    # recommendation_text() (the AdaptationEngine's suggestion without its score-bearing reason).
 
     def build_agent_context(profile, additional_data) -> AgentContext:
         """Context for preparation and company agents"""
@@ -1382,7 +1425,8 @@ flowchart TD
 | `POST` | `/api/v1/interviews` | ✅ | Create interview session from `InterviewConfigRequest` (anything omitted comes from the profile; `focus_topics` for a Weak-Area Drill). 422 `option_unavailable` for behavioral/coding/voice until they ship |
 | `GET` | `/api/v1/interviews/options?role=` | ✅ | Start-page data: profile defaults, topics for the role, choices not built yet |
 | `GET` | `/api/v1/interviews` | ✅ | List interview sessions |
-| `GET` | `/api/v1/interviews/{session_id}` | ✅ | Get session state |
+| `GET` | `/api/v1/interviews/{session_id}` | ✅ | Session snapshot (same payload as `SESSION_SNAPSHOT`) |
+| `GET` | `/api/v1/interviews/{session_id}/state` | ✅ | State machine view: `state`, `allowed_next`, progress, `state_history` |
 | `GET` | `/api/v1/questions` | ✅ | List questions (filtered) |
 | `GET` | `/api/v1/reports/{report_id}` | ✅ | Get interview report |
 | `GET` | `/api/v1/reports` | ✅ | List all reports |
@@ -1392,22 +1436,30 @@ flowchart TD
 
 Single source of truth for event names. Other docs refer here.
 
-Endpoint: `/ws/interview/{session_id}`. Every frame is `{ "type", "state", "payload" }`. **Handshake:** browsers can't set an `Authorization` header on a WebSocket and a token in the URL ends up in logs, so the first client frame must be `AUTH` within 10 s. Close codes: `4400` bad handshake · `4401` unauthorized · `4404` session not found (or not yours) · `4408` auth timeout · `1011` server error.
+Endpoint: `/ws/interview/{session_id}`. Every frame is `{ "type", "state", "payload" }`. **Handshake:** browsers can't set an `Authorization` header on a WebSocket and a token in the URL ends up in logs, so the first client frame must be `AUTH` within 10 s. Close codes: `4400` bad handshake · `4401` unauthorized · `4404` session not found (or not yours) · `4408` auth timeout · `4429` far too many messages · `1011` server error.
+
+**As built (1.9):** inbound frames are validated by `app/api/ws_protocol.py` before the engine sees them.
+- **Limits:** at most 64,000 characters per frame (`message_too_large`); per connection, 30 messages per 10 s (`rate_limited`, retryable), with the connection closed at 90.
+- **Unknown or malformed messages:** a schema error is `bad_message`, naming the field; an unknown type is `unknown_event`.
+- **Not built yet:** coding and voice events are recognised but answered with `event_unavailable` until Phases 4 and 5.
+- **Contract test:** `tests/integration/test_ws_flow.py` replays whole interviews and validates every server event against the payload models there.
+- **Client:** sends a heartbeat `PING` every 25 s and replaces the connection if nothing comes back within 10 s. It reconnects with backoff (1–15 s) indefinitely, and waits while the browser is offline.
 
 | Event | Direction | Payload |
 |---|---|---|
 | `AUTH` | C→S | `{ token }`: access JWT; must be the first frame |
-| `SESSION_SNAPSHOT` | S→C | `{ state, config, current_question?, transcript[], coding_problem?, draft_code? }`. Sent on **every** connect and reconnect. Replaces `SESSION_READY`. |
-| `QUESTION` | S→C | `{ question_id, text, topic, difficulty, is_follow_up, hints? }` (also used for the next question) |
+| `SESSION_SNAPSHOT` | S→C | `{ state, config, focus_topics, current_question?, draft_answer?, transcript[], report_id?, questions_asked, total_questions, started_at, server_time, coding_problem?, draft_code? }`. Transcript roles: interviewer (with `is_follow_up` / `is_closing`), hint, candidate, evaluation. Sent on **every** connect and reconnect, and again when a connection that waited for another worker re-syncs. Replaces `SESSION_READY`. |
+| `QUESTION` | S→C | `{ question_id, text, topic, difficulty, is_follow_up, hints_left, asked_at, suggested_seconds, question_number, total_questions, server_time }` (also used for the next question and follow-ups; `asked_at` + `server_time` drive the room's timer) |
 | `PROCESSING` | S→C | `{ message }` |
 | `EVALUATION` | S→C | `{ question_id, overall_score, dimensions, performance_tier, strengths, weaknesses, feedback, suggestion, model_answer_outline }` (Practice only) |
-| `HINT` | S→C | `{ text }` (Practice only, reply to `HINT_REQUEST`) |
+| `HINT` | S→C | `{ question_id, text, hints_left }` (Practice only, reply to `HINT_REQUEST`; one per question, including follow-ups) |
 | `CODING_CHALLENGE_START` | S→C | `CodingChallengePayload` (hidden tests stripped) |
 | `CODE_RESULT` | S→C | `ExecutionResult` (hidden tests: pass/fail only in Serious mode) |
-| `INTERVIEW_COMPLETE` | S→C | `{ report_id }` |
-| `ERROR` | S→C | `{ code, message, retryable? }`: `retryable: true` means the state went back to `WAITING_FOR_RESPONSE` and the same answer can be resubmitted. Codes: `answer_empty`, `answer_too_long`, `not_accepting_answers`, `unknown_event`, `question_unavailable` (no first question could be prepared; state stays `SETUP` and reconnecting retries), plus gateway codes such as `llm_rate_limited` |
+| `INTERVIEW_COMPLETE` | S→C | `{ report_id, closing_message? }` |
+| `ERROR` | S→C | `{ code, message, retryable? }`: `retryable: true` means the state went back to `WAITING_FOR_RESPONSE` and the same answer can be resubmitted. Codes: `answer_empty`, `answer_too_long`, `not_accepting_answers`, `unknown_event`, `question_unavailable` (no first question could be prepared; state stays `INTRODUCTION` and reconnecting retries at once), `evaluation_interrupted`, `hints_unavailable`, `hint_limit_reached`, `no_active_question`, `bad_message`, `event_unavailable`, `message_too_large`, `rate_limited`, plus gateway codes such as `llm_rate_limited` |
 | `ANSWER` | C→S | `{ answer_text, answer_type }` |
-| `HINT_REQUEST` | C→S | `{}` (Practice only) |
+| `HINT_REQUEST` | C→S | `{ draft_text? }` (Practice only; the draft lets the hint build on what's written) |
+| `ANSWER_DRAFT` | C→S | `{ answer_text }`: autosave of the answer being typed (debounced ~1.5 s). Kept for the current question and returned as `draft_answer` in the snapshot; cleared when the answer is submitted |
 | `CODE_SUBMIT` | C→S | `{ code, language, is_final }`. The server executes; `is_final=false` is a graded check without ending the problem |
 | `CODE_DRAFT` | C→S | `{ code, language }` (debounced autosave, ~10s) |
 | `AUDIO_CHUNK` | C→S | Binary audio bytes |
