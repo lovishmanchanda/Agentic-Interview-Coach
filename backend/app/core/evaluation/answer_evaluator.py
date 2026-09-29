@@ -5,7 +5,7 @@ Two evaluators share one result shape, so the engine, reports and the Mentor don
     technical   evaluator/technical_v1    correctness · depth · communication
     behavioral  evaluator/behavioral_v1   STAR (situation · task · action · result) · specificity · ownership · communication
 
-The evaluator is picked from the question's type. Coding answers get their own evaluator in Phase 4,
+The evaluator is picked from the question's type. Coding submissions go to code_evaluator.py (Phase 4),
 which is where the problem-solving dimensions from the plan (approach, complexity, edge cases) belong.
 Every prompt change is measured with evaluation/interview_eval/run_evaluator_eval.py first.
 """
@@ -19,7 +19,7 @@ from app.core.prompts import render_prompt
 from app.gateway import AIGateway
 from app.gateway.types import CallContext
 
-EvaluationType = Literal["technical", "behavioral"]
+EvaluationType = Literal["technical", "behavioral", "coding"]
 PerformanceTier = Literal["strong", "adequate", "weak"]
 
 

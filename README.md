@@ -66,7 +66,7 @@ CI runs all of these on every push/PR (`.github/workflows/ci.yml`).
 | Frontend: landing, login, register, profile wizard, dashboard shell | `frontend/app/`, `components/`, `store/`, `lib/api.js` | ✅ |
 | Local dev without Azure, Docker Compose, CI | `docker-compose.yml`, `.github/workflows/ci.yml` | ✅ |
 | Mentor RAG (`rag_tool`) | `backend/app/core/mentor/rag_tool/` | ✅ Built. Starts when `HF_TOKEN` is set. [Guide](docs/modules/rag-tool/INTEGRATION.md) |
-| Coding sandbox (`sandbox_tool`) | `backend/app/core/coding/sandbox_tool/` (local only for now) | ⚠️ Built, not in Git yet: it joins the repo in Phase 4 with the fixes in `plan-review.md` §C (Piston URL from config instead of hard-coded). [Guide](docs/modules/coding-sandbox.md) |
+| Coding sandbox | `backend/app/core/coding/` | ✅ Rebuilt in Phase 4 with the `plan-review.md` §C fixes. The original `sandbox_tool/` stays local (gitignored) and is superseded. [Guide](docs/modules/coding-sandbox.md) |
 | **Phase 1 — Interview engine** | | ✅ Done |
 | 1.0 Walking skeleton: one question → Groq evaluation → report → RAG index → Mentor cites it | `backend/app/core/interview/engine.py`, `app/api/ws.py`, `frontend/app/(app)/interview/` | ✅ Verified live on Groq + HF |
 | Groq AI Gateway (`gpt-oss-120b` / `gpt-oss-20b`, JSON validation, tool calls, token budget) | `backend/app/gateway/groq_gateway.py` | ✅ (`python -m scripts.check_groq` for a live check) |
@@ -80,6 +80,9 @@ CI runs all of these on every push/PR (`.github/workflows/ci.yml`).
 | 1.3 Interview state machine: validated transitions, state history, crash/reconnect recovery, `GET /interviews/{id}/state` | `backend/app/core/interview/state_machine.py` | ✅ |
 | 1.2 Interview configuration: type, practice/serious mode, role, level, difficulty, company, question count, focus topics (Weak-Area Drill) | `backend/app/db/models/interview.py`, `frontend/app/(app)/interview/configure/` | ✅ |
 | Mentor: generic "where am I weakest?" questions answered from recent sessions; markdown replies | `core/mentor/rag_tool/service.py`, `frontend/components/mentor/` | ✅ |
+| **Phase 4 — Coding interviews** | | ✅ Done (verified on the Piston VM) |
+| Live coding: Monaco editor, Run / Submit, 18 problems, Python graded against every test incl. hidden, code evaluator, coding in reports | `backend/app/core/coding/`, `app/core/evaluation/code_evaluator.py`, `frontend/components/coding/` | ✅ (needs `PISTON_URL`) |
+| Time-limit wrap-up (`MAX_INTERVIEW_MINUTES`) | `backend/app/core/interview/adaptation_engine.py` | ✅ |
 | **Phase 2 — Mentor** | | ✅ Done |
 | Background report indexing with retries and a catch-up sweep; embeddings through the AI Gateway | `backend/app/core/mentor/indexer.py`, `app/gateway/embeddings.py` | ✅ |
 | Mentor agent: versioned prompt, saved conversations, Weak-Area Drill button, welcome from your latest report | `backend/app/core/mentor/mentor_agent.py`, `app/api/v1/mentor.py`, `prompts/mentor/` | ✅ |

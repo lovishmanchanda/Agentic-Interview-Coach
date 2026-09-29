@@ -44,7 +44,7 @@ def test_seeding_is_idempotent_and_queryable(repo_settings):
     first, second, coding, ml, total = asyncio.run(scenario())
     assert first == {"inserted": total, "updated": 0}
     assert second == {"inserted": 0, "updated": total}
-    assert {q["question_id"] for q in coding} == SANDBOX_PROBLEMS
+    assert {q["question_id"] for q in coding} >= SANDBOX_PROBLEMS and len(coding) >= 15
     assert ml and all("ml_engineer" in q["roles"] for q in ml)
     assert "ml_bias_variance" not in {q["question_id"] for q in ml}
     assert all("_id" not in q for q in coding)

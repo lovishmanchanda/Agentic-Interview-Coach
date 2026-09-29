@@ -11,7 +11,7 @@ import ChoiceGroup from "@/components/ui/ChoiceGroup";
 import { Input, Select } from "@/components/ui/Field";
 import Spinner from "@/components/ui/Spinner";
 import { api } from "@/lib/api";
-import { INTERVIEW_MODES, INTERVIEW_TYPES, QUESTION_COUNTS, topicLabel } from "@/lib/interviewOptions";
+import { CODING_LANGUAGES, CODING_QUESTION_COUNTS, INTERVIEW_MODES, INTERVIEW_TYPES, QUESTION_COUNTS, topicLabel } from "@/lib/interviewOptions";
 import { DIFFICULTIES, EXPERIENCE_LEVELS, TARGET_ROLES } from "@/lib/profileOptions";
 
 const MAX_FOCUS = 5;
@@ -44,7 +44,8 @@ function ConfigureForm() {
         const type = params.get("type");
         setForm({
           ...options.defaults,
-          ...(type === "technical" || type === "behavioral" ? { interview_type: type } : {}),
+          ...(["technical", "behavioral", "coding"].includes(type) ? { interview_type: type } : {}),
+          ...(type === "coding" ? { question_count: Math.min(options.defaults.question_count, 3) } : {}),
           role: roleValue(params.get("role") || options.defaults.role),
           company: options.defaults.company || "",
           focus_topics: focusFromUrl(params),
@@ -81,8 +82,13 @@ function ConfigureForm() {
 
   const set = (key) => (value) => setForm((f) => ({ ...f, [key]: value }));
   // Topics mean different things per type (dsa vs ownership), so switching type clears the drill.
-  const setType = (value) => setForm((f) => ({ ...f, interview_type: value, focus_topics: value === f.interview_type ? f.focus_topics : [] }));
+  // A coding interview has at most 3 problems.
+  const setType = (value) => setForm((f) => ({
+    ...f, interview_type: value, focus_topics: value === f.interview_type ? f.focus_topics : [],
+    question_count: value === "coding" ? Math.min(f.question_count, 3) : f.question_count,
+  }));
   const behavioral = form.interview_type === "behavioral";
+  const codingType = form.interview_type === "coding";
   const reasonFor = (field, value) => unavailable.find((u) => u.field === field && u.value === value)?.reason;
   const withAvailability = (field, options) =>
     options.map((o) => ({ ...o, disabled: Boolean(reasonFor(field, o.value)), reason: reasonFor(field, o.value) }));
@@ -119,8 +125,15 @@ function ConfigureForm() {
             onChange={setType} options={withAvailability("interview_type", INTERVIEW_TYPES)} />
           <ChoiceGroup legend="Mode" name="interview_mode" size="lg" value={form.interview_mode}
             onChange={set("interview_mode")} options={INTERVIEW_MODES} />
-          <ChoiceGroup legend="Number of questions" name="question_count" value={form.question_count}
-            onChange={set("question_count")} options={QUESTION_COUNTS} />
+          <ChoiceGroup legend={codingType ? "Number of problems" : "Number of questions"} name="question_count"
+            value={form.question_count} onChange={set("question_count")}
+            options={codingType ? CODING_QUESTION_COUNTS : QUESTION_COUNTS}
+            hint={codingType ? "Each problem takes about 15–35 minutes." : undefined} />
+          {codingType && (
+            <ChoiceGroup legend="Starting language" name="coding_language" value={form.coding_language || "python"}
+              onChange={set("coding_language")} options={CODING_LANGUAGES}
+              hint="You can switch per problem. Python is checked against every test; the others run as written for now." />
+          )}
         </div>
       </Card>
 
@@ -146,7 +159,7 @@ function ConfigureForm() {
       </Card>
 
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <p className="text-sm text-muted">Answers are typed. Voice is coming soon.</p>
+        <p className="text-sm text-muted">{codingType ? "Code runs in an isolated sandbox, separate from the app." : "Answers are typed. Voice is coming soon."}</p>
         <Button type="submit" loading={starting}>Start interview</Button>
       </div>
     </form>

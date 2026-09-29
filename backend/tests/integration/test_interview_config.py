@@ -25,7 +25,7 @@ def test_missing_fields_come_from_the_profile(app_client, mock_db):
     assert created["config"] == {
         "interview_type": "technical", "interview_mode": "practice", "role": "Software Engineer",
         "role_key": "software_engineer", "experience_level": "1-2", "company": "Contoso", "difficulty": "adaptive",
-        "question_count": 3, "input_mode": "text", "output_mode": "text",
+        "question_count": 3, "input_mode": "text", "output_mode": "text", "coding_language": "python",
     }
     doc = _session_doc(mock_db, created["session_id"])
     assert doc["target_difficulty"] == "medium" and doc["focus_topics"] == []
@@ -52,7 +52,7 @@ def test_overrides_drive_question_choice_and_evaluation(app_client, gateway, moc
 
 
 @pytest.mark.parametrize("config, message", [
-    ({"interview_type": "coding"}, "Coding interviews are coming soon."),
+    ({"interview_type": "coding"}, "Coding interviews need the code runner, which isn't set up on this server yet."),  # no PISTON_URL in tests
     ({"input_mode": "voice"}, "Voice answers are coming soon. Use text for now."),
     ({"output_mode": "voice"}, "Spoken questions are coming soon. Use text for now."),
 ])
@@ -144,7 +144,7 @@ def test_options_endpoint(app_client):
     assert data["defaults"]["role"] == "Software Engineer" and data["defaults"]["difficulty"] == "adaptive"
     assert data["role_key"] == "software_engineer"
     assert data["topics"][:2] == ["dsa", "system_design"] and "python" in data["topics"]  # role topics, then bank topics
-    assert {"field": "interview_type", "value": "coding", "reason": "Coding interviews are coming soon."} in data["unavailable"]
+    assert {"field": "interview_type", "value": "coding", "reason": "Coding interviews need the code runner, which isn't set up on this server yet."} in data["unavailable"]
     assert all(u["value"] != "behavioral" for u in data["unavailable"])
 
     ml = app_client.get("/api/v1/interviews/options", params={"role": "Data Scientist"}, headers=headers).json()["data"]

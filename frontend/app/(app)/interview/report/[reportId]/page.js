@@ -12,7 +12,7 @@ import Card from "@/components/ui/Card";
 import Spinner from "@/components/ui/Spinner";
 import { api } from "@/lib/api";
 import { formatDuration } from "@/lib/format";
-import { INTERVIEW_MODES, INTERVIEW_TYPES, topicLabel } from "@/lib/interviewOptions";
+import { INTERVIEW_MODES, INTERVIEW_TYPES, topicLabel, dimensionLabel } from "@/lib/interviewOptions";
 import { labelFor } from "@/lib/profileOptions";
 
 const SEVERITY_TONE = { high: "warning", medium: "primary", low: "neutral" };
@@ -29,7 +29,10 @@ function StatTile({ label, value, note }) {
 }
 
 const capitalise = (word) => word.charAt(0).toUpperCase() + word.slice(1);
-const SUB_SCORE_LABEL = { technical: "Technical", communication: "Communication", story: "STAR story" };
+const SUB_SCORE_LABEL = {
+  technical: "Technical", communication: "Communication", story: "STAR story",
+  problem_solving: "Problem solving", complexity: "Complexity", code_quality: "Code quality",
+};
 
 export default function ReportPage() {
   const { reportId } = useParams();
@@ -57,13 +60,14 @@ export default function ReportPage() {
     key: q.question_id,
     label: q.is_follow_up ? `Q${q.number ?? i + 1} follow-up` : `Q${q.number ?? i + 1} · ${topicLabel(q.topic)}`,
     value: q.score,
-    detail: [q.time_taken_s != null && formatDuration(q.time_taken_s), q.hints_used ? "hint used" : null].filter(Boolean).join(" · "),
+    detail: [q.tests_total ? `${q.tests_passed}/${q.tests_total} tests` : null,
+      q.time_taken_s != null && formatDuration(q.time_taken_s), q.hints_used ? "hint used" : null].filter(Boolean).join(" · "),
   }));
   const topicRows = Object.entries(report.per_topic_scores || {}).map(([topic, score]) => ({
     key: topic, label: topicLabel(topic), value: score,
   }));
   const dimensionRows = Object.entries(report.dimension_scores || {}).map(([name, score]) => ({
-    key: name, label: capitalise(name), value: score,
+    key: name, label: dimensionLabel(name), value: score,
   }));
   const overall = report.scores.overall;
   const subScores = Object.entries(report.scores).filter(([name]) => name !== "overall");

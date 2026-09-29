@@ -282,7 +282,7 @@ flowchart TD
         RT_INT["interviews.py\nCreate · List · Get session"]
         RT_QUEST["questions.py\nList by topic/role/difficulty"]
         RT_REPORTS["reports.py\nGet · List reports"]
-        RT_CODE["code.py\nPOST /code/execute\npractice runs, ungraded"]
+        RT_CODE["interviews.py\nPOST /interviews/{id}/code/run\npractice runs, not recorded"]
         RT_WS["ws.py\nWebSocket handler\nEvent routing"]
     end
 
@@ -1027,7 +1027,7 @@ class InterviewStateMachine:
   - Taking over a stale `EVALUATING` session sends `ERROR evaluation_interrupted` (retryable). Taking over `GENERATING_REPORT` reuses a report that was already saved.
 - **Sends are best-effort.** A failed WebSocket send marks the socket closed and never interrupts the engine, so a turn always completes in the database.
 
-The coding sub-flow (`CODING_QUESTION_PRESENTED → CANDIDATE_CODING → CODE_SUBMITTED → EXECUTION → RESULT_SHOWN → EVALUATING`) runs inside the `WAITING_FOR_RESPONSE` state, stored as `interview_sessions.current_coding_problem`.
+The coding sub-flow needs no extra states (as built, Phase 4): a coding problem is a question with `type: coding` whose asked-question document keeps its `coding` spec and every test. Thinking, coding and Run all happen in `WAITING_FOR_RESPONSE` (Run is a REST call that changes nothing); `CODE_SUBMIT` moves it to `EVALUATING`, where the server runs every test, sends `CODE_RESULT`, and the coding evaluator scores it; then `FOLLOW_UP_DECISION` as usual. A follow-up on a coding problem is a text question. The editor's draft is `interview_sessions.code_draft`. The interview also wraps up after `MAX_INTERVIEW_MINUTES` (default 60), decided by the state machine, whatever the question count.
 
 ### 8.3 QuestionEngine
 
@@ -1223,18 +1223,20 @@ sequenceDiagram
 
 ## 10. Live Coding Sandbox Architecture
 
-> **Built module**: `app/core/coding/sandbox_tool/` implements the agent tools `request_coding_question` and `submit_code_for_execution`. The files below are the target shape after the Phase 4 fixes (`plan-review.md` §C).
+> **As built (Phase 4):** the fixes from `plan-review.md` §C are in `app/core/coding/`: `languages.py` (Piston runtimes; Python graded), `sandbox_client.py` (`PistonExecutor`, the only Piston caller, behind `AIGateway.execute_code()`), `test_harness.py` (graded Python runner). Problems live in `question_bank` (18, seeded from `data/seed/question_bank/coding.json`); coding problems are never LLM-generated because their tests must be verified. The old `sandbox_tool/` (local only, gitignored) is superseded and can be deleted.
+>
+> The harness appends a runner that calls the candidate's function on every test input (hidden ones too) and prints each **return value** on a line tagged with a random marker. **Expected outputs never enter the sandbox**: comparison happens on the server (Python literals, list order ignored where the problem allows), so printing fake results or reading the program's source can't pass a test. Correctness = the share of tests passed; the evaluator's other six dimensions come from Groq, and the overall score is a fixed weighting (`code_evaluator.WEIGHTS`).
 
 ### 10.1 Components
 
 ```mermaid
 flowchart LR
-    FE["Monaco editor"] -- "Run: POST /api/v1/code/execute\n(ungraded, stdin)" --> CODE_API["api/v1/code.py"]
+    FE["Monaco editor"] -- "Run: POST /api/v1/interviews/{id}/code/run\n(visible tests, not recorded)" --> CODE_API["api/v1/interviews.py"]
     FE -- "Submit: WS CODE_SUBMIT" --> ENGINE["Interview Engine"]
-    ENGINE --> TOOL["sandbox_tool.submit_code_for_execution\n(problem_id, code, language)"]
-    TOOL --> HARNESS["test_harness.wrap()\nall test cases incl. hidden"]
+    ENGINE --> TOOL["test_harness.run_code\n(question, code, language)"]
+    CODE_API --> TOOL
+    TOOL --> HARNESS["runner appended\nall test cases incl. hidden"]
     HARNESS --> GW["AIGateway.execute_code()"]
-    CODE_API --> GW
     GW --> CLIENT["sandbox_client.py\n(only Piston caller)"]
     CLIENT --> PISTON["Piston on Azure VM"]
     TOOL -- "ExecutionResult" --> ENGINE
@@ -1405,11 +1407,31 @@ flowchart TD
 - Code submissions: **maximum 10,000 characters** — validated before forwarding to sandbox
 - JD text input: **maximum 50,000 characters**
 - Answer text: **maximum 5,000 characters**
-- Rate limiting applied at the API gateway level (per-user, per-endpoint); `/code/execute` has its own tighter limit
+- Rate limiting (as built, in-process: `utils/rate_limit.py`): failed logins per email and per IP (`LOGIN_FAILURES_PER_15_MIN`), sign-ups per IP, Mentor messages and interview starts per candidate (each is LLM spend), Run per candidate; WebSocket messages per connection. 429 `rate_limited`. A shared store (Redis / API Management) replaces it when there are several workers
+- Request bodies over `MAX_REQUEST_BYTES` (1 MB) are refused with 413 before they're read
 - Candidate code is **never executed on the application server** — always routed to Piston
 - **Execution results are never accepted from the client.** Only `CODE_SUBMIT` (code + language) is accepted; the server executes and grades.
 - Hidden test inputs and outputs never leave the server in Serious mode
 - Mentor `user_id` is always taken from the JWT, never from the request body
+
+### 12.3a Security audit (2026-09-29, after Phase 4)
+
+What was checked, and what changed:
+
+| Area | Result |
+|---|---|
+| Secrets in git history and the working tree | Clean: no API key, token, connection string or VM address was ever committed; `.env` is ignored (now `chmod 600`) |
+| Dependencies | `npm audit`: 0. `pip-audit`: 5 advisories, all `chromadb`, all in Chroma's **server** HTTP API; the app embeds Chroma in-process and runs no Chroma server, so none apply (recheck when a fixed version ships). Chroma's telemetry `capture()` is a no-op in 1.5.9 |
+| Tokens | HS256 pinned, issuer/expiry/jti required, access vs refresh type checked, refresh rotation with reuse detection, role read from the database. **Fixed:** local mode used a secret written in the repo, so a deployment that forgot `APP_ENV` would have accepted forged tokens; local now generates a random secret per process |
+| Access control | Every data endpoint needs a token; every ID-taking endpoint and the WebSocket check ownership (404 otherwise). One test tries all of them as a second user |
+| Abuse | **Added** the rate limits and body-size limit above; API docs (`/docs`, `/openapi.json`) are served only in local/test |
+| Input | Pydantic on every body, validation errors never echo values back, profile skills capped at 60 chars each |
+| Code execution | Only on Piston; expected outputs never enter the sandbox; forged result lines score 0 (checked on the real VM) |
+| Frontend | No raw HTML (react-markdown with its URL sanitising), safe post-login redirects, external links `noopener`. **Added** headers: `X-Frame-Options: DENY`, `frame-ancestors 'none'`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`; `X-Powered-By` removed. A full CSP (nonces, self-hosted Monaco) is Phase 6/7 |
+| Logs | No emails, passwords, tokens or answers logged |
+| Infra | `docker-compose` ports bound to 127.0.0.1 (MongoDB has no password); `.dockerignore` excludes local-only files; CI `permissions: contents: read`; backend image runs `--proxy-headers` (trusted proxies via `FORWARDED_ALLOW_IPS`) |
+
+Known and accepted for now: tokens in `localStorage` (§12.1 trade-off; moving the refresh token to an httpOnly cookie is Phase 6), registration says when an email is already registered, refresh-token rows aren't expired from the database (Cosmos TTL works only on `_ts`), limits are per process.
 
 ### 12.4 Piston VM
 
@@ -1444,7 +1466,7 @@ flowchart TD
 | `GET` | `/api/v1/questions` | ✅ | List questions (filtered) |
 | `GET` | `/api/v1/reports/{report_id}` | ✅ | Get interview report |
 | `GET` | `/api/v1/reports` | ✅ | List all reports |
-| `POST` | `/api/v1/code/execute` | ✅ | Practice run: `{ language, code, stdin }` → stdout/stderr/status (ungraded, rate-limited) |
+| `POST` | `/api/v1/interviews/{id}/code/run` | ✅ | Run: `{ code, language }` → `ExecutionResult` on the current coding problem's visible tests (ungraded languages: run as written). Not recorded or scored. `CODE_RUNS_PER_MINUTE` per candidate (429 `rate_limited`); 409 `no_coding_question` when no coding problem is waiting |
 
 ### WebSocket Events
 
@@ -1467,15 +1489,14 @@ Endpoint: `/ws/interview/{session_id}`. Every frame is `{ "type", "state", "payl
 | `PROCESSING` | S→C | `{ message }` |
 | `EVALUATION` | S→C | `{ question_id, overall_score, dimensions, performance_tier, strengths, weaknesses, feedback, suggestion, model_answer_outline }` (Practice only) |
 | `HINT` | S→C | `{ question_id, text, hints_left }` (Practice only, reply to `HINT_REQUEST`; one per question, including follow-ups) |
-| `CODING_CHALLENGE_START` | S→C | `CodingChallengePayload` (hidden tests stripped) |
-| `CODE_RESULT` | S→C | `ExecutionResult` (hidden tests: pass/fail only in Serious mode) |
+| `CODE_RESULT` | S→C | `{ question_id, status, stdout, stderr, compile_output, runtime_ms, memory_kb, passed_tests, total_tests, test_results[{passed, is_hidden, input, expected, actual}], graded, language }`: the server's run of a submission. Serious mode: a hidden test's input/expected/actual are `null` (pass/fail only). A coding problem arrives as a normal `QUESTION` whose `coding` field carries the statement, examples, starters, languages and visible tests |
 | `INTERVIEW_COMPLETE` | S→C | `{ report_id, closing_message? }` |
 | `ERROR` | S→C | `{ code, message, retryable? }`: `retryable: true` means the state went back to `WAITING_FOR_RESPONSE` and the same answer can be resubmitted. Codes: `answer_empty`, `answer_too_long`, `not_accepting_answers`, `unknown_event`, `question_unavailable` (no first question could be prepared; state stays `INTRODUCTION` and reconnecting retries at once), `evaluation_interrupted`, `hints_unavailable`, `hint_limit_reached`, `no_active_question`, `bad_message`, `event_unavailable`, `message_too_large`, `rate_limited`, plus gateway codes such as `llm_rate_limited` |
 | `ANSWER` | C→S | `{ answer_text, answer_type }` |
 | `HINT_REQUEST` | C→S | `{ draft_text? }` (Practice only; the draft lets the hint build on what's written) |
 | `ANSWER_DRAFT` | C→S | `{ answer_text }`: autosave of the answer being typed (debounced ~1.5 s). Kept for the current question and returned as `draft_answer` in the snapshot; cleared when the answer is submitted |
-| `CODE_SUBMIT` | C→S | `{ code, language, is_final }`. The server executes; `is_final=false` is a graded check without ending the problem |
-| `CODE_DRAFT` | C→S | `{ code, language }` (debounced autosave, ~10s) |
+| `CODE_SUBMIT` | C→S | `{ code, language, explanation }`: the answer to a coding problem. The server runs every test, sends `CODE_RESULT`, then evaluates. Errors: `code_empty`, `code_too_long`, `code_expected` (an `ANSWER` sent to a coding problem), `code_runner_unavailable` (retryable, nothing recorded) |
+| `CODE_DRAFT` | C→S | `{ code, language }` (debounced autosave, ~5 s); returned as `draft_code` in the snapshot |
 | `AUDIO_CHUNK` | C→S | Binary audio bytes |
 | `AUDIO_END` | C→S | `{}` |
 | `AI_RESPONSE_AUDIO` | S→C | Binary audio bytes |

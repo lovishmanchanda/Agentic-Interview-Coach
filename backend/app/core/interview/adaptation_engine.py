@@ -60,8 +60,11 @@ def update_performance(vector: dict[str, dict], topic: str, score: float) -> dic
     return {**vector, topic: {"mean": mean, "n": n}}
 
 
-def should_wrap_up(session: dict, *, budget_remaining: int, token_reserve: int) -> str | None:
-    """Why the interview must end now, or None. (A time limit joins these when the config has one.)"""
+def should_wrap_up(session: dict, *, budget_remaining: int, token_reserve: int,
+                   time_limit_reached: bool = False) -> str | None:
+    """Why the interview must end now, or None. The state machine decides when; the agent only what to say."""
+    if time_limit_reached:
+        return "time limit reached"
     if budget_remaining < token_reserve:
         return f"token budget nearly spent ({budget_remaining} left)"
     return None
@@ -86,11 +89,12 @@ def weakest_focus_topic(session: dict) -> str | None:
 
 
 def allowed_actions(question: dict, session: dict, *, budget_remaining: int, token_reserve: int,
-                    follow_ups_enabled: bool = True) -> set[Action]:
+                    follow_ups_enabled: bool = True, time_limit_reached: bool = False) -> set[Action]:
     """The moves the interviewer agent (1.6) may choose between. The same limits as decide_next_action,
     without its preferences: the agent may follow up on any answer, or skip a follow-up, but it can't end
     early, run past question_count, or follow up on a follow-up."""
-    if should_wrap_up(session, budget_remaining=budget_remaining, token_reserve=token_reserve):
+    if should_wrap_up(session, budget_remaining=budget_remaining, token_reserve=token_reserve,
+                      time_limit_reached=time_limit_reached):
         return {"complete"}
     allowed: set[Action] = set()
     if follow_ups_enabled and not question.get("is_follow_up"):
@@ -121,14 +125,15 @@ def action_for_choice(action: Action, evaluation: dict, session: dict, *, reason
 
 
 def decide_next_action(evaluation: dict, question: dict, session: dict, *, budget_remaining: int,
-                       token_reserve: int, follow_ups_enabled: bool = True) -> NextAction:
+                       token_reserve: int, follow_ups_enabled: bool = True, time_limit_reached: bool = False) -> NextAction:
     tier = evaluation["performance_tier"]
     current = session["target_difficulty"]
     adaptive = session["config"].get("difficulty") == "adaptive"
     delta, target = next_difficulty(evaluation, session)
     score = evaluation["overall_score"]
 
-    if reason := should_wrap_up(session, budget_remaining=budget_remaining, token_reserve=token_reserve):
+    if reason := should_wrap_up(session, budget_remaining=budget_remaining, token_reserve=token_reserve,
+                                time_limit_reached=time_limit_reached):
         return NextAction("complete", 0, current, None, reason)
 
     if follow_ups_enabled and tier == "adequate" and not question.get("is_follow_up"):

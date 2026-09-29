@@ -1,12 +1,14 @@
 """candidate_profiles (architecture.md §5.2). The profile is the spine every agent reads from."""
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import AliasChoices, BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field, StringConstraints
 
 ExperienceLevel = Literal["fresher", "1-2", "3-5", "senior"]
 IOMode = Literal["text", "voice"]
 Difficulty = Literal["easy", "medium", "hard", "adaptive"]
+
+Skill = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=60)]
 
 PREPARATION_TOPICS = ("dsa", "system_design", "python", "machine_learning", "dbms", "os", "oops", "behavioral")
 
@@ -32,7 +34,7 @@ class Preferences(BaseModel):
 class ProfileCreate(BaseModel):
     personal: Personal
     target: Target
-    skills: list[str] = Field(default_factory=list, max_length=50)
+    skills: list[Skill] = Field(default_factory=list, max_length=50)
     preferences: Preferences = Field(default_factory=Preferences)
 
 
@@ -40,7 +42,7 @@ class ProfileUpdate(BaseModel):
     """PUT /profiles/me: each provided section replaces the stored one; omitted sections stay."""
     personal: Personal | None = None
     target: Target | None = None
-    skills: list[str] | None = Field(default=None, max_length=50)
+    skills: list[Skill] | None = Field(default=None, max_length=50)
     preferences: Preferences | None = None
 
 

@@ -27,10 +27,25 @@ class LLMOutputError(AppError):
     code = "llm_bad_output"
 
 
+class _JsonRejected(Exception):
+    """Groq's JSON mode refused the model's output (HTTP 400 json_validate_failed). Not a provider outage:
+    the model wrote bad JSON, so it gets the same corrective retry as JSON we fail to parse ourselves."""
+
+    def __init__(self, failed_generation: str):
+        super().__init__("json_validate_failed")
+        self.failed_generation = failed_generation
+
+
+def _json_rejection(exc: "groq.BadRequestError") -> str | None:
+    body = exc.body if isinstance(exc.body, dict) else {}
+    error = body.get("error", body) if isinstance(body.get("error", body), dict) else {}
+    return str(error.get("failed_generation") or "") if error.get("code") == "json_validate_failed" else None
+
+
 class GroqAIGateway(AIGateway):
     def __init__(self, *, api_key: str, default_model: str, fast_model: str, session_token_budget: int,
-                 client: Any = None, timeout_s: float = 60.0, embedder=None):
-        super().__init__(session_token_budget=session_token_budget, embedder=embedder)
+                 client: Any = None, timeout_s: float = 60.0, embedder=None, executor=None):
+        super().__init__(session_token_budget=session_token_budget, embedder=embedder, executor=executor)
         self.client = client or groq.AsyncGroq(api_key=api_key, timeout=timeout_s, max_retries=2)
         self.models: dict[str, str] = {"default": default_model, "fast": fast_model}
 
@@ -48,6 +63,14 @@ class GroqAIGateway(AIGateway):
             log.error("groq_auth_failed")  # never log the key
             raise ServiceUnavailableError("The AI service is not configured correctly.",
                                           code="llm_auth_failed") from exc
+        except groq.BadRequestError as exc:
+            if (failed := _json_rejection(exc)) is not None:
+                self._log_usage(model=model, call_type=call_type, tokens_used=0,
+                                latency_ms=self._elapsed_ms(started), context=context)
+                raise _JsonRejected(failed) from exc
+            log.error("groq_api_error", extra={"fields": {"status": exc.status_code}})
+            raise ServiceUnavailableError("The AI service returned an error. Please try again.",
+                                          code="llm_unavailable") from exc
         except (groq.APITimeoutError, groq.APIConnectionError) as exc:
             raise ServiceUnavailableError("The AI service did not respond. Please try again.",
                                           code="llm_unavailable") from exc
@@ -78,10 +101,13 @@ class GroqAIGateway(AIGateway):
         ]
         last_error = ""
         for attempt in range(2):
-            response = await self._chat(messages, call_type="structured", tier=tier, context=context,
-                                        temperature=0.2, max_completion_tokens=3_000,
-                                        response_format={"type": "json_object"})
-            content = response.choices[0].message.content or ""
+            try:
+                response = await self._chat(messages, call_type="structured", tier=tier, context=context,
+                                            temperature=0.2, max_completion_tokens=3_000,
+                                            response_format={"type": "json_object"})
+                content = response.choices[0].message.content or ""
+            except _JsonRejected as rejected:
+                content = rejected.failed_generation  # validated below like any other output; usually it fails
             try:
                 return schema.model_validate(json.loads(content)).model_dump()
             except (json.JSONDecodeError, ValidationError) as exc:

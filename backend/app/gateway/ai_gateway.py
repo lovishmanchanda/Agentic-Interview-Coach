@@ -23,9 +23,10 @@ log = logging.getLogger("app.gateway")
 
 
 class AIGateway:
-    def __init__(self, *, session_token_budget: int, embedder: EmbeddingProvider | None = None):
+    def __init__(self, *, session_token_budget: int, embedder: EmbeddingProvider | None = None, executor=None):
         self.session_token_budget = session_token_budget
         self.embedder = embedder
+        self.executor = executor  # core/coding/sandbox_client.PistonExecutor, when PISTON_URL is set
         self._session_tokens: dict[str, int] = defaultdict(int)
         self._candidate_tokens: dict[str, int] = defaultdict(int)
 
@@ -76,7 +77,21 @@ class AIGateway:
     # ── Code execution (Piston) ──────────────────────────────────────────────
     async def execute_code(self, language: str, code: str, stdin: str = "", *,
                            context: CallContext | None = None) -> ExecutionResult:
-        return await self._not_configured("execute")
+        """Runs code in the Piston sandbox, never on this server. A failing sandbox is a 503 (retryable);
+        the candidate's own errors (compile, runtime, time limit) come back in the result."""
+        if self.executor is None:
+            raise ServiceUnavailableError("Running code isn't set up on this server (PISTON_URL).",
+                                          code="code_runner_not_configured")
+        started = time.perf_counter()
+        try:
+            result = await self.executor.execute(language, code, stdin)
+        except Exception as exc:  # noqa: BLE001 -- network and HTTP errors from the sandbox look alike to callers
+            log.warning("execute_failed", extra={"fields": {"language": language, "error": type(exc).__name__}})
+            raise ServiceUnavailableError("The code runner didn't respond. Please try again.",
+                                          code="code_runner_unavailable") from exc
+        self._log_usage(model=getattr(self.executor, "model", "sandbox"), call_type="execute", tokens_used=0,
+                        latency_ms=self._elapsed_ms(started), context=context)
+        return result
 
     # ── Budget + usage (shared by every provider) ────────────────────────────
     def budget_remaining(self, session_id: str) -> int:

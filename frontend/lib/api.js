@@ -116,6 +116,9 @@ export const api = {
     },
     list: () => request("/api/v1/interviews"),
     get: (sessionId) => request(`/api/v1/interviews/${encodeURIComponent(sessionId)}`),
+    // A practice run of the current coding problem's visible tests. Not recorded; Submit goes over the socket.
+    runCode: (sessionId, { code, language }) =>
+      request(`/api/v1/interviews/${encodeURIComponent(sessionId)}/code/run`, { method: "POST", body: { code, language } }),
   },
   reports: {
     get: (reportId) => request(`/api/v1/reports/${encodeURIComponent(reportId)}`),

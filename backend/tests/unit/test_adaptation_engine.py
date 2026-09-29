@@ -128,6 +128,14 @@ def test_token_budget_beats_everything_including_follow_ups():
     assert d.action == "complete" and "token budget" in d.reason
 
 
+def test_time_limit_wraps_up_whatever_the_question_count():
+    d = decide(_eval(9, "strong"), time_limit_reached=True)
+    assert d.action == "complete" and d.reason == "time limit reached"
+    from app.core.interview.adaptation_engine import allowed_actions
+    assert allowed_actions(QUESTION, _session(), budget_remaining=50_000, token_reserve=4_000,
+                           time_limit_reached=True) == {"complete"}
+
+
 # ── drills ──
 
 def test_drill_revisits_the_weakest_focus_topic_once_all_are_covered():

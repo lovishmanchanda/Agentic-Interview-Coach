@@ -255,3 +255,36 @@ def test_a_slow_step_left_behind_is_taken_over_quickly(app_client, mock_db):
     question = ws.receive_json()
     ws.__exit__(None, None, None)
     assert question["type"] == "QUESTION" and question["payload"]["question_number"] == 1
+
+
+def test_the_time_limit_ends_the_interview_before_the_question_count(settings, mock_db):
+    """4.7: the state machine decides when to wrap up (here: the interview started over an hour ago)."""
+    import asyncio as _asyncio
+    from datetime import timedelta as _td
+
+    from fastapi.testclient import TestClient as _Client
+
+    from app.db.repositories.interview_repo import utcnow as _now
+    from app.db.seed import load_seed_questions, seed_question_bank
+    from app.gateway import FakeAIGateway
+    from app.main import create_app
+    from tests.fakes import GOOD_EVALUATION
+    from tests.integration.test_interview_config import _create
+    from tests.integration.test_multi_question_interview import _signup
+    from tests.integration.test_walking_skeleton import _open
+
+    _asyncio.run(seed_question_bank(mock_db, load_seed_questions(settings.seed_dir)))
+    gateway = FakeAIGateway(session_token_budget=1_000_000)
+    with _Client(create_app(settings.model_copy(update={"max_interview_minutes": 60}), db=mock_db, gateway=gateway)) as client:
+        token, headers = _signup(client)
+        session_id = _create(client, headers, question_count=5)["session_id"]
+        ws = _open(client, session_id, token)
+        ws.receive_json(), ws.receive_json()
+        _asyncio.run(mock_db["interview_sessions"].update_one({"session_id": session_id},
+                                                               {"$set": {"started_at": _now() - _td(minutes=61)}}))
+        gateway.script("structured", GOOD_EVALUATION)
+        ws.send_json({"type": "ANSWER", "answer_text": "Buckets."})
+        assert [ws.receive_json()["type"] for _ in range(3)] == ["PROCESSING", "EVALUATION", "INTERVIEW_COMPLETE"]
+        ws.__exit__(None, None, None)
+        state = client.get(f"/api/v1/interviews/{session_id}/state", headers=headers).json()["data"]
+        assert state["last_decision"]["reason"] == "time limit reached" and state["questions_asked"] == 1

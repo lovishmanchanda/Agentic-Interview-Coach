@@ -12,6 +12,8 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
 MAX_FRAME_CHARS = 64_000          # an answer is ≤ 5,000 characters; JSON escaping can multiply that
 MAX_DRAFT_CHARS = 10_000
+MAX_CODE_FRAME_CHARS = 20_000     # the engine enforces MAX_CODE_CHARS (10,000) with a friendly ERROR
+CodingLanguage = Literal["python", "javascript", "java", "cpp", "c"]
 
 
 # ── client → server ──────────────────────────────────────────────────────────
@@ -36,15 +38,29 @@ class AnswerDraft(_Inbound):
 
 class HintRequest(_Inbound):
     type: Literal["HINT_REQUEST"]
-    draft_text: str = Field(default="", max_length=MAX_DRAFT_CHARS)  # lets the hint build on what's written
+    draft_text: str = Field(default="", max_length=MAX_CODE_FRAME_CHARS)  # the answer or code written so far
 
 
-Inbound = Annotated[Ping | Answer | AnswerDraft | HintRequest, Field(discriminator="type")]
+class CodeSubmit(_Inbound):
+    """A coding problem's answer. The server runs it; a client never reports a result."""
+    type: Literal["CODE_SUBMIT"]
+    code: str = Field(default="", max_length=MAX_CODE_FRAME_CHARS)
+    language: CodingLanguage = "python"
+    explanation: str = Field(default="", max_length=MAX_DRAFT_CHARS)  # approach + complexity, in words
+
+
+class CodeDraft(_Inbound):
+    type: Literal["CODE_DRAFT"]
+    code: str = Field(default="", max_length=MAX_CODE_FRAME_CHARS)
+    language: CodingLanguage = "python"
+
+
+Inbound = Annotated[Ping | Answer | AnswerDraft | HintRequest | CodeSubmit | CodeDraft, Field(discriminator="type")]
 _INBOUND = TypeAdapter(Inbound)
 
-# Part of the contract, arriving in later phases (coding: Phase 4, voice: Phase 5).
-NOT_YET_AVAILABLE = {"CODE_SUBMIT", "CODE_DRAFT", "AUDIO_CHUNK", "AUDIO_END"}
-KNOWN = {"PING", "ANSWER", "ANSWER_DRAFT", "HINT_REQUEST", "AUTH"} | NOT_YET_AVAILABLE
+# Part of the contract, arriving in a later phase (voice: Phase 5).
+NOT_YET_AVAILABLE = {"AUDIO_CHUNK", "AUDIO_END"}
+KNOWN = {"PING", "ANSWER", "ANSWER_DRAFT", "HINT_REQUEST", "CODE_SUBMIT", "CODE_DRAFT", "AUTH"} | NOT_YET_AVAILABLE
 
 
 class ProtocolError(Exception):
@@ -54,7 +70,7 @@ class ProtocolError(Exception):
         self.message = message
 
 
-def parse_inbound(data: Any) -> Ping | Answer | AnswerDraft | HintRequest:
+def parse_inbound(data: Any) -> Ping | Answer | AnswerDraft | HintRequest | CodeSubmit | CodeDraft:
     kind = data.get("type") if isinstance(data, dict) else None
     if kind not in KNOWN or kind == "AUTH":
         raise ProtocolError("unknown_event", f"Unsupported event: {kind!r}")
@@ -98,6 +114,9 @@ class TranscriptEntry(BaseModel):
     evaluation: dict | None = None
     is_follow_up: bool | None = None
     is_closing: bool | None = None
+    code: str | None = None          # a coding answer: the submitted code, its language and the run
+    language: str | None = None
+    execution: dict | None = None
 
 
 class QuestionView(_Out):
@@ -109,6 +128,7 @@ class QuestionView(_Out):
     hints_left: int
     asked_at: str | None
     suggested_seconds: int
+    coding: dict | None             # the problem, starters and visible tests; None for a spoken/text question
 
 
 class SessionSnapshotPayload(_Out):
@@ -118,6 +138,7 @@ class SessionSnapshotPayload(_Out):
     focus_topics: list[str]
     current_question: QuestionView | None
     draft_answer: str | None
+    draft_code: dict | None
     transcript: list[TranscriptEntry]
     report_id: str | None
     questions_asked: int
@@ -148,6 +169,30 @@ class EvaluationPayload(_Out):
     model_answer_outline: list[str]
 
 
+class TestResultView(BaseModel):
+    passed: bool
+    is_hidden: bool
+    input: str | None
+    expected: str | None
+    actual: str | None
+
+
+class CodeResultPayload(_Out):
+    """The server's run of a submission. Serious mode: hidden tests show pass/fail only (fields are None)."""
+    question_id: str
+    status: Literal["accepted", "wrong_answer", "time_limit", "runtime_error", "compile_error", "internal_error"]
+    stdout: str | None
+    stderr: str | None
+    compile_output: str | None
+    runtime_ms: int | None
+    memory_kb: int | None
+    passed_tests: int
+    total_tests: int
+    test_results: list[TestResultView]
+    graded: bool
+    language: str
+
+
 class HintPayload(_Out):
     question_id: str
     text: str
@@ -170,6 +215,7 @@ OUTBOUND: dict[str, type[BaseModel] | None] = {
     "QUESTION": QuestionPayload,
     "PROCESSING": ProcessingPayload,
     "EVALUATION": EvaluationPayload,
+    "CODE_RESULT": CodeResultPayload,
     "HINT": HintPayload,
     "INTERVIEW_COMPLETE": InterviewCompletePayload,
     "ERROR": ErrorPayload,

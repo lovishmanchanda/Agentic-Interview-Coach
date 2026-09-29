@@ -6,7 +6,7 @@
 services:
   mongo:
     image: mongo:7
-    ports: ["27017:27017"]
+    ports: ["127.0.0.1:27017:27017"]  # localhost only: this MongoDB has no password
     volumes: [mongo-data:/data/db]
     healthcheck:
       test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
@@ -24,7 +24,7 @@ services:
     env_file:
       - path: .env
         required: false
-    ports: ["8000:8000"]
+    ports: ["127.0.0.1:8000:8000"]
     depends_on:
       mongo: { condition: service_healthy }
 
@@ -32,7 +32,7 @@ services:
     build:
       context: frontend
       args: { NEXT_PUBLIC_API_URL: "http://localhost:8000" }
-    ports: ["3000:3000"]
+    ports: ["127.0.0.1:3000:3000"]
     depends_on: [backend]
 
 volumes:

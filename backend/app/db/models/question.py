@@ -20,13 +20,24 @@ class Example(BaseModel):
     explanation: str | None = None
 
 
+ValueKind = Literal["value", "linked_list"]
+
+
 class CodingSpec(BaseModel):
-    """Only on coding questions. Consumed by sandbox_tool + the test harness (Phase 4)."""
-    entry_function: str
+    """Only on coding questions. Consumed by the test harness (core/coding/test_harness.py).
+
+    Test inputs are Python literals for the arguments ("[2,7,11,15], 9"); expected outputs are one literal.
+    `arg_types`/`return_type` say which arguments/result are linked lists (built from / read back into lists).
+    compare="unordered": any order of the returned list is accepted (e.g. "return the answer in any order").
+    """
+    entry_function: str = Field(pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
     constraints: str = ""
     examples: list[Example] = Field(default_factory=list)
     template_code: dict[CodingLanguage, str]
     time_limit_minutes: int = Field(default=20, ge=1, le=120)
+    arg_types: list[ValueKind] = Field(default_factory=list)
+    return_type: ValueKind = "value"
+    compare: Literal["exact", "unordered"] = "exact"
 
 
 class Question(BaseModel):

@@ -13,12 +13,14 @@ ExecutionStatus = Literal["accepted", "wrong_answer", "time_limit", "runtime_err
 class TestCaseResult(BaseModel):
     passed: bool
     is_hidden: bool
-    input: str | None = None
+    input: str | None = None       # None once redacted (a hidden test in serious mode)
     expected: str | None = None
-    actual: str | None = None
+    actual: str | None = None      # the value returned, or "Error: …" if the call raised
 
 
 class ExecutionResult(BaseModel):
+    """One run in the sandbox. `execute_code()` fills the run fields; the test harness adds the tests.
+    graded=False: a language without a harness yet, so the code ran as written and no tests were checked."""
     status: ExecutionStatus
     stdout: str | None = None
     stderr: str | None = None
@@ -28,6 +30,8 @@ class ExecutionResult(BaseModel):
     passed_tests: int = 0
     total_tests: int = 0
     test_results: list[TestCaseResult] = []
+    graded: bool = False
+    language: str = ""
 
 
 @dataclass

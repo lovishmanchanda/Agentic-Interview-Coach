@@ -1,5 +1,7 @@
 # sandbox_tool — Coding Sandbox for Live Interview Coach
 
+> **Superseded in Phase 4 (2026-09-29).** The app no longer uses `sandbox_tool`. Its ideas were rebuilt with the `plan-review.md` §C fixes in `backend/app/core/coding/` (`languages.py`, `sandbox_client.py`, `test_harness.py`), problems moved to `data/seed/question_bank/coding.json`, and the UI is `frontend/components/coding/`. See `docs/architecture.md` §10 and `docs/flow.md` §10. This page is kept as the module's original notes.
+
 A plug-and-play coding sandbox module that integrates with the Interview Agent
 as described in `docs/interview-agent-implementation-plan.md`.
 

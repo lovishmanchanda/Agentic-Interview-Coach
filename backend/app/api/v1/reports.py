@@ -35,5 +35,6 @@ async def get_report(report_id: str, user: CurrentUser, repo: RepoDep,
     # the evaluations, including a serious-mode interview's, which were hidden while it ran.
     session = await repo.get_session(report["session_id"])
     transcript = await engine.transcript(report["session_id"], include_evaluations=True,
-                                         closing_message=(session or {}).get("closing_message"))
+                                         closing_message=(session or {}).get("closing_message"),
+                                         hide_hidden_tests=bool(session) and session["config"]["interview_mode"] == "serious")
     return ok({**_public(report), "transcript": transcript, "config": session["config"] if session else None})

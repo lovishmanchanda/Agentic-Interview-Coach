@@ -221,8 +221,10 @@ def test_oversized_and_malformed_messages_are_refused_but_the_socket_stays_usabl
     assert ws.receive()["payload"]["code"] == "message_too_large"
     ws.ws.send_text("{not json")
     assert ws.receive()["payload"]["code"] == "bad_message"
-    ws.send({"type": "CODE_SUBMIT", "code": "print(1)"})
+    ws.send({"type": "AUDIO_CHUNK", "data": "x"})
     assert ws.receive()["payload"]["code"] == "event_unavailable"
+    ws.send({"type": "CODE_SUBMIT", "code": "print(1)"})  # a text question isn't waiting for code
+    assert ws.receive()["payload"]["code"] == "not_accepting_answers"
     ws.send({"type": "ANSWER", "answer_text": 5})
     assert ws.receive()["payload"]["code"] == "bad_message"
     ws.send({"type": "PING"})

@@ -44,3 +44,34 @@ class HashEmbeddings(Embeddings):
 def drain_indexing(client) -> None:
     """Mentor indexing runs in the background (ReportIndexer); wait for it on the app's event loop."""
     client.portal.call(client.app.state.indexer.drain)
+
+
+class LocalPythonExecutor:
+    """Tests only: runs Python in a subprocess on the test machine, standing in for Piston, so the harness is
+    exercised end to end. The app itself never runs code locally (gateway -> PistonExecutor)."""
+    model = "local-python"
+
+    def __init__(self, timeout_s: float = 5.0):
+        self.timeout_s = timeout_s
+        self.programs: list[str] = []
+
+    async def execute(self, language: str, code: str, stdin: str = ""):
+        import subprocess
+        import sys
+
+        import anyio
+
+        from app.core.coding.sandbox_client import to_result
+
+        assert language == "python", "the local test executor only runs Python"
+        self.programs.append(code)
+
+        def run():
+            try:
+                done = subprocess.run([sys.executable, "-I", "-c", code], input=stdin, capture_output=True,
+                                      text=True, timeout=self.timeout_s)
+                return {"run": {"stdout": done.stdout, "stderr": done.stderr, "code": done.returncode, "signal": None}}
+            except subprocess.TimeoutExpired as exc:
+                return {"run": {"stdout": exc.stdout or "", "stderr": "", "code": None, "signal": "SIGKILL"}}
+
+        return to_result(language, await anyio.to_thread.run_sync(run))

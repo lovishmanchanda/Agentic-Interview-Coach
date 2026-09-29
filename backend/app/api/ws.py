@@ -21,6 +21,8 @@ from app.api.ws_protocol import (
     Answer,
     AnswerDraft,
     HintRequest,
+    CodeDraft,
+    CodeSubmit,
     Ping,
     ProtocolError,
     RateLimiter,
@@ -140,6 +142,11 @@ async def interview_socket(websocket: WebSocket, session_id: str):
                         await engine.save_draft(session_id, user["_id"], message.answer_text)
                     case HintRequest():
                         await engine.handle_hint_request(session_id, user["_id"], message.draft_text, emit)
+                    case CodeSubmit():
+                        await engine.handle_code_submission(session_id, user["_id"], message.code, message.language,
+                                                            message.explanation, emit)
+                    case CodeDraft():
+                        await engine.save_code_draft(session_id, user["_id"], message.code, message.language)
             except AppError as exc:
                 await emit(event("ERROR", "", code=exc.code, message=exc.message))
             except WebSocketDisconnect:

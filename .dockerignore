@@ -10,3 +10,11 @@ data/chroma
 .git
 workingflow.md
 **/.npm-cache
+# Local-only files (gitignored) never go into an image
+backend/app/core/coding/sandbox_tool
+backend/scripts/sandbox_demo.py
+frontend/prototypes
+docs/archive
+evaluation/results
+frontend/AGENTS.md
+frontend/CLAUDE.md

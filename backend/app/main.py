@@ -4,6 +4,7 @@ import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1 import api_router
@@ -15,6 +16,8 @@ from app.db.client import create_client, ensure_schema
 from app.gateway import build_gateway
 from app.utils.exceptions import register_exception_handlers
 from app.utils.logging import bind_context, clear_context, configure_logging
+from app.utils.rate_limit import SlidingWindowLimiter
+from app.utils.responses import fail
 
 log = logging.getLogger("app")
 
@@ -53,13 +56,33 @@ def create_app(settings: Settings | None = None, *, db=None, gateway=None, rag=N
         if client is not None:
             await client.close()
 
-    app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
+    # The API map (/docs, /openapi.json) is for local development only.
+    docs = settings.app_env in ("local", "test")
+    app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan,
+                  docs_url="/docs" if docs else None, redoc_url="/redoc" if docs else None,
+                  openapi_url="/openapi.json" if docs else None)
     app.state.settings = settings
+    app.state.limiters = {
+        "login_email": SlidingWindowLimiter(settings.login_failures_per_15_min, 15 * 60),
+        "login_ip": SlidingWindowLimiter(settings.login_failures_per_15_min * 3, 15 * 60),
+        "register_ip": SlidingWindowLimiter(settings.registrations_per_hour, 3600),
+        "mentor": SlidingWindowLimiter(settings.mentor_messages_per_minute, 60),
+        "interviews": SlidingWindowLimiter(settings.interviews_per_hour, 3600),
+        "code_run": SlidingWindowLimiter(settings.code_runs_per_minute, 60),
+    }
 
     app.add_middleware(
         CORSMiddleware, allow_origins=settings.cors_origins, allow_credentials=True,
         allow_methods=["*"], allow_headers=["*"], expose_headers=["X-Request-ID"],
     )
+
+    @app.middleware("http")
+    async def limit_body_size(request: Request, call_next):
+        """Reject oversized bodies before they're read (the biggest legitimate one is a JD or code, ~50 KB)."""
+        length = request.headers.get("content-length")
+        if length and length.isdigit() and int(length) > settings.max_request_bytes:
+            return JSONResponse(fail("payload_too_large", "The request is too large."), status_code=413)
+        return await call_next(request)
 
     @app.middleware("http")
     async def request_context(request: Request, call_next):

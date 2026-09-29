@@ -33,6 +33,11 @@ HEADLINE_DIMENSIONS = {
     "technical": {"technical": ["correctness", "depth"], "communication": ["communication"]},
     "behavioral": {"story": ["situation", "task", "action", "result", "specificity", "ownership"],
                    "communication": ["communication"]},
+    # Coding (4.8). Follow-ups in a coding interview are discussion questions scored on the technical dimensions;
+    # their correctness/communication count towards these too.
+    "coding": {"problem_solving": ["correctness", "approach", "edge_cases"],
+               "complexity": ["time_complexity", "space_complexity"],
+               "code_quality": ["code_quality"], "communication": ["communication"]},
 }
 
 
@@ -48,6 +53,15 @@ def _dedupe(items: list[str], limit: int) -> list[str]:
             seen.add(key)
             out.append(item.strip())
     return out[:limit]
+
+
+def _test_counts(answer: dict) -> dict:
+    """A coding answer's tests, for the per-question chart (only when the language was graded)."""
+    execution = answer.get("execution") or {}
+    if answer.get("answer_type") != "code" or not execution.get("graded"):
+        return {}
+    return {"tests_passed": execution.get("passed_tests", 0), "tests_total": execution.get("total_tests", 0),
+            "language": answer.get("language")}
 
 
 def _question_scores(questions: list[dict], evaluations: list[dict], answers: list[dict]) -> list[dict]:
@@ -67,6 +81,7 @@ def _question_scores(questions: list[dict], evaluations: list[dict], answers: li
             "topic": q.get("topic", "general"), "question_text": q.get("question_text", ""),
             "score": e["overall_score"], "performance_tier": e.get("performance_tier"),
             "time_taken_s": answer.get("time_taken_s"), "hints_used": len(q.get("hints") or []),
+            **_test_counts(answer),
         })
     return rows
 

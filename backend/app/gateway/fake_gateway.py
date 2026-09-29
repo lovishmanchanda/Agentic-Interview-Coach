@@ -31,10 +31,10 @@ class UnscriptedCallError(AssertionError):
 
 
 class FakeAIGateway(AIGateway):
-    def __init__(self, *, session_token_budget: int = 60_000, embedder=None):
+    def __init__(self, *, session_token_budget: int = 60_000, embedder=None, executor=None):
         # embedder: a real provider (keyless dev with HF_TOKEN set) keeps the Mentor's Chroma collection
         # consistent with live runs; without one, embed() returns deterministic hash vectors.
-        super().__init__(session_token_budget=session_token_budget, embedder=embedder)
+        super().__init__(session_token_budget=session_token_budget, embedder=embedder, executor=executor)
         self._queues: dict[str, deque] = defaultdict(deque)
         self.calls: list[tuple[CallType, dict[str, Any]]] = []
 
@@ -106,8 +106,12 @@ class FakeAIGateway(AIGateway):
 
     # ── Code execution ──
     async def execute_code(self, language, code, stdin="", *, context=None) -> ExecutionResult:
+        if self.executor is not None and not self._queues["execute"]:  # e.g. the tests' local Python runner
+            self.calls.append(("execute", {"language": language, "code": code, "stdin": stdin, "context": context}))
+            return await super().execute_code(language, code, stdin, context=context)
         return self._next("execute", {"language": language, "code": code, "stdin": stdin, "context": context},
-                          default=lambda: ExecutionResult(status="accepted", stdout="[fake gateway] not executed\n"))
+                          default=lambda: ExecutionResult(status="accepted", language=language,
+                                                          stdout="[fake gateway] not executed\n"))
 
 
 def _hash_vector(text: str) -> list[float]:

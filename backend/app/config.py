@@ -3,6 +3,7 @@
 Locally these come from `.env` (repo root or backend/). In production, App Service injects them as
 environment variables backed by Azure Key Vault references, so no Key Vault SDK is needed here.
 """
+import secrets
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -56,8 +57,18 @@ class Settings(BaseSettings):
     chroma_collection: str = "interview_reports_v2"
 
     # ── Code execution (Piston) ──
+    # Base URL: a proxy that serves POST <url>/execute, or Piston itself as http://host:2000/api/v2.
     piston_url: str = ""
-    piston_api_key: str = ""
+    piston_api_key: str = ""   # sent as X-API-Key when set
+    piston_timeout_s: float = Field(default=30.0, gt=0)
+    code_runs_per_minute: int = Field(default=12, ge=1)  # "Run" presses per candidate (Submit is limited by the flow)
+
+    # ── Abuse limits (per process; see utils/rate_limit.py) ──
+    login_failures_per_15_min: int = Field(default=10, ge=1)   # per email and per IP
+    registrations_per_hour: int = Field(default=20, ge=1)      # per IP
+    mentor_messages_per_minute: int = Field(default=10, ge=1)  # per candidate: each one is an LLM call
+    interviews_per_hour: int = Field(default=20, ge=1)         # per candidate: each one is several LLM calls
+    max_request_bytes: int = Field(default=1_000_000, ge=10_000)
 
     # ── Voice ──
     speech_key: str = ""
@@ -74,6 +85,8 @@ class Settings(BaseSettings):
     # Groq writes the report's summary, weak areas, recommendations and study plan (scores are always computed).
     # Off: the deterministic report stitched from the evaluator's notes.
     report_writer: bool = True
+    # Wrap up after this long, whatever the question count (the state machine decides when; the agent what to say).
+    max_interview_minutes: int = Field(default=60, ge=1)
 
     # ── Input limits (architecture.md §12.3) ──
     max_answer_chars: int = 5_000
@@ -96,9 +109,12 @@ class Settings(BaseSettings):
             raise ValueError("JWT_SECRET must be set (>= 32 chars) outside local/test")
         if self.use_inmemory_db and self.app_env not in ("local", "test"):
             raise ValueError("USE_INMEMORY_DB is only allowed when APP_ENV is local or test")
-        if self.app_env in ("local", "test") and not self.jwt_secret:
-            # Deterministic dev-only secret so local runs work without a .env.
-            self.jwt_secret = "local-dev-only-secret-change-me-0123456789"
+        if self.app_env == "test" and not self.jwt_secret:
+            self.jwt_secret = "test-only-secret-0123456789-0123456789"  # deterministic for the test suite
+        elif self.app_env == "local" and not self.jwt_secret:
+            # Random per process: a secret written in the repo would let anyone forge tokens if a deployment
+            # ever ran with the default APP_ENV. The cost: sign in again after restarting the backend.
+            self.jwt_secret = secrets.token_urlsafe(48)
         return self
 
     @property

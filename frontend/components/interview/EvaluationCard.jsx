@@ -1,4 +1,5 @@
 import Badge from "@/components/ui/Badge";
+import { dimensionLabel } from "@/lib/interviewOptions";
 
 const TIER_TONE = { strong: "success", adequate: "primary", weak: "warning" };
 
@@ -30,7 +31,7 @@ export default function EvaluationCard({ evaluation }) {
         {dimensions && (
           <span className="text-xs text-muted">
             {/* technical: correctness · depth · communication; behavioral: the STAR parts, specificity, ownership… */}
-            {Object.entries(dimensions).map(([name, score]) => `${name} ${score}`).join(" · ")}
+            {Object.entries(dimensions).map(([name, score]) => `${dimensionLabel(name)} ${score}`).join(" · ")}
           </span>
         )}
       </div>

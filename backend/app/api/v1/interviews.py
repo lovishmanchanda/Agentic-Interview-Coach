@@ -1,15 +1,18 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
+from pydantic import BaseModel, Field
 
 from app.core.interview.engine import InterviewEngine
 from app.core.interview.question_engine import topics_for
 from app.core.interview.state_machine import allowed_next
 from app.db.models.interview import UNAVAILABLE, InterviewConfigRequest, InterviewType
+from app.db.models.question import CodingLanguage
 from app.db.repositories.interview_repo import InterviewRepository
 from app.db.repositories.profile_repo import ProfileRepository
 from app.dependencies import CurrentUser, get_engine, get_interview_repo, get_profile_repo
 from app.utils.exceptions import ConflictError, UnprocessableError
+from app.utils.rate_limit import enforce
 from app.utils.responses import ok
 
 router = APIRouter(prefix="/interviews", tags=["interviews"])
@@ -22,6 +25,14 @@ async def _require_profile(profiles: ProfileRepository, candidate_id: str) -> di
     if profile is None:
         raise ConflictError("Complete your profile before starting an interview", code="profile_missing")
     return profile
+
+
+CODING_UNAVAILABLE = "Coding interviews need the code runner, which isn't set up on this server yet."
+
+
+def _unavailable(engine: InterviewEngine) -> dict[tuple[str, str], str]:
+    """What can't be chosen right now: features not built yet, and coding without a code runner."""
+    return {**UNAVAILABLE, **({} if engine.gateway.executor else {("interview_type", "coding"): CODING_UNAVAILABLE})}
 
 
 def _summary(session: dict) -> dict:
@@ -47,18 +58,24 @@ async def interview_options(user: CurrentUser, engine: EngineDep, profiles: Prof
     profile = await _require_profile(profiles, user["_id"])
     config = engine.resolve_config(InterviewConfigRequest(role=role, interview_type=interview_type), profile)
     return ok({
-        "defaults": {k: config[k] for k in ("interview_type", "interview_mode", "role", "experience_level",
-                                            "company", "difficulty", "question_count", "input_mode", "output_mode")},
+        "defaults": {k: config[k] for k in ("interview_type", "interview_mode", "role", "experience_level", "company",
+                                            "difficulty", "question_count", "input_mode", "output_mode", "coding_language")},
         "role_key": config["role_key"],
         "topics": await topics_for(engine.question_bank, interview_type, config["role_key"]),
-        "unavailable": [{"field": field, "value": value, "reason": reason} for (field, value), reason in UNAVAILABLE.items()],
+        "unavailable": [{"field": field, "value": value, "reason": reason}
+                        for (field, value), reason in _unavailable(engine).items()],
     })
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-async def create_interview(body: InterviewConfigRequest, user: CurrentUser, engine: EngineDep, profiles: ProfilesDep):
+async def create_interview(body: InterviewConfigRequest, user: CurrentUser, engine: EngineDep, profiles: ProfilesDep,
+                           request: Request):
     profile = await _require_profile(profiles, user["_id"])
-    if reason := body.unavailable_reason():
+    enforce(request.app.state.limiters["interviews"], user["_id"],
+            "You've started a lot of interviews in the last hour. Try again later.")
+    unavailable = _unavailable(engine)
+    reason = next((r for (field, value), r in unavailable.items() if getattr(body, field) == value), None)
+    if reason:
         raise UnprocessableError(reason, code="option_unavailable")
     session = await engine.create_session(candidate_id=user["_id"], profile=profile, request=body)
     return ok(_summary(session))
@@ -101,3 +118,17 @@ async def get_interview_state(session_id: str, user: CurrentUser, engine: Engine
         "updated_at": session["updated_at"].isoformat(),
         "state_history": [{"state": h["state"], "at": h["at"].isoformat()} for h in session.get("state_history", [])],
     })
+
+
+class CodeRunRequest(BaseModel):
+    code: str = Field(max_length=20_000)  # the engine applies MAX_CODE_CHARS with a friendly message
+    language: CodingLanguage = "python"
+
+
+@router.post("/{session_id}/code/run")
+async def run_code(session_id: str, body: CodeRunRequest, user: CurrentUser, engine: EngineDep, request: Request):
+    """Run: the current coding problem's visible tests (or the code as written, for ungraded languages).
+    Not recorded or scored; Submit (CODE_SUBMIT over the WebSocket) is what counts."""
+    enforce(request.app.state.limiters["code_run"], user["_id"],
+            "That's a lot of runs in a minute. Wait a moment and try again.")
+    return ok(await engine.run_code(session_id, user["_id"], body.code, body.language))

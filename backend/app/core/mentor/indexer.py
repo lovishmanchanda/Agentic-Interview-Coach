@@ -30,7 +30,12 @@ def to_rag_report(report: dict, questions: list[dict], answers: list[dict], eval
     feedback = []
     for e in evaluations:
         q = by_question.get(e["question_id"], {})
-        answer_text = latest_answer.get(e["question_id"], {}).get("answer_text", "")
+        answer = latest_answer.get(e["question_id"], {})
+        answer_text = answer.get("answer_text", "")
+        if answer.get("answer_type") == "code":  # the Mentor sees the result and the explanation, not the code
+            run = answer.get("execution") or {}
+            tests = f"{run.get('passed_tests', 0)}/{run.get('total_tests', 0)} tests passed" if run.get("graded") else "not graded"
+            answer_text = f"[{answer.get('language')} solution: {run.get('status')}, {tests}] {answer_text}".strip()
         feedback.append(QuestionFeedback(
             question_id=e["question_id"],
             question=q.get("question_text", ""),

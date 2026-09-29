@@ -66,7 +66,9 @@ def build_engine(state) -> InterviewEngine:
                            follow_ups=state.settings.interview_follow_ups,
                            agent=InterviewAgent(state.gateway, AgentRunRepository(state.db))
                            if state.settings.interview_agent else None,
-                           report_writer=state.settings.report_writer)
+                           report_writer=state.settings.report_writer,
+                           max_code_chars=state.settings.max_code_chars,
+                           max_interview_minutes=state.settings.max_interview_minutes)
 
 
 def get_engine(request: Request) -> InterviewEngine:

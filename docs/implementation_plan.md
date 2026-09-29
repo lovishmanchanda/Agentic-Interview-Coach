@@ -761,6 +761,16 @@ Phase 0 → Phase 1 (starting with the walking skeleton, 1.0) → Phase 2 → Ph
 ### Phase 4 — Serious Adaptive Interview & Behavioral Mode
 **Goal**: Build the flagship Serious Interview mode with explicit Interviewer/Evaluator separation, adaptive difficulty, and the Personal/Behavioral interview type.
 
+> [!NOTE]
+> **✅ Done (2026-09-29)**, verified live on the Piston VM + Groq. 468 backend tests.
+> - **Already done in Phase 1:** 4.1 serious mode (1.2/1.11), 4.2 the interviewer sees tiers only (1.6), 4.3 per-answer evaluations + performance vector (1.7/1.8), 4.4 adaptive difficulty, topic rotation and no repeats across sessions (1.1/1.8), 4.5 behavioral STAR interviews (1.7).
+> - **4.6 Live coding:** `core/coding/` (`languages.py`, `sandbox_client.py` = `PistonExecutor` behind `AIGateway.execute_code()`, `test_harness.py`), `core/evaluation/code_evaluator.py` + `prompts/evaluator/coding_v1.txt` (7 dimensions; correctness = share of tests passed; overall = fixed weighting), 18 problems (8 easy, 7 medium, 3 hard) in `data/seed/question_bank/coding.json` with expected outputs computed from reference solutions. Engine: `CODE_SUBMIT` → run every test → `CODE_RESULT` → evaluate; `CODE_DRAFT`; `POST /interviews/{id}/code/run` (visible tests, rate-limited). Coding problems are never LLM-generated. Frontend: `components/coding/` (Monaco via `@monaco-editor/react`, one buffer per language, Run / Submit, approach box, output panel), coding options on the start page (1–3 problems, starting language).
+> - **Deviations:** no extra coding states (4.6.6 maps onto the existing states); `/code/execute` became `POST /interviews/{id}/code/run` (session-scoped, uses the session's problem, no stdin); Run checks the visible tests instead of free stdin; only Python is graded, the other four languages run as written; the candidate's written approach is part of the submission (it's what "communication" and complexity analysis are scored on); Monaco loads from its CDN (self-hosting in Phase 7).
+> - **4.7:** `MAX_INTERVIEW_MINUTES` (60) — the state machine wraps up at the question count or the time limit, whichever comes first.
+> - **4.8:** coding headline scores (problem solving, complexity, code quality, communication), tests passed per question, the transcript shows code + run (hidden tests pass/fail only in serious mode, also in the report).
+> - **Also fixed:** Groq JSON-mode rejections (HTTP 400 `json_validate_failed`) now get the normal corrective retry instead of failing the call.
+> - **Live on Piston:** all 5 languages run; compile errors (C++, and Java via its single-file launcher), runtime errors and time limits (3 s) map to the right status; every one of the 18 problems' reference solutions passes all its tests (~100 ms each); faked result lines score 0, a bug only a hidden test catches scores 4/5. A full practice interview in the browser (Java run, Python submissions, a wrong answer at 3/5, a follow-up, the report) worked end to end. Found and fixed on the way: a circular import when the sandbox client was imported first.
+
 **Duration Estimate**: 2–3 weeks
 
 #### Tasks

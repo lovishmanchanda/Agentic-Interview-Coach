@@ -526,16 +526,16 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    BE[submit_code_for_execution\nsandbox_tool] --> GRADED{Harness exists\nfor language?}
+    BE[test_harness.run_code\nRun: visible tests · Submit: all] --> GRADED{Harness exists\nfor language?}
 
-    GRADED -- "Yes (Python first)" --> WRAP[test_harness.wrap\ncode + all test cases]
+    GRADED -- "Yes (Python first)" --> WRAP[code + runner\ncalls the function per test\nexpected outputs stay on the server]
     GRADED -- No --> RAW[Run as-is\nrun-only, no grading]
 
     WRAP --> GW[AIGateway.execute_code]
     RAW --> GW
     GW --> CLIENT[sandbox_client\nPOST PISTON_URL/execute\nX-API-Key · language · version · files · stdin]
     CLIENT --> PISTON[Piston on Azure VM]
-    PISTON --> PARSE[test_harness.parse\nper-test JSON lines → results]
+    PISTON --> PARSE[test_harness.grade\nmarker lines → compare with expected]
 
     PARSE --> UNIFIED["ExecutionResult\n{ status, stdout, stderr, runtime_ms,\npassed_tests, total_tests, test_results[] }"]
 
@@ -550,6 +550,8 @@ flowchart LR
 The browser never reports its own execution result. Grading is based only on the harness's per-test output, never on the exit code.
 
 ### 10c. Live Coding State Sub-Flow
+
+> **As built (Phase 4):** these are phases of the UI, not separate server states. Thinking, coding and Run happen in `WAITING_FOR_RESPONSE`; Submit → `EVALUATING` (run every test → `CODE_RESULT` → coding evaluator) → `FOLLOW_UP_DECISION`. A follow-up is a text question (e.g. "why a stack?", "can you do it in O(n)?"); the next main problem's difficulty follows the score, as in a technical interview. The interview ends at the problem count or the time limit.
 
 ```mermaid
 stateDiagram-v2

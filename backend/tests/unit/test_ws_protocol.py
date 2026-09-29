@@ -29,7 +29,8 @@ def test_valid_messages(data, kind):
     ({"type": "AUTH", "token": "x"}, "unknown_event"),       # only valid as the first frame
     (["PING"], "unknown_event"),
     ("PING", "unknown_event"),
-    ({"type": "CODE_SUBMIT", "code": "x"}, "event_unavailable"),
+    ({"type": "AUDIO_END"}, "event_unavailable"),
+    ({"type": "CODE_SUBMIT", "code": "x", "language": "go"}, "bad_message"),
     ({"type": "AUDIO_CHUNK"}, "event_unavailable"),
     ({"type": "ANSWER", "answer_text": "x", "answer_type": "voice"}, "bad_message"),
     ({"type": "ANSWER", "answer_text": 5}, "bad_message"),

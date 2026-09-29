@@ -28,7 +28,10 @@ import anyio
 
 from pymongo.errors import DuplicateKeyError
 
+from app.core.coding.languages import LANGUAGES, public_languages
+from app.core.coding.test_harness import redact, run_code
 from app.core.evaluation.answer_evaluator import evaluate_answer
+from app.core.evaluation.code_evaluator import evaluate_code
 from app.agents.interview_agent import InterviewAgent
 from app.agents.interview_agent_schemas import ACTION_TO_ADAPTATION
 from app.core.interview.adaptation_engine import action_for_choice, allowed_actions, decide_next_action, update_performance
@@ -41,7 +44,8 @@ from app.db.repositories.interview_repo import InterviewRepository, as_utc, utcn
 from app.db.repositories.question_repo import QuestionRepository
 from app.gateway import AIGateway
 from app.gateway.types import CallContext
-from app.utils.exceptions import AppError, NotFoundError
+from app.gateway.types import ExecutionResult
+from app.utils.exceptions import AppError, NotFoundError, ConflictError, UnprocessableError
 from app.utils.logging import bind_context, log_event
 
 log = logging.getLogger(__name__)
@@ -77,9 +81,11 @@ SUGGESTED_SECONDS = {"technical": 180, "behavioral": 240}
 
 def suggested_seconds(question: dict) -> int:
     """A guide for the room's timer, not a limit: ~3 min technical, ~4 min behavioral (a STAR story), +1 min
-    for hard questions, 2 min for a follow-up."""
+    for hard questions, 2 min for a follow-up, and the problem's own time for a coding problem."""
     if question.get("is_follow_up"):
         return 120
+    if question.get("type") == "coding" and question.get("coding"):
+        return question["coding"].get("time_limit_minutes", 20) * 60
     base = SUGGESTED_SECONDS.get(question.get("type", "technical"), 180)
     return base + (60 if question.get("difficulty") == "hard" else 0)
 
@@ -100,11 +106,35 @@ def _evaluation_view(evaluation: dict) -> dict:
     return {k: evaluation.get(k) for k in keys}
 
 
+def _coding_view(question: dict, session: dict) -> dict:
+    """The problem as the room shows it: statement is the question text; only the visible tests are sent."""
+    spec = question["coding"]
+    return {"entry_function": spec["entry_function"], "constraints": spec.get("constraints", ""),
+            "examples": spec.get("examples", []), "starter_code": spec.get("template_code", {}),
+            "time_limit_minutes": spec.get("time_limit_minutes", 20),
+            "default_language": session["config"].get("coding_language") or "python",
+            "languages": public_languages(),
+            "visible_tests": [{"input": t["input"], "expected": t["expected_output"]}
+                              for t in question.get("test_cases", []) if not t.get("is_hidden")],
+            "hidden_test_count": sum(1 for t in question.get("test_cases", []) if t.get("is_hidden"))}
+
+
+def _code_answer_text(answer: dict) -> str:
+    """How a coding submission reads to the interviewer agent and the Mentor: the explanation plus a result line."""
+    execution = answer.get("execution") or {}
+    tests = (f"{execution.get('passed_tests', 0)}/{execution.get('total_tests', 0)} tests passed"
+             if execution.get("graded") else "not graded (ran as written)")
+    explanation = (answer.get("answer_text") or "").strip() or "(no explanation)"
+    return f"{explanation}\n\n[Submitted {answer.get('language', 'code')} solution: {execution.get('status', '?')}, {tests}]"
+
+
 class InterviewEngine:
     def __init__(self, *, repo: InterviewRepository, question_bank: QuestionRepository, gateway: AIGateway,
                  indexer: ReportIndexer | None = None, max_answer_chars: int = 5_000, question_token_reserve: int = QUESTION_TOKEN_RESERVE,
                  stale_work: timedelta = STALE_WORK, follow_ups: bool = True, agent: InterviewAgent | None = None,
-                 report_writer: bool = True):
+                 report_writer: bool = True, max_code_chars: int = 10_000, max_interview_minutes: int = 60):
+        self.max_code_chars = max_code_chars
+        self.max_interview_minutes = max_interview_minutes
         self.repo = repo
         self.report_writer = report_writer
         self.follow_ups = follow_ups
@@ -134,6 +164,7 @@ class InterviewEngine:
             "question_count": request.question_count,
             "input_mode": request.input_mode,
             "output_mode": request.output_mode,
+            "coding_language": request.coding_language,
         }
 
     async def create_session(self, *, candidate_id: str, profile: dict, request: InterviewConfigRequest) -> dict:
@@ -175,7 +206,8 @@ class InterviewEngine:
             raise NotFoundError("Interview session not found", code="session_not_found")
         return session
 
-    async def transcript(self, session_id: str, *, include_evaluations: bool, closing_message: str | None = None) -> list[dict]:
+    async def transcript(self, session_id: str, *, include_evaluations: bool, closing_message: str | None = None,
+                         hide_hidden_tests: bool = False) -> list[dict]:
         questions = await self.repo.session_questions(session_id)
         answers = await self.repo.session_answers(session_id)
         evaluations = {e["answer_id"]: e for e in await self.repo.session_evaluations(session_id)} if include_evaluations else {}
@@ -186,7 +218,11 @@ class InterviewEngine:
             entries.extend({"role": "hint", "question_id": q["question_id"], "content": h["text"]}
                            for h in q.get("hints") or [])
             for a in (a for a in answers if a["question_id"] == q["question_id"]):
-                entries.append({"role": "candidate", "question_id": q["question_id"], "content": a["answer_text"]})
+                entry = {"role": "candidate", "question_id": q["question_id"], "content": a["answer_text"]}
+                if a.get("answer_type") == "code":
+                    entry.update(code=a["code"], language=a["language"],
+                                 execution=redact(a["execution"], hide_hidden=hide_hidden_tests))
+                entries.append(entry)
                 if a["answer_id"] in evaluations:
                     entries.append({"role": "evaluation", "question_id": q["question_id"],
                                     "evaluation": _evaluation_view(evaluations[a["answer_id"]])})
@@ -200,7 +236,8 @@ class InterviewEngine:
         session_id = session["session_id"]
         reveal = session["config"]["interview_mode"] == "practice" or session["state"] == REPORT_READY
         transcript = await self.transcript(session_id, include_evaluations=reveal,
-                                           closing_message=session.get("closing_message"))
+                                           closing_message=session.get("closing_message"),
+                                           hide_hidden_tests=session["config"]["interview_mode"] == "serious")
         questions = await self.repo.session_questions(session_id)
         current = next((q for q in questions if q["question_id"] == session.get("current_question_id")), None)
         return {
@@ -210,6 +247,7 @@ class InterviewEngine:
             "focus_topics": session.get("focus_topics", []),
             "current_question": self._question_view(current, session) if current and session["state"] in (WAITING, EVALUATING) else None,
             "draft_answer": self._draft_for(session),
+            "draft_code": self._code_draft_for(session),
             "transcript": transcript,
             "report_id": session.get("report_id"),
             "questions_asked": session["questions_asked"],
@@ -238,6 +276,12 @@ class InterviewEngine:
                              message=f"Answers are limited to {self.max_answer_chars} characters."))
             return
 
+        if session["state"] == WAITING and session.get("current_question_id"):
+            current_question = await self.repo.get_question(session["current_question_id"])
+            if current_question and current_question.get("type") == "coding":
+                await emit(event("ERROR", session["state"], code="code_expected",
+                                 message="This is a coding problem: submit your code instead."))
+                return
         session = await self.sm.transition(session_id, WAITING, EVALUATING, extra={"draft_answer": None})
         if session is None:
             current = await self.repo.get_session(session_id)
@@ -258,14 +302,22 @@ class InterviewEngine:
         context = CallContext(session_id=session_id, candidate_id=candidate_id)
         try:
             result = await evaluate_answer(self.gateway, question=question, answer_text=answer_text,
-                                           profile={"target": {"role": session["config"]["role"]},
-                                                    "personal": {"experience_level": session["config"]["experience_level"]}},
-                                           context=context)
+                                           profile=self._profile_for(session), context=context)
         except AppError as exc:
             await self.sm.transition(session_id, EVALUATING, WAITING)
             await emit(event("ERROR", WAITING, code=exc.code, message=exc.message, retryable=True))
             return
+        await self._record_evaluation(session, question, answer, result, emit)
 
+    @staticmethod
+    def _profile_for(session: dict) -> dict:
+        return {"target": {"role": session["config"]["role"]},
+                "personal": {"experience_level": session["config"]["experience_level"]}}
+
+    async def _record_evaluation(self, session: dict, question: dict, answer: dict, result: dict, emit: Emit) -> None:
+        """EVALUATING → FOLLOW_UP_DECISION with the evaluation stored, then on to the next step."""
+        session_id, candidate_id = session["session_id"], session["candidate_id"]
+        practice = session["config"]["interview_mode"] == "practice"
         evaluation = await self.repo.add_evaluation({
             "evaluation_id": uuid.uuid4().hex, "session_id": session_id, "question_id": question["question_id"],
             "answer_id": answer["answer_id"], "candidate_id": candidate_id, "evaluation_type": result["evaluation_type"],
@@ -288,6 +340,98 @@ class InterviewEngine:
         if practice:  # serious mode: scores stay hidden until the report
             await emit(event("EVALUATION", DECIDING, **_evaluation_view(evaluation)))
         await self._drive(session, emit)
+
+    # ── coding (4.6) ─────────────────────────────────────────────────────────
+    async def _coding_question(self, session: dict) -> dict | None:
+        if session["state"] != WAITING or not session.get("current_question_id"):
+            return None
+        question = await self.repo.get_question(session["current_question_id"])
+        return question if question and question.get("type") == "coding" else None
+
+    def _check_code(self, code: str, language: str) -> tuple[str, str] | None:
+        """(code, message) for invalid code, else None."""
+        if language not in LANGUAGES:
+            return "language_unsupported", f"{language} isn't supported."
+        if not (code or "").strip():
+            return "code_empty", "Write some code before running it."
+        if len(code) > self.max_code_chars:
+            return "code_too_long", f"Code is limited to {self.max_code_chars} characters."
+        return None
+
+    async def run_code(self, session_id: str, candidate_id: str, code: str, language: str) -> dict:
+        """POST /interviews/{id}/code/run: a practice run on the visible tests. Not recorded, not scored."""
+        session = await self.get_owned_session(session_id, candidate_id)
+        question = await self._coding_question(session)
+        if question is None:
+            raise ConflictError("There's no coding problem waiting for an answer right now.", code="no_coding_question")
+        if problem := self._check_code(code, language):
+            raise UnprocessableError(problem[1], code=problem[0])
+        context = CallContext(session_id=session_id, candidate_id=candidate_id)
+        result = await run_code(self.gateway, question, code, language, include_hidden=False, context=context)
+        log_event(log, "code_run", session_id=session_id, language=language, status=result.status,
+                  passed=result.passed_tests, total=result.total_tests)
+        return result.model_dump()
+
+    async def handle_code_submission(self, session_id: str, candidate_id: str, code: str, language: str,
+                                     explanation: str, emit: Emit) -> None:
+        """CODE_SUBMIT: run every test (hidden ones too) in the sandbox, show the result (CODE_RESULT), then
+        the coding evaluator scores it and the interview moves on, as with a text answer."""
+        session = await self.get_owned_session(session_id, candidate_id)
+        question = await self._coding_question(session)
+        if question is None:
+            await emit(event("ERROR", session["state"], code="not_accepting_answers",
+                             message="This question isn't waiting for code right now."))
+            return
+        if problem := self._check_code(code, language):
+            await emit(event("ERROR", session["state"], code=problem[0], message=problem[1]))
+            return
+        explanation = (explanation or "").strip()[:self.max_answer_chars]
+        session = await self.sm.transition(session_id, WAITING, EVALUATING)
+        if session is None:
+            current = await self.repo.get_session(session_id)
+            await emit(event("ERROR", current["state"], code="not_accepting_answers",
+                             message="This question isn't waiting for code right now."))
+            return
+        practice = session["config"]["interview_mode"] == "practice"
+        await emit(event("PROCESSING", EVALUATING, message="Running your code against the tests…"))
+        context = CallContext(session_id=session_id, candidate_id=candidate_id)
+        try:
+            execution: ExecutionResult = await run_code(self.gateway, question, code, language, include_hidden=True,
+                                                        context=context)
+        except AppError as exc:  # the sandbox is down: nothing is recorded, the candidate resubmits
+            await self.sm.transition(session_id, EVALUATING, WAITING)
+            await emit(event("ERROR", WAITING, code=exc.code, message=exc.message, retryable=True))
+            return
+        now = utcnow()
+        answer = await self.repo.add_answer({
+            "answer_id": uuid.uuid4().hex, "session_id": session_id, "question_id": question["question_id"],
+            "candidate_id": candidate_id, "answer_text": explanation, "answer_type": "code", "code": code,
+            "language": language, "execution": execution.model_dump(), "submitted_at": now,
+            "time_taken_s": round((now - as_utc(question["asked_at"])).total_seconds()) if question.get("asked_at") else None,
+        })
+        await self.repo.update_session(session_id, {"code_draft": None})
+        await emit(event("CODE_RESULT", EVALUATING, question_id=question["question_id"],
+                         **redact(execution, hide_hidden=not practice)))
+        await emit(event("PROCESSING", EVALUATING,
+                         message="Reviewing your solution…" if practice else "Solution recorded. Preparing the next step…"))
+        try:
+            result = await evaluate_code(self.gateway, question=question, code=code, language=language,
+                                         explanation=explanation, execution=execution,
+                                         profile=self._profile_for(session), context=context,
+                                         time_taken_s=answer["time_taken_s"])
+        except AppError as exc:
+            # The code ran and its result is kept; only the review failed, so the same code can be resubmitted.
+            await self.sm.transition(session_id, EVALUATING, WAITING)
+            await emit(event("ERROR", WAITING, code=exc.code, message=exc.message, retryable=True))
+            return
+        await self._record_evaluation(session, question, answer, result, emit)
+
+    async def save_code_draft(self, session_id: str, candidate_id: str, code: str, language: str) -> None:
+        """CODE_DRAFT: the editor's content, so a reload restores it. Ignored unless a coding problem is waiting."""
+        session = await self.get_owned_session(session_id, candidate_id)
+        if language in LANGUAGES and await self._coding_question(session):
+            await self.repo.update_session(session_id, {"code_draft": {
+                "question_id": session["current_question_id"], "code": code[:self.max_code_chars], "language": language}})
 
     async def save_draft(self, session_id: str, candidate_id: str, text: str) -> None:
         """ANSWER_DRAFT: autosave, so a reload or dropped connection doesn't lose a half-written answer.
@@ -405,14 +549,18 @@ class InterviewEngine:
         question = await self.repo.get_question(session["current_question_id"])
         evaluation = await self.repo.latest_evaluation(session_id, question["question_id"])
         budget = self.gateway.budget_remaining(session_id)
+        time_up = utcnow() - as_utc(session["started_at"]) >= timedelta(minutes=self.max_interview_minutes)
         decision = decide_next_action(evaluation, question, session, budget_remaining=budget,
-                                      token_reserve=self.question_token_reserve, follow_ups_enabled=self.follow_ups)
+                                      token_reserve=self.question_token_reserve, follow_ups_enabled=self.follow_ups,
+                                      time_limit_reached=time_up)
         decided_by, lead_in, agent_outcome, follow_up_points = "adaptation", "", None, []
         if self.agent is not None:
             allowed = allowed_actions(question, session, budget_remaining=budget,
-                                      token_reserve=self.question_token_reserve, follow_ups_enabled=self.follow_ups)
+                                      token_reserve=self.question_token_reserve, follow_ups_enabled=self.follow_ups,
+                                      time_limit_reached=time_up)
             answer = await self.repo.get_answer(evaluation["answer_id"])
-            run = await self.agent.decide(session=session, question=question, answer_text=answer["answer_text"],
+            answer_text = _code_answer_text(answer) if answer.get("answer_type") == "code" else answer["answer_text"]
+            run = await self.agent.decide(session=session, question=question, answer_text=answer_text,
                                           evaluation=evaluation, allowed=allowed, recommended=decision.action)
             agent_outcome = run.outcome
             if run.decision is not None:
@@ -442,7 +590,9 @@ class InterviewEngine:
         follow-up, against the parent question's concepts and rubric."""
         follow_up = await self.repo.add_question({
             "question_id": uuid.uuid4().hex, "session_id": session["session_id"], "candidate_id": session["candidate_id"],
-            "source": "follow_up", "type": parent.get("type", "technical"), "parent_question_id": parent["question_id"],
+            # A follow-up on a coding problem is a discussion question (complexity, trade-offs), answered in text.
+            "source": "follow_up", "type": "technical" if parent.get("type") == "coding" else parent.get("type", "technical"),
+            "parent_question_id": parent["question_id"],
             "bank_question_id": None, "generated_question_id": None,
             "topic": parent["topic"], "subtopic": parent.get("subtopic", ""), "difficulty": parent["difficulty"],
             "question_text": text, "expected_concepts": expected_points or parent.get("expected_concepts", []),
@@ -494,6 +644,8 @@ class InterviewEngine:
             "question_text": picked["question_text"], "expected_concepts": picked.get("expected_concepts", []),
             "evaluation_rubric": picked.get("evaluation_rubric", {}),
             "follow_up_possibilities": picked.get("follow_up_possibilities", []), "is_follow_up": False,
+            # Coding problems keep their spec and every test (hidden ones never leave the server).
+            **({"coding": picked["coding"], "test_cases": picked.get("test_cases", [])} if picked.get("coding") else {}),
             "interviewer_message": f"{lead} {picked['question_text']}",
             "question_number": number, "asked_at": utcnow(),
             "prompt_version_used": context.prompt_version,
@@ -555,7 +707,15 @@ class InterviewEngine:
                 # The room's timer: when it was asked (server clock) and a suggested answer time.
                 "asked_at": as_utc(question["asked_at"]).isoformat() if question.get("asked_at") else None,
                 "suggested_seconds": suggested_seconds(question),
-                "hints_left": max(0, MAX_HINTS_PER_QUESTION - len(question.get("hints") or [])) if practice else 0}
+                "hints_left": max(0, MAX_HINTS_PER_QUESTION - len(question.get("hints") or [])) if practice else 0,
+                "coding": _coding_view(question, session) if question.get("type") == "coding" else None}
+
+    @staticmethod
+    def _code_draft_for(session: dict) -> dict | None:
+        draft = session.get("code_draft") or {}
+        if session["state"] == WAITING and draft.get("question_id") == session.get("current_question_id"):
+            return {"code": draft["code"], "language": draft["language"]}
+        return None
 
     @staticmethod
     def _draft_for(session: dict) -> str | None:

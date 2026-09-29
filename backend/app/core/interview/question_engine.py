@@ -29,7 +29,7 @@ from app.db.repositories.interview_repo import InterviewRepository
 from app.db.repositories.question_repo import QuestionRepository
 from app.gateway import AIGateway
 from app.gateway.types import CallContext
-from app.utils.exceptions import AppError
+from app.utils.exceptions import AppError, ServiceUnavailableError
 from app.utils.logging import log_event
 
 log = logging.getLogger(__name__)
@@ -135,7 +135,8 @@ class QuestionEngine:
             best = rank_candidates(candidates, topics_covered=session.get("topics_covered", []),
                                    recently_seen=recently_seen, difficulty=session["target_difficulty"], rng=rng,
                                    preferred_topic=_suggested_topic(session))[0]
-            if best["difficulty"] == session["target_difficulty"]:
+            # Coding problems are never generated (their tests must be verified), so the closest level is used.
+            if best["difficulty"] == session["target_difficulty"] or config["interview_type"] == "coding":
                 return {**best, "source": "bank"}
             # The bank has nothing left at this difficulty (e.g. adaptation moved up to "hard"): that is a
             # miss too, so write one at the right level. If that fails, the closest level beats no question.
@@ -145,6 +146,9 @@ class QuestionEngine:
                 log_event(log, "generation_failed_using_closest_bank_question", level=logging.WARNING,
                           code=exc.code, wanted=session["target_difficulty"], used=best["difficulty"])
                 return {**best, "source": "bank"}
+        if config["interview_type"] == "coding":
+            raise ServiceUnavailableError("There are no more coding problems for this interview.",
+                                          code="question_unavailable")
         return await self._generate(session, context=context)
 
     async def _generate(self, session: dict, *, context: CallContext) -> dict:
@@ -185,5 +189,7 @@ async def topics_for(bank: QuestionRepository, interview_type: str, role: str) -
     For behavioral interviews these are competencies."""
     if interview_type == "behavioral":
         return list(dict.fromkeys([*BEHAVIORAL_COMPETENCIES, *await bank.subtopics(type="behavioral", role=role)]))
+    if interview_type == "coding":  # problems need tests, so only what the bank has
+        return await bank.topics(type="coding", role=role)
     return list(dict.fromkeys([*ROLE_TOPICS.get(role, ROLE_TOPICS[DEFAULT_ROLE]),
                                *await bank.topics(type="technical", role=role)]))

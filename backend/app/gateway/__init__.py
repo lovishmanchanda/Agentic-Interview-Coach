@@ -8,13 +8,19 @@ from app.gateway.groq_gateway import GroqAIGateway
 def build_gateway(settings: Settings) -> AIGateway:
     # Embeddings (the Mentor) need HF_TOKEN; without it embed() -> 503 and the Mentor is disabled.
     embedder = HuggingFaceEmbedder(token=settings.hf_token, model=settings.embedding_model) if settings.hf_token else None
+    # Coding interviews need PISTON_URL; without it execute_code() -> 503 and the coding type is unavailable.
+    from app.core.coding.sandbox_client import PistonExecutor  # here, not at the top: it imports app.gateway.types
+
+    executor = PistonExecutor(url=settings.piston_url, api_key=settings.piston_api_key,
+                              timeout_s=settings.piston_timeout_s) if settings.piston_url else None
     if settings.fake_gateway:
-        return FakeAIGateway(session_token_budget=settings.session_token_budget, embedder=embedder)
+        return FakeAIGateway(session_token_budget=settings.session_token_budget, embedder=embedder, executor=executor)
     if settings.groq_api_key:
         return GroqAIGateway(api_key=settings.groq_api_key, default_model=settings.groq_interview_model,
                              fast_model=settings.groq_fast_model,
-                             session_token_budget=settings.session_token_budget, embedder=embedder)
-    return AIGateway(session_token_budget=settings.session_token_budget, embedder=embedder)  # stub: LLM calls -> 503
+                             session_token_budget=settings.session_token_budget, embedder=embedder, executor=executor)
+    return AIGateway(session_token_budget=settings.session_token_budget, embedder=embedder,
+                     executor=executor)  # stub: LLM calls -> 503
 
 
 def gateway_kind(gateway: AIGateway) -> str:

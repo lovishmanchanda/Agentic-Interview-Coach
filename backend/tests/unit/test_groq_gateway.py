@@ -107,3 +107,26 @@ def test_gateway_selection():
     assert isinstance(build_gateway(Settings(_env_file=None, app_env="local", groq_api_key="k")), GroqAIGateway)
     assert isinstance(build_gateway(Settings(_env_file=None, app_env="local")), FakeAIGateway)
     assert isinstance(build_gateway(Settings(_env_file=None, app_env="local", groq_api_key="k", use_fake_gateway=True)), FakeAIGateway)
+
+
+def _json_rejected(failed: str):
+    request = httpx.Request("POST", "https://x")
+    body = {"error": {"message": "Failed to generate JSON.", "type": "invalid_request_error",
+                      "code": "json_validate_failed", "failed_generation": failed}}
+    return groq.BadRequestError("json_validate_failed", response=httpx.Response(400, request=request), body=body)
+
+
+def test_groq_json_rejection_gets_the_corrective_retry():
+    """Groq's JSON mode can refuse the model's output with a 400; that's bad JSON, not an outage."""
+    gw, client = _gateway(_json_rejected('{"score": 5, "reason": "x"}"}'), _response(json.dumps({"score": 5, "reason": "ok"})))
+    assert run(gw.generate_structured("rate it", Verdict))["reason"] == "ok"
+    assert client.calls[1]["messages"][-2] == {"role": "assistant", "content": '{"score": 5, "reason": "x"}"}'}
+
+
+def test_other_bad_requests_are_still_503s():
+    request = httpx.Request("POST", "https://x")
+    other = groq.BadRequestError("context too long", response=httpx.Response(400, request=request),
+                                 body={"error": {"code": "context_length_exceeded"}})
+    gw, _ = _gateway(other)
+    with pytest.raises(ServiceUnavailableError):
+        run(gw.generate_structured("rate it", Verdict))

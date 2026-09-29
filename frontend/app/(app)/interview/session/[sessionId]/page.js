@@ -3,6 +3,8 @@
 import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
+import CodingRoom from "@/components/coding/CodingRoom";
+import EvaluationCard from "@/components/interview/EvaluationCard";
 import QuestionTimer, { ElapsedClock } from "@/components/interview/QuestionTimer";
 import Transcript from "@/components/interview/Transcript";
 import Alert from "@/components/ui/Alert";
@@ -51,6 +53,8 @@ export default function InterviewSessionPage() {
   const [currentQuestion, setCurrentQuestion] = useState(null); // {question_id, asked_at, suggested_seconds, …}
   const [clockOffset, setClockOffset] = useState(0);            // server clock − browser clock, for the timers
   const [startedAt, setStartedAt] = useState(null);
+  const [draftCode, setDraftCode] = useState(null);   // {code, language} autosaved for the current coding problem
+  const [codeResult, setCodeResult] = useState(null); // the latest CODE_RESULT (the server's run of a submission)
 
   useEffect(() => {
     const socket = connectInterview(sessionId, {
@@ -71,6 +75,7 @@ export default function InterviewSessionPage() {
             setProgress({ asked: payload.questions_asked, total: payload.total_questions,
               followUp: Boolean(payload.current_question?.is_follow_up) });
             setHintsLeft(payload.current_question?.hints_left ?? 0);
+            setDraftCode(payload.draft_code || null);
             if (payload.draft_answer) {
               // Restore the autosaved answer, unless something has been typed since.
               lastDraftRef.current = payload.draft_answer;
@@ -95,6 +100,11 @@ export default function InterviewSessionPage() {
             if (payload.message) setProcessingText(payload.message);
             setProcessing(true);
             break;
+          case "CODE_RESULT":
+            setCodeResult(payload);
+            // Attach the run to the submission this page just added to the transcript.
+            setTranscript((t) => t.map((e) => (e.role === "candidate" && e.code && !e.execution ? { ...e, execution: payload } : e)));
+            break;
           case "EVALUATION":
             setProcessing(false);
             setTranscript((t) => [...t, { role: "evaluation", question_id: payload.question_id, evaluation: payload }]);
@@ -109,7 +119,11 @@ export default function InterviewSessionPage() {
           case "ERROR":
             setProcessing(false);
             setHintLoading(false);
-            setError(payload.retryable ? `${payload.message} Your answer is kept below. Submit it again.` : payload.message);
+            if (payload.retryable) {
+              // Nothing was recorded: drop the optimistic submission so a retry doesn't show twice.
+              setTranscript((t) => t.filter((e) => e.question_id !== "pending"));
+            }
+            setError(payload.retryable ? `${payload.message} Your answer is kept. Submit it again.` : payload.message);
             break;
           default:
         }
@@ -153,6 +167,16 @@ export default function InterviewSessionPage() {
       setTranscript((t) => [...t, { role: "candidate", question_id: "pending", content: text }]);
       setAnswer("");
       lastDraftRef.current = "";
+      setProcessing(true);
+    } else {
+      setError("Not connected yet. Wait a moment and try again.");
+    }
+  }
+
+  function submitCode({ code, language, explanation }) {
+    setError(null);
+    if (socketRef.current?.send({ type: "CODE_SUBMIT", code, language, explanation })) {
+      setTranscript((t) => [...t, { role: "candidate", question_id: "pending", content: explanation, code, language }]);
       setProcessing(true);
     } else {
       setError("Not connected yet. Wait a moment and try again.");
@@ -227,6 +251,40 @@ export default function InterviewSessionPage() {
     <QuestionTimer askedAt={currentQuestion.asked_at} suggestedSeconds={currentQuestion.suggested_seconds}
       clockOffsetMs={clockOffset} stopped={!waiting} compact={!serious} />
   );
+
+  const coding = !finished && currentQuestion?.coding ? currentQuestion : null;
+  if (coding) {
+    // Coding problem: the room is the problem + editor; the conversation so far folds away.
+    const evaluation = [...transcript].reverse().find((e) => e.role === "evaluation" && e.question_id === coding.question_id);
+    return (
+      <div className="flex flex-col gap-4">
+        <header className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-semibold">{title}</h1>
+            <p className="text-sm text-muted">{subtitle}</p>
+          </div>
+          <div className="flex items-center gap-4">
+            {STATUS_TEXT[status.kind] && <Spinner label={STATUS_TEXT[status.kind]} />}
+            {timer && <div className="w-56">{timer}</div>}
+          </div>
+        </header>
+        {statusBar}
+        <CodingRoom key={coding.question_id} sessionId={sessionId} question={coding} draftCode={draftCode}
+          waiting={waiting} submitting={processing} socketRef={socketRef}
+          submittedResult={codeResult?.question_id === coding.question_id ? codeResult : null} onSubmit={submitCode} />
+        {busyText && !error && <Spinner label={busyText} />}
+        {!serious && evaluation && <EvaluationCard evaluation={evaluation.evaluation} />}
+        {serious && <p className="text-xs text-muted">Serious mode: scores and feedback appear in your report at the end. Hidden tests show pass/fail only.</p>}
+        {transcript.length > 1 && (
+          <details className="rounded-xl border border-border bg-surface px-4 py-3">
+            <summary className="cursor-pointer text-sm font-medium">Conversation so far</summary>
+            <div className="mt-4"><Transcript entries={transcript} /></div>
+          </details>
+        )}
+        <div ref={bottomRef} />
+      </div>
+    );
+  }
 
   if (serious) {
     // A clean room: the interviewer and the current question on stage, earlier turns folded away,
