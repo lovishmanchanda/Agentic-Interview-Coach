@@ -36,7 +36,7 @@ function startersFor(welcome) {
  * What a new conversation opens with. No reports yet: what the Mentor does and a first-interview CTA.
  * Otherwise a greeting from the latest report (built here from real scores, no LLM call) and starters.
  */
-export default function MentorWelcome({ welcome, name, onPick }) {
+export default function MentorWelcome({ welcome, name, onPick, onPrepare }) {
   if (!welcome.report_count) {
     return (
       <section className="rounded-xl border border-border bg-surface p-6">
@@ -47,7 +47,10 @@ export default function MentorWelcome({ welcome, name, onPick }) {
         <ul className="mt-3 list-disc space-y-1 pl-5 text-sm">
           {CAN_DO.map((item) => <li key={item}>{item}</li>)}
         </ul>
-        <Button href="/interview/configure" className="mt-5">Start your first interview</Button>
+        <div className="mt-5 flex flex-wrap gap-2">
+          <Button href="/interview/configure">Start your first interview</Button>
+          <Button variant="secondary" onClick={onPrepare}>Prepare for a company</Button>
+        </div>
       </section>
     );
   }
@@ -71,6 +74,7 @@ export default function MentorWelcome({ welcome, name, onPick }) {
         </p>
       </div>
       <StarterChips starters={startersFor(welcome)} onPick={onPick} />
+      <Button variant="secondary" size="sm" onClick={onPrepare}>Prepare for a company interview</Button>
     </section>
   );
 }

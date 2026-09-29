@@ -5,9 +5,10 @@ import { useEffect, useRef } from "react";
 import Spinner from "@/components/ui/Spinner";
 
 import ChatBubble from "./ChatBubble";
+import PrepProgress from "./PrepProgress";
 
 /** The message list. Keeps the newest message in view as replies arrive. */
-export default function MentorChat({ messages, sending }) {
+export default function MentorChat({ messages, sending, pendingKind }) {
   const bottomRef = useRef(null);
 
   useEffect(() => {
@@ -21,7 +22,9 @@ export default function MentorChat({ messages, sending }) {
         {sending && (
           <li className="max-w-[85%]">
             <div className="inline-flex rounded-2xl rounded-tl-sm border border-border bg-surface px-4 py-3">
-              <Spinner label="Mentor is thinking…" />
+              {pendingKind === "prep"
+                ? <PrepProgress withJd={Boolean(messages.at(-1)?.content?.includes("job description"))} />
+                : <Spinner label="Mentor is thinking…" />}
             </div>
           </li>
         )}

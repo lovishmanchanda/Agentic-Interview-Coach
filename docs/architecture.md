@@ -705,15 +705,35 @@ A turn (question + reply) is written in one update after the reply, so a failed 
 ```json
 {
   "_id": "ObjectId",
-  "name": "string (indexed)",
-  "aliases": ["string"],
-  "tech_stack": ["string"],
-  "interview_style": "string",
-  "behavioral_values": ["string"],
-  "typical_interview_rounds": ["string"],
-  "known_focus_areas": ["string"],
-  "last_researched_at": "datetime",
-  "source": "agent_research | manual"
+  "company_id": "string (unique; slug of the name, e.g. goldman_sachs)",
+  "name": "string",
+  "aliases": ["string (indexed, lowercase)"],
+  "overview": "string",
+  "interview_process": [{"stage": "string", "description": "string"}],
+  "technical_focus": ["topic key"],      // vocabulary: app/agents/prep/vocabulary.py
+  "coding_focus": ["topic key"],
+  "competencies": ["behavioral competency key"],
+  "behavioral_values": ["string"],       // shown to candidates only when source = curated
+  "tips": ["string"],
+  "source": "curated | llm",             // curated: data/seed/companies/; llm: Groq, cached only if it knew the company
+  "created_at": "datetime", "updated_at": "datetime"
+}
+```
+
+#### `prep_plans` (Phase 3)
+```json
+{
+  "plan_id": "string (unique)",
+  "candidate_id": "string (indexed with created_at)",
+  "company_name": "string", "company_id": "string | null",
+  "company_source": "curated | cached | llm | unknown | failed",
+  "jd_analysis": {"role_title": "…", "seniority": "…", "requirements": [{"area", "importance", "evidence"}], "other_skills": []},
+  "analysis": {"gaps": [{"area", "kind", "importance", "status", "score", "priority", "reason"}], "strengths": [...]},
+  "plan": {"summary": "…", "estimated_weeks": 3, "weeks": [{"week", "theme", "focus_areas", "activities", "mock_interview"}],
+           "readiness_check": "…", "company_tips": []},
+  "plan_source": "llm | fallback",
+  "actions": [{"type": "practice", "href": "/interview/configure?…", "label": "Week 1: Coding · Arrays"}],
+  "markdown": "the Mentor message", "run_id": "agent_runs id", "created_at": "datetime"
 }
 ```
 
@@ -1457,6 +1477,8 @@ Known and accepted for now: tokens in `localStorage` (§12.1 trade-off; moving t
 | `POST` | `/api/v1/mentor/message` | ✅ | `{ message, conversation_id? }` (omit the ID to start one) → `{ conversation_id, title, answer, sources: [{citation, session_id, report_id, date, topic, chunk_type}], actions: [drill], messages: [the saved user + assistant turn] }`. 404 `conversation_not_found` for someone else's ID, 409 `conversation_full` |
 | `GET` | `/api/v1/mentor/conversations` | ✅ | Past conversations, most recent first (title, preview, message count) |
 | `GET` | `/api/v1/mentor/conversations/{id}` | ✅ | One conversation with its messages, sources and actions |
+| `POST` | `/api/v1/mentor/prepare` | ✅ | Company preparation (Phase 3): `{ company, jd_text?, weeks?, conversation_id? }` → the same shape as `/mentor/message` plus `prep_plan_id`; the plan is posted into the conversation. "Prepare me for X" in `/mentor/message` does the same. `PREP_PLANS_PER_HOUR` per candidate |
+| `GET` | `/api/v1/prep/plans` · `/api/v1/prep/plans/{id}` | ✅ | The candidate's saved plans (someone else's reads as 404) |
 | `GET` | `/api/v1/mentor/welcome` | ✅ | The Mentor page's opening state: report count, latest report (score, weakest/strongest topic), reports still being indexed (and re-queues them) |
 | `POST` | `/api/v1/interviews` | ✅ | Create interview session from `InterviewConfigRequest` (anything omitted comes from the profile; `focus_topics` for a Weak-Area Drill). 422 `option_unavailable` for behavioral/coding/voice until they ship |
 | `GET` | `/api/v1/interviews/options?role=` | ✅ | Start-page data: profile defaults, topics for the role, choices not built yet |

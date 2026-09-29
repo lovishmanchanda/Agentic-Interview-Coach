@@ -291,6 +291,15 @@ flowchart TD
     style OBS fill:#1e293b,color:#94a3b8
 ```
 
+> **As built (Phase 3, 2026-09-29):**
+> - **Trigger:** "Prepare me for Google (in 3 weeks)" in the Mentor chat (`app/agents/prep/intent.py`: a prep verb + *for/at/with* + a known company, or a capitalised name that isn't a topic, so "prepare me for system design" stays a study question), or the **Prepare for a company** form (company, optional timeline, optional job description) → `POST /mentor/prepare`.
+> - **Research:** curated notes for 10 companies (`data/seed/companies/`) → otherwise Groq from general knowledge (`prep/company_research_v1`), cached in `companies` only if the model recognises the company. No web search yet.
+> - **JD analysis** (`prep/jd_analysis_v1`, fast tier) runs **in parallel** with research; areas outside the topic vocabulary are listed as "also in the job description".
+> - **Candidate snapshot and gap analysis are deterministic** (latest score per topic from reports; importance × status → priority), so the ranking is exact and explainable.
+> - **Planner** (`prep/planner_v1`) writes the weeks; every topic is checked against the gaps; if it fails, a deterministic plan is built from the same gaps.
+> - **Reply:** the plan as a Mentor message with a practice button per week (`/interview/configure?type=…&mode=…&company=…&focus=…`). The plan is saved (`prep_plans`), indexed in the Mentor's RAG index (chunk_type `prep_plan`) so follow-ups ("why week 1?") are answered from it, and every step is recorded in `agent_runs`.
+> - Company values are quoted only from curated notes; AI-researched notes are labelled as such.
+
 ---
 
 ## 6. Interview Configuration Flow

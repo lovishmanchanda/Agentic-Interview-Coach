@@ -69,6 +69,7 @@ def create_app(settings: Settings | None = None, *, db=None, gateway=None, rag=N
         "mentor": SlidingWindowLimiter(settings.mentor_messages_per_minute, 60),
         "interviews": SlidingWindowLimiter(settings.interviews_per_hour, 3600),
         "code_run": SlidingWindowLimiter(settings.code_runs_per_minute, 60),
+        "prep": SlidingWindowLimiter(settings.prep_plans_per_hour, 3600),
     }
 
     app.add_middleware(
@@ -101,9 +102,10 @@ def create_app(settings: Settings | None = None, *, db=None, gateway=None, rag=N
 
 async def _seed_inmemory(db, settings: Settings) -> None:
     """The in-memory DB starts empty on every restart, so seed it automatically."""
-    from app.db.seed import load_seed_questions, seed_dev_user, seed_question_bank
+    from app.db.seed import load_seed_companies, load_seed_questions, seed_companies, seed_dev_user, seed_question_bank
 
     await seed_question_bank(db, load_seed_questions(settings.seed_dir))
+    await seed_companies(db, load_seed_companies(settings.seed_dir))
     if settings.app_env == "local":
         await seed_dev_user(db, settings)
 

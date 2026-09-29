@@ -15,7 +15,7 @@ log = logging.getLogger(__name__)
 COLLECTIONS = [
     "users", "refresh_tokens", "candidate_profiles", "roles", "companies",
     "interview_sessions", "interview_questions", "candidate_answers", "evaluations",
-    "interview_reports", "agent_runs", "mentor_conversations", "question_bank",
+    "interview_reports", "agent_runs", "mentor_conversations", "question_bank", "prep_plans",
 ]
 
 # architecture.md §5.3 index strategy. (collection, keys, options)
@@ -44,7 +44,10 @@ INDEXES: list[tuple[str, list[tuple[str, int]], dict]] = [
     ("agent_runs", [("started_at", DESCENDING)], {}),
     ("question_bank", [("question_id", ASCENDING)], {"unique": True}),
     ("question_bank", [("type", ASCENDING), ("topic", ASCENDING), ("difficulty", ASCENDING), ("roles", ASCENDING)], {}),
-    ("companies", [("name", ASCENDING)], {}),
+    ("companies", [("company_id", ASCENDING)], {"unique": True}),
+    ("companies", [("aliases", ASCENDING)], {}),
+    ("prep_plans", [("plan_id", ASCENDING)], {"unique": True}),
+    ("prep_plans", [("candidate_id", ASCENDING), ("created_at", DESCENDING)], {}),
 ]
 
 

@@ -83,6 +83,33 @@ async def index_session_report(rag, repo: InterviewRepository, report: dict) -> 
         return False
 
 
+def prep_plan_text(doc: dict) -> str:
+    plan, analysis = doc["plan"], doc["analysis"]
+    gaps = ", ".join(f"{g['area']} ({g['status']})" for g in analysis["gaps"][:8])
+    weeks = " ".join(f"Week {w['week']}: {w['theme']} ({', '.join(w['focus_areas'])}). " + " ".join(w["activities"])
+                     for w in plan["weeks"])
+    return (f"Preparation plan for {doc['company_name']} ({plan['estimated_weeks']} weeks). {plan['summary']} "
+            f"Gaps: {gaps}. "
+            f"{weeks} When to book: {plan.get('readiness_check', '')} Tips: {' '.join(plan.get('company_tips', []))}")
+
+
+async def index_prep_plan(rag, doc: dict) -> dict | None:
+    """Adds a prep plan to the candidate's Mentor index as one chunk (chunk_type "prep_plan", same metadata keys as
+    report chunks). Returns it as a Mentor source, or None if indexing failed (the plan itself is already saved)."""
+    chunk_id = f"{doc['plan_id']}:prep_plan"
+    date = doc["created_at"].date().isoformat()
+    metadata = {"user_id": doc["candidate_id"], "session_id": doc["plan_id"], "date": date, "interview_type": "prep",
+                "report_topic": doc["company_name"], "chunk_type": "prep_plan", "topic": doc["company_name"], "score": 0.0}
+    try:
+        await anyio.to_thread.run_sync(lambda: rag.collection.upsert(ids=[chunk_id], documents=[prep_plan_text(doc)],
+                                                                     metadatas=[metadata]))
+    except Exception:  # noqa: BLE001 -- the Mentor just won't know the plan; the chat still shows it
+        log.exception("prep_plan_index_failed", extra={"fields": {"plan_id": doc["plan_id"]}})
+        return None
+    return {"citation": 1, "chunk_id": chunk_id, "session_id": doc["plan_id"], "date": date,
+            "topic": doc["company_name"], "chunk_type": "prep_plan", "report_id": None}
+
+
 class ReportIndexer:
     """Background Mentor indexing, one task per report (a report already pending isn't scheduled twice).
     One instance per app (app.state.indexer); tasks live on the app's event loop."""

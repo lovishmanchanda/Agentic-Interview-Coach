@@ -15,7 +15,9 @@ from urllib.parse import urlencode
 import anyio
 import anyio.from_thread
 
-from app.core.mentor.indexer import ReportIndexer
+from app.agents.prep import intent as prep_intent
+from app.agents.prep.orchestrator import PrepOrchestrator
+from app.core.mentor.indexer import ReportIndexer, index_prep_plan
 from app.core.mentor.rag_tool import MentorChatRequest
 from app.core.mentor.rag_tool.service import classify_intent
 from app.core.prompts import render_prompt
@@ -24,6 +26,7 @@ from app.db.repositories.mentor_repo import MentorConversationRepository
 from app.gateway import AIGateway
 from app.gateway.types import CallContext
 from app.utils.exceptions import ConflictError, NotFoundError, ServiceUnavailableError
+from app.utils.rate_limit import SlidingWindowLimiter, enforce
 
 MENTOR_PROMPT_VERSION = "mentor/mentor_v1"
 HISTORY_MESSAGES = 8          # rag_tool's MentorChatRequest cap; the prompt shows the last 6
@@ -69,6 +72,8 @@ def public_message(message: dict) -> dict:
     if message["role"] == "assistant":
         out["sources"] = message.get("retrieved_chunks", [])
         out["actions"] = message.get("actions", [])
+        if message.get("prep_plan_id"):
+            out["prep_plan_id"] = message["prep_plan_id"]
     return out
 
 
@@ -85,7 +90,10 @@ def public_conversation(conversation: dict, *, with_messages: bool = False) -> d
 
 class MentorAgent:
     def __init__(self, *, rag, gateway: AIGateway, conversations: MentorConversationRepository,
-                 interviews: InterviewRepository, indexer: ReportIndexer | None = None):
+                 interviews: InterviewRepository, indexer: ReportIndexer | None = None,
+                 prep: PrepOrchestrator | None = None, prep_limiter: SlidingWindowLimiter | None = None):
+        self.prep = prep
+        self.prep_limiter = prep_limiter
         self.rag = rag
         self.gateway = gateway
         self.conversations = conversations
@@ -93,24 +101,29 @@ class MentorAgent:
         self.indexer = indexer
 
     # ── chat ─────────────────────────────────────────────────────────────────
+    async def _history(self, conversation_id: str | None, candidate_id: str) -> tuple[str, list[dict]]:
+        """(conversation_id, recent messages) for an existing conversation, or a new id and no history."""
+        if not conversation_id:
+            return uuid.uuid4().hex, []
+        conversation = await self.conversations.get(conversation_id, candidate_id)
+        if conversation is None:
+            raise NotFoundError("Conversation not found", code="conversation_not_found")
+        if conversation.get("message_count", 0) + 2 > MAX_MESSAGES:
+            raise ConflictError("This conversation is full. Start a new one to keep going.", code="conversation_full")
+        return conversation_id, conversation.get("messages", [])[-HISTORY_MESSAGES:]
+
     async def chat(self, *, candidate_id: str, message: str, conversation_id: str | None = None) -> dict:
+        if self.prep is not None:  # "Prepare me for Google" -> the company-prep workflow (Phase 3)
+            request = prep_intent.detect(message, await self.prep.companies.names())
+            if request is not None:
+                return await self.prepare(candidate_id=candidate_id, company=request.company, weeks=request.weeks,
+                                          conversation_id=conversation_id, user_message=message)
         if self.rag is None:
             raise ServiceUnavailableError("The mentor is not available: HF_TOKEN is not configured.",
                                           code="mentor_disabled")
-        history: list[dict] = []
-        previous: list[str] = []
-        if conversation_id:
-            conversation = await self.conversations.get(conversation_id, candidate_id)
-            if conversation is None:
-                raise NotFoundError("Conversation not found", code="conversation_not_found")
-            if conversation.get("message_count", 0) + 2 > MAX_MESSAGES:
-                raise ConflictError("This conversation is full. Start a new one to keep going.",
-                                    code="conversation_full")
-            recent = conversation.get("messages", [])[-HISTORY_MESSAGES:]
-            history = [{"role": m["role"], "content": _strip_citations(m["content"])} for m in recent]
-            previous = previous_chunk_ids(recent)
-        else:
-            conversation_id = uuid.uuid4().hex
+        conversation_id, recent = await self._history(conversation_id, candidate_id)
+        history = [{"role": m["role"], "content": _strip_citations(m["content"])} for m in recent]
+        previous = previous_chunk_ids(recent)
 
         drill = await self.drill_suggestion(candidate_id) if _DRILL_PATTERN.search(message) else None
         system_prompt = render_prompt(MENTOR_PROMPT_VERSION, practice_note=self._practice_note(drill))
@@ -138,6 +151,35 @@ class MentorAgent:
                                                      title=_title(message), messages=turn)
         return {"conversation_id": conversation_id, "title": saved["title"], "answer": response.answer,
                 "sources": sources, "actions": actions, "messages": [public_message(m) for m in turn]}
+
+    # ── company preparation (Phase 3) ────────────────────────────────────────
+    async def prepare(self, *, candidate_id: str, company: str, jd_text: str | None = None, weeks: int | None = None,
+                      conversation_id: str | None = None, user_message: str | None = None) -> dict:
+        """Runs the prep workflow and posts the plan into the conversation as a Mentor reply, so follow-up questions
+        happen in the same chat. The plan is also indexed so the Mentor can answer questions about it later."""
+        if self.prep is None:
+            raise ServiceUnavailableError("Company preparation isn't available right now.", code="prep_unavailable")
+        if self.prep_limiter is not None:
+            enforce(self.prep_limiter, candidate_id, "You've made several preparation plans in the last hour. Try again later.")
+        conversation_id, _ = await self._history(conversation_id, candidate_id)
+        asked_at = utcnow()
+        started = time.perf_counter()
+        doc = await self.prep.run(candidate_id=candidate_id, company_name=company, jd_text=jd_text, weeks=weeks)
+        # Indexed for the Mentor, and recorded as this reply's source: a follow-up like "what's week 2 again?"
+        # that finds nothing of its own is answered from the plan (previous_chunk_ids).
+        plan_chunk = await index_prep_plan(self.rag, doc) if self.rag is not None else None
+        text = user_message or f"Prepare me for {doc['company_name']}" + (" (with a job description)" if jd_text else "")
+        turn = [
+            {"message_id": uuid.uuid4().hex, "role": "user", "content": text, "timestamp": asked_at},
+            {"message_id": uuid.uuid4().hex, "role": "assistant", "content": doc["markdown"], "timestamp": utcnow(),
+             "retrieved_chunks": [plan_chunk] if plan_chunk else [], "actions": doc["actions"], "intent": "company_prep",
+             "prep_plan_id": doc["plan_id"],
+             "prompt_version": "prep/planner_v1", "latency_ms": int((time.perf_counter() - started) * 1000)},
+        ]
+        saved = await self.conversations.append_turn(conversation_id=conversation_id, candidate_id=candidate_id,
+                                                     title=_title(text), messages=turn)
+        return {"conversation_id": conversation_id, "title": saved["title"], "answer": doc["markdown"], "sources": [],
+                "actions": doc["actions"], "prep_plan_id": doc["plan_id"], "messages": [public_message(m) for m in turn]}
 
     async def _with_report_ids(self, candidate_id: str, sources: list[dict]) -> list[dict]:
         """Citation chips link to the report; only this candidate's reports are looked up."""

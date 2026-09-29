@@ -701,6 +701,18 @@ Phase 0 → Phase 1 (starting with the walking skeleton, 1.0) → Phase 2 → Ph
 
 **Duration Estimate**: 2–3 weeks
 
+> [!NOTE]
+> **✅ Done (2026-09-29)**, verified live on Groq. 509 backend tests. Code: `backend/app/agents/prep/`, prompts `prompts/prep/`, data `data/seed/companies/`.
+> - **3.1 (deviation):** no Azure AI Search or web search yet (no keys). The knowledge base is the `companies` collection: 10 curated companies (widely documented facts, hedged) + Groq research from general knowledge for others, cached only when the model recognises the company. Lookup by name/alias; Azure AI Search replaces the lookup later.
+> - **3.2 Company research**, **3.3 JD analyzer** (fast tier), run in parallel; JD areas outside the topic vocabulary become "also in the job description".
+> - **3.4 Candidate profiler (deviation):** the latest score per topic from the reports in the database, not RAG retrieval: exact rather than approximate.
+> - **3.5 Gap analyzer:** deterministic (importance × status: weak / untested / developing / strong).
+> - **3.6 Planner:** Groq writes the weeks, validated against the gaps; deterministic fallback plan. Plans stored in `prep_plans`.
+> - **3.7 Orchestrator:** each step timed and recorded in `agent_runs`; research, JD or planner failures still give a plan. `PREP_PLANS_PER_HOUR` (5) per candidate.
+> - **3.8 In the Mentor:** "Prepare me for X (in N weeks)" in chat, or the **Prepare for a company** form (with an optional JD); step-by-step progress while it works; the plan as a message with a practice button per week that opens the start page pre-filled (type, mode, company, topics). The plan is indexed so follow-ups are answered from it.
+> - **Live:** Amazon (curated, chat) 20 s; Razorpay with a JD (researched + JD) 42 s → 7.7 s after running research and JD in parallel; an unknown company is handled honestly; follow-up about the plan answered from it; Flipkart via the form in the browser → Week 4 button opens a serious coding interview pre-filled for Flipkart.
+> - **Quality guards added after reading live output:** AI-researched company values are no longer quoted (a model recalled Amazon-like values for Razorpay); tips never tell the candidate to claim experience they don't have.
+
 #### Tasks
 
 **3.1 Azure AI Search Setup**

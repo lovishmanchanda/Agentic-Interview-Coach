@@ -1,0 +1,197 @@
+[
+  {
+    "company_id": "google",
+    "name": "Google",
+    "aliases": ["alphabet", "google llc"],
+    "overview": "Search, cloud, ads and consumer products at very large scale. Software engineering interviews are known for algorithmic depth.",
+    "interview_process": [
+      {"stage": "Recruiter screen", "description": "Background, role fit and logistics."},
+      {"stage": "Technical phone/online screen", "description": "Typically one or two coding interviews in a shared editor."},
+      {"stage": "Onsite / virtual loop", "description": "Usually several coding interviews, a system design interview for experienced candidates, and a behavioral interview on Googleyness and leadership."},
+      {"stage": "Hiring committee and team matching", "description": "Interview feedback is reviewed by a committee; team matching often follows."}
+    ],
+    "technical_focus": ["dsa", "system_design"],
+    "coding_focus": ["graphs", "dynamic_programming", "arrays", "strings", "hashing"],
+    "behavioral_values": ["Thriving in ambiguity", "Collaboration and helping others", "User focus", "Doing the right thing"],
+    "competencies": ["collaboration", "learning", "leadership", "communication"],
+    "tips": [
+      "Talk through your approach and its complexity before coding; interviewers grade the reasoning, not just the result.",
+      "Expect follow-ups that change constraints; practise adapting a working solution.",
+      "Write clean code without an IDE's help."
+    ]
+  },
+  {
+    "company_id": "amazon",
+    "name": "Amazon",
+    "aliases": ["aws", "amazon web services"],
+    "overview": "E-commerce, AWS and devices. Every interview round also assesses the Leadership Principles.",
+    "interview_process": [
+      {"stage": "Online assessment", "description": "Commonly coding problems plus a work-style survey for early-career roles."},
+      {"stage": "Phone screen", "description": "Coding and Leadership Principle questions."},
+      {"stage": "Interview loop", "description": "Several interviews mixing coding, system design (for experienced roles) and behavioral questions; one interviewer is often a 'Bar Raiser' from outside the team."}
+    ],
+    "technical_focus": ["dsa", "system_design", "oops"],
+    "coding_focus": ["arrays", "hashing", "graphs", "strings", "linked_list"],
+    "behavioral_values": ["Customer Obsession", "Ownership", "Invent and Simplify", "Are Right, A Lot", "Learn and Be Curious", "Hire and Develop the Best", "Insist on the Highest Standards", "Think Big", "Bias for Action", "Frugality", "Earn Trust", "Dive Deep", "Have Backbone; Disagree and Commit", "Deliver Results", "Strive to be Earth's Best Employer", "Success and Scale Bring Broad Responsibility"],
+    "competencies": ["ownership", "conflict", "prioritisation", "learning"],
+    "tips": [
+      "Prepare two or three STAR stories per Leadership Principle, with measurable results.",
+      "Behavioral questions carry real weight in every round, not just one.",
+      "Use 'I', not 'we': interviewers want your own actions."
+    ]
+  },
+  {
+    "company_id": "microsoft",
+    "name": "Microsoft",
+    "aliases": ["msft", "microsoft corporation"],
+    "overview": "Cloud (Azure), productivity software, developer tools and gaming.",
+    "interview_process": [
+      {"stage": "Recruiter screen", "description": "Background and role fit."},
+      {"stage": "Technical screen", "description": "Typically a coding interview."},
+      {"stage": "Interview loop", "description": "Several interviews covering coding, design and behavioral questions; teams vary in format."}
+    ],
+    "technical_focus": ["dsa", "system_design", "oops"],
+    "coding_focus": ["arrays", "strings", "linked_list", "graphs", "hashing"],
+    "behavioral_values": ["Growth mindset", "Customer obsession", "Diversity and inclusion", "One Microsoft (collaboration)"],
+    "competencies": ["growth", "learning", "collaboration", "communication"],
+    "tips": [
+      "Show how you learn from mistakes: growth mindset is a stated value.",
+      "Clarify requirements and test your code with examples out loud."
+    ]
+  },
+  {
+    "company_id": "meta",
+    "name": "Meta",
+    "aliases": ["facebook", "meta platforms"],
+    "overview": "Social apps (Facebook, Instagram, WhatsApp) and VR/AI research, at massive scale.",
+    "interview_process": [
+      {"stage": "Recruiter screen", "description": "Background and logistics."},
+      {"stage": "Technical screen", "description": "Usually coding problems under time pressure."},
+      {"stage": "Onsite / virtual loop", "description": "Typically two coding interviews, a system or product design interview for experienced candidates, and a behavioral interview."}
+    ],
+    "technical_focus": ["dsa", "system_design"],
+    "coding_focus": ["arrays", "strings", "graphs", "hashing", "two_pointers"],
+    "behavioral_values": ["Move fast", "Focus on long-term impact", "Build awesome things", "Be direct and respect your colleagues"],
+    "competencies": ["ownership", "conflict", "collaboration", "prioritisation"],
+    "tips": [
+      "Coding rounds often expect two problems in one interview: practise speed as well as correctness.",
+      "In behavioral answers, emphasise impact and how you handled disagreement."
+    ]
+  },
+  {
+    "company_id": "apple",
+    "name": "Apple",
+    "aliases": ["apple inc"],
+    "overview": "Hardware, operating systems and services. Hiring is largely team-driven, so the process varies by team.",
+    "interview_process": [
+      {"stage": "Recruiter / hiring manager screen", "description": "Role fit and experience."},
+      {"stage": "Technical interviews", "description": "Coding and domain-specific questions set by the team."},
+      {"stage": "Onsite / virtual loop", "description": "Several interviews with the team, often deep on your past projects."}
+    ],
+    "technical_focus": ["dsa", "oops", "os", "system_design"],
+    "coding_focus": ["arrays", "strings", "linked_list", "hashing"],
+    "behavioral_values": ["Attention to detail", "Deep domain expertise", "Collaboration across disciplines", "Privacy and user experience"],
+    "competencies": ["ownership", "collaboration", "communication"],
+    "tips": [
+      "Know your past projects in depth: expect detailed questions about your decisions.",
+      "Research the specific team's product area."
+    ]
+  },
+  {
+    "company_id": "netflix",
+    "name": "Netflix",
+    "aliases": [],
+    "overview": "Streaming at global scale. Hiring leans towards experienced engineers; culture fit is assessed explicitly.",
+    "interview_process": [
+      {"stage": "Recruiter and hiring manager screens", "description": "Experience, role fit and culture."},
+      {"stage": "Technical interviews", "description": "Coding and system design, often tied to real problems the team has."},
+      {"stage": "Onsite / virtual loop", "description": "Several technical and culture interviews."}
+    ],
+    "technical_focus": ["system_design", "dsa", "networking"],
+    "coding_focus": ["arrays", "hashing", "graphs"],
+    "behavioral_values": ["Freedom and responsibility", "Candor and giving feedback", "Context, not control", "High performance"],
+    "competencies": ["ownership", "conflict", "communication", "leadership"],
+    "tips": [
+      "Read the Netflix culture memo and prepare examples that show judgement and candor.",
+      "Expect system design grounded in scale and reliability."
+    ]
+  },
+  {
+    "company_id": "uber",
+    "name": "Uber",
+    "aliases": ["uber technologies"],
+    "overview": "Ride-hailing, delivery and logistics platforms with real-time, location-heavy systems.",
+    "interview_process": [
+      {"stage": "Recruiter screen", "description": "Background and role fit."},
+      {"stage": "Technical screen", "description": "Typically a coding interview."},
+      {"stage": "Onsite / virtual loop", "description": "Coding, system design for experienced candidates, and behavioral interviews."}
+    ],
+    "technical_focus": ["dsa", "system_design"],
+    "coding_focus": ["graphs", "arrays", "hashing", "dynamic_programming"],
+    "behavioral_values": ["Customer focus", "Ownership", "Collaboration", "Doing the right thing"],
+    "competencies": ["ownership", "collaboration", "prioritisation"],
+    "tips": [
+      "System design questions often involve real-time location, matching or payments.",
+      "Be ready to discuss trade-offs of consistency versus availability."
+    ]
+  },
+  {
+    "company_id": "flipkart",
+    "name": "Flipkart",
+    "aliases": [],
+    "overview": "One of India's largest e-commerce companies.",
+    "interview_process": [
+      {"stage": "Online assessment", "description": "Commonly coding problems."},
+      {"stage": "Machine coding round", "description": "Commonly reported: build a small working system (clean, extensible code) in a fixed time."},
+      {"stage": "Problem solving / DSA interviews", "description": "Data structures and algorithms."},
+      {"stage": "Design and hiring manager rounds", "description": "System design for experienced roles, then fit and past work."}
+    ],
+    "technical_focus": ["dsa", "oops", "system_design"],
+    "coding_focus": ["arrays", "graphs", "dynamic_programming", "hashing"],
+    "behavioral_values": ["Customer first", "Bias for action", "Ownership", "Integrity"],
+    "competencies": ["ownership", "prioritisation", "communication"],
+    "tips": [
+      "Practise machine coding: design classes cleanly, keep it extensible, and get it running within the time limit.",
+      "Expect strong emphasis on DSA fundamentals."
+    ]
+  },
+  {
+    "company_id": "atlassian",
+    "name": "Atlassian",
+    "aliases": [],
+    "overview": "Team collaboration software (Jira, Confluence, Trello). Values are assessed in a dedicated interview.",
+    "interview_process": [
+      {"stage": "Recruiter screen", "description": "Background and role fit."},
+      {"stage": "Technical interviews", "description": "Coding (often practical, code-quality focused) and system design for experienced roles."},
+      {"stage": "Values interview", "description": "Behavioral questions mapped to the company values."},
+      {"stage": "Management interview", "description": "Past work, growth and collaboration."}
+    ],
+    "technical_focus": ["dsa", "system_design", "oops"],
+    "coding_focus": ["arrays", "hashing", "strings", "sorting"],
+    "behavioral_values": ["Open company, no bullshit", "Build with heart and balance", "Don't #@!% the customer", "Play, as a team", "Be the change you seek"],
+    "competencies": ["collaboration", "communication", "ownership", "growth"],
+    "tips": [
+      "Prepare a story for each company value; the values interview is a real gate.",
+      "Write readable, well-structured code: quality is weighed alongside correctness."
+    ]
+  },
+  {
+    "company_id": "goldman_sachs",
+    "name": "Goldman Sachs",
+    "aliases": ["gs", "goldman"],
+    "overview": "Investment bank with large engineering teams building trading, risk and platform systems.",
+    "interview_process": [
+      {"stage": "Online assessment", "description": "Commonly coding problems, sometimes with aptitude questions."},
+      {"stage": "Technical interviews", "description": "Coding in a shared editor, data structures, and core CS fundamentals."},
+      {"stage": "Final round ('superday')", "description": "Several back-to-back technical and behavioral interviews."}
+    ],
+    "technical_focus": ["dsa", "oops", "dbms", "os"],
+    "coding_focus": ["arrays", "strings", "dynamic_programming", "hashing"],
+    "behavioral_values": ["Client service", "Integrity", "Partnership", "Excellence"],
+    "competencies": ["collaboration", "communication", "ownership"],
+    "tips": [
+      "Revise CS fundamentals (OOP, DBMS, OS) as well as DSA.",
+      "Expect questions on why finance and why this firm."
+    ]
+  }
+]

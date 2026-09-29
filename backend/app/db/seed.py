@@ -4,7 +4,9 @@ from pathlib import Path
 
 from app.config import Settings
 from app.db.models.profile import Personal, Preferences, ProfileCreate, Target
+from app.db.models.company import Company
 from app.db.models.question import Question
+from app.db.repositories.company_repo import CompanyRepository
 from app.db.repositories.profile_repo import ProfileRepository
 from app.db.repositories.question_repo import QuestionRepository
 from app.db.repositories.user_repo import UserRepository
@@ -28,6 +30,29 @@ def load_seed_questions(seed_dir: str | Path) -> list[Question]:
     if duplicates:
         raise ValueError(f"duplicate question_id(s): {sorted(duplicates)}")
     return questions
+
+
+def load_seed_companies(seed_dir: str | Path) -> list[Company]:
+    """Validates <seed_dir>/companies/*.json (curated company knowledge for Phase 3)."""
+    companies: list[Company] = []
+    for path in sorted(Path(seed_dir, "companies").glob("*.json")):
+        for raw in json.loads(path.read_text()):
+            try:
+                companies.append(Company.model_validate({**raw, "source": "curated"}))
+            except ValueError as exc:
+                raise ValueError(f"{path.name}: {exc}") from exc
+    ids = [c.company_id for c in companies]
+    if duplicates := {cid for cid in ids if ids.count(cid) > 1}:
+        raise ValueError(f"duplicate company_id(s): {sorted(duplicates)}")
+    return companies
+
+
+async def seed_companies(db, companies: list[Company]) -> dict[str, int]:
+    repo = CompanyRepository(db)
+    inserted = 0
+    for company in companies:
+        inserted += await repo.upsert(company)
+    return {"inserted": inserted, "updated": len(companies) - inserted}
 
 
 async def seed_question_bank(db, questions: list[Question]) -> dict[str, int]:

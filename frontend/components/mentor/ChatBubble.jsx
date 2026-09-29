@@ -12,6 +12,18 @@ function DrillAction({ action }) {
   );
 }
 
+/** A plan's practice buttons: each opens the start page pre-filled for that week's mock interview. */
+function PracticeActions({ actions }) {
+  if (!actions.length) return null;
+  return (
+    <div className="mt-3 flex flex-wrap gap-2">
+      {actions.map((a) => (
+        <Button key={a.href} href={a.href} variant="secondary" size="sm">{a.label}</Button>
+      ))}
+    </div>
+  );
+}
+
 export default function ChatBubble({ message }) {
   if (message.role === "user") {
     return (
@@ -27,6 +39,7 @@ export default function ChatBubble({ message }) {
       <div className="rounded-2xl rounded-tl-sm border border-border bg-surface px-4 py-3 text-sm">
         <MentorAnswer text={message.content} sources={message.sources || []} />
         {(message.actions || []).filter((a) => a.type === "drill").map((a) => <DrillAction key={a.href} action={a} />)}
+        <PracticeActions actions={(message.actions || []).filter((a) => a.type === "practice")} />
       </div>
     </li>
   );

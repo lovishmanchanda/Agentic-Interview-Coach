@@ -16,7 +16,8 @@ import { DIFFICULTIES, EXPERIENCE_LEVELS, TARGET_ROLES } from "@/lib/profileOpti
 
 const MAX_FOCUS = 5;
 
-/** ?focus=dsa,oops&role=ml_engineer&type=behavioral pre-fills a drill (the report's "Practise weak areas" link). */
+/** ?focus=dsa,oops&role=ml_engineer&type=behavioral pre-fills a drill (the report's "Practise weak areas" link);
+ *  a preparation plan's buttons also pass &company=Google&mode=serious. */
 function focusFromUrl(params) {
   return [...new Set((params.get("focus") || "").split(",").map((t) => t.trim()).filter(Boolean))].slice(0, MAX_FOCUS);
 }
@@ -45,9 +46,10 @@ function ConfigureForm() {
         setForm({
           ...options.defaults,
           ...(["technical", "behavioral", "coding"].includes(type) ? { interview_type: type } : {}),
+          ...(["practice", "serious"].includes(params.get("mode")) ? { interview_mode: params.get("mode") } : {}),
           ...(type === "coding" ? { question_count: Math.min(options.defaults.question_count, 3) } : {}),
           role: roleValue(params.get("role") || options.defaults.role),
-          company: options.defaults.company || "",
+          company: (params.get("company") || options.defaults.company || "").slice(0, 100),
           focus_topics: focusFromUrl(params),
         });
         setTopics(options.topics);

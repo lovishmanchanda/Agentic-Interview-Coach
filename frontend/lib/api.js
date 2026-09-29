@@ -127,6 +127,13 @@ export const api = {
     // No conversationId: starts a new conversation. The server keeps the history.
     send: (message, conversationId) =>
       request("/api/v1/mentor/message", { method: "POST", body: { message, ...(conversationId ? { conversation_id: conversationId } : {}) } }),
+    // Company preparation (Phase 3): research + optional job description + your history -> a plan in the chat.
+    prepare: ({ company, jdText, weeks, conversationId }) =>
+      request("/api/v1/mentor/prepare", {
+        method: "POST",
+        body: { company, ...(jdText ? { jd_text: jdText } : {}), ...(weeks ? { weeks } : {}),
+          ...(conversationId ? { conversation_id: conversationId } : {}) },
+      }),
     welcome: () => request("/api/v1/mentor/welcome"),
     conversations: () => request("/api/v1/mentor/conversations"),
     conversation: (id) => request(`/api/v1/mentor/conversations/${encodeURIComponent(id)}`),

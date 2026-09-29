@@ -80,6 +80,8 @@ CI runs all of these on every push/PR (`.github/workflows/ci.yml`).
 | 1.3 Interview state machine: validated transitions, state history, crash/reconnect recovery, `GET /interviews/{id}/state` | `backend/app/core/interview/state_machine.py` | ✅ |
 | 1.2 Interview configuration: type, practice/serious mode, role, level, difficulty, company, question count, focus topics (Weak-Area Drill) | `backend/app/db/models/interview.py`, `frontend/app/(app)/interview/configure/` | ✅ |
 | Mentor: generic "where am I weakest?" questions answered from recent sessions; markdown replies | `core/mentor/rag_tool/service.py`, `frontend/components/mentor/` | ✅ |
+| **Phase 3 — Company preparation** | | ✅ Done |
+| "Prepare me for Google": company research (10 curated + AI-researched, cached), JD analysis, gap analysis from your scores, week-by-week plan with practice buttons, inside the Mentor | `backend/app/agents/prep/`, `prompts/prep/`, `data/seed/companies/`, `frontend/components/mentor/PrepareForm.jsx` | ✅ |
 | **Phase 4 — Coding interviews** | | ✅ Done (verified on the Piston VM) |
 | Live coding: Monaco editor, Run / Submit, 18 problems, Python graded against every test incl. hidden, code evaluator, coding in reports | `backend/app/core/coding/`, `app/core/evaluation/code_evaluator.py`, `frontend/components/coding/` | ✅ (needs `PISTON_URL`) |
 | Time-limit wrap-up (`MAX_INTERVIEW_MINUTES`) | `backend/app/core/interview/adaptation_engine.py` | ✅ |
