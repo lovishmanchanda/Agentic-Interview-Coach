@@ -45,6 +45,19 @@ def _strip_citations(text: str) -> str:
     return _CITATION.sub("", text)
 
 
+def previous_chunk_ids(messages: list[dict]) -> list[str]:
+    """The excerpts the most recent grounded reply used, for a follow-up that finds nothing of its own.
+    Turns saved before sources carried chunk_id: summary/recommendations IDs are rebuilt from the session."""
+    for message in reversed(messages):
+        sources = message.get("retrieved_chunks") if message["role"] == "assistant" else None
+        if sources:
+            ids = [s.get("chunk_id") or (f"{s['session_id']}:{s['chunk_type']}"
+                                         if s.get("chunk_type") in ("summary", "recommendations") else None)
+                   for s in sources]
+            return [i for i in ids if i]
+    return []
+
+
 def _title(message: str) -> str:
     text = " ".join(message.split())
     return text if len(text) <= TITLE_CHARS else text[: TITLE_CHARS - 1].rsplit(" ", 1)[0] + "…"
@@ -85,6 +98,7 @@ class MentorAgent:
             raise ServiceUnavailableError("The mentor is not available: HF_TOKEN is not configured.",
                                           code="mentor_disabled")
         history: list[dict] = []
+        previous: list[str] = []
         if conversation_id:
             conversation = await self.conversations.get(conversation_id, candidate_id)
             if conversation is None:
@@ -92,8 +106,9 @@ class MentorAgent:
             if conversation.get("message_count", 0) + 2 > MAX_MESSAGES:
                 raise ConflictError("This conversation is full. Start a new one to keep going.",
                                     code="conversation_full")
-            history = [{"role": m["role"], "content": _strip_citations(m["content"])}
-                       for m in conversation.get("messages", [])[-HISTORY_MESSAGES:]]
+            recent = conversation.get("messages", [])[-HISTORY_MESSAGES:]
+            history = [{"role": m["role"], "content": _strip_citations(m["content"])} for m in recent]
+            previous = previous_chunk_ids(recent)
         else:
             conversation_id = uuid.uuid4().hex
 
@@ -107,7 +122,8 @@ class MentorAgent:
 
         asked_at = utcnow()
         started = time.perf_counter()
-        request = MentorChatRequest(user_id=candidate_id, message=message, history=history)
+        request = MentorChatRequest(user_id=candidate_id, message=message, history=history,
+                                    previous_chunk_ids=previous)
         response = await anyio.to_thread.run_sync(self.rag.answer, request, invoke_llm, system_prompt)
         sources = await self._with_report_ids(candidate_id, response.sources)
         actions = [drill] if drill and sources else []  # no data -> nothing to drill yet

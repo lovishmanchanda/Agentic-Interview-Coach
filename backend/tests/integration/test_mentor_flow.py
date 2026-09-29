@@ -157,3 +157,38 @@ def test_mentor_endpoints_need_auth(app_client):
     assert app_client.get("/api/v1/mentor/conversations").status_code == 401
     assert app_client.get("/api/v1/mentor/welcome").status_code == 401
     assert app_client.post("/api/v1/mentor/message", json={"message": "hi"}).status_code == 401
+
+
+def test_a_follow_up_is_given_the_previous_replys_excerpts(app_client, gateway):
+    token, headers = _signup(app_client)
+    _interview(app_client, gateway, token, headers)
+    rag = app_client.app.state.rag
+    seen = []
+    original = rag.answer
+    rag.answer = lambda request, *args: seen.append(request) or original(request, *args)
+
+    gateway.script("generate", "Summary [1].", "Fix that first [1].")
+    first = _ask(app_client, headers, "How am I doing?").json()["data"]
+    _ask(app_client, headers, "Which of those should I fix first?", first["conversation_id"])
+    assert seen[0].previous_chunk_ids == []  # a new conversation has none
+    assert seen[1].previous_chunk_ids == [s["chunk_id"] for s in first["sources"]]
+    assert all(s["chunk_id"].startswith(s["session_id"] + ":") for s in first["sources"])
+
+
+def test_previous_chunk_ids_skip_no_data_replies_and_rebuild_old_sources():
+    from app.core.mentor.mentor_agent import previous_chunk_ids
+
+    messages = [
+        {"role": "user", "content": "How am I doing?"},
+        # Saved before sources carried chunk_id: summary/recommendations IDs are rebuilt, question ones can't be.
+        {"role": "assistant", "content": "…", "retrieved_chunks": [
+            {"session_id": "s1", "chunk_type": "summary"}, {"session_id": "s1", "chunk_type": "question_feedback"},
+            {"session_id": "s1", "chunk_type": "recommendations"}]},
+        {"role": "user", "content": "Cooking?"},
+        {"role": "assistant", "content": "No data.", "retrieved_chunks": []},
+    ]
+    assert previous_chunk_ids(messages) == ["s1:summary", "s1:recommendations"]
+    messages.append({"role": "assistant", "content": "…", "retrieved_chunks": [{"chunk_id": "s2:question:q1",
+                                                                                 "session_id": "s2", "chunk_type": "question_feedback"}]})
+    assert previous_chunk_ids(messages) == ["s2:question:q1"]
+    assert previous_chunk_ids([]) == []

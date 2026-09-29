@@ -207,7 +207,7 @@ flowchart LR
 
     subgraph RETRIEVAL["Retrieval at Query Time (intent-routed)"]
         INTENT{classify_intent}
-        SPEC[specific: similarity search\nquery + last 2 user turns\ndrop distance > 0.8\nno hits + generic question → vague]
+        SPEC[specific: similarity search\nquery + last 2 user turns\ndrop distance > 0.8\nno hits + generic question → vague\nstill none mid-conversation → previous reply's excerpts]
         VAGUE[vague: 2 most recent sessions\nsummary + recommendations\nincl. generic 'where am I weakest?']
         COMP[comparison: N most recent sessions\nN parsed from message, 2-5]
         DEDUPE[Max 2 chunks per session\nAll filtered by user_id]
@@ -240,7 +240,7 @@ Citations: the answer cites excerpts as `[1]`, `[2]`… (full-width `【n】` is
 | "Prepare me for Google" | Triggers Company Prep Agent workflow (Section 5) |
 | "Compare my last two interviews" | Comparison mode: summary + recommendations of the N most recent sessions |
 | "Drill me on my weak spots" (or any study / practise question) | Adds a **Start a weak-area drill** button: `/interview/configure?focus=…&role=…&type=…`, the weakest topics (below 7.5) of the latest interview type, up to 3. The reply is told which topics the button covers |
-| "Which of those should I fix first?" | Known gap: a follow-up that only points back can find no excerpts when the earlier questions were generic too (see implementation_plan.md Phase 2) |
+| "Which of those should I fix first?" | A follow-up that only points back: if it finds nothing of its own, it's answered from the excerpts the previous reply used (`previous_chunk_ids`) |
 | Off-topic, or "solve this for me" | Declines and redirects to interview feedback (guardrail in the Mentor prompt) |
 
 > [!NOTE]

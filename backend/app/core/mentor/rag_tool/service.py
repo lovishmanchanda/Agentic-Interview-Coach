@@ -202,21 +202,21 @@ class RagService:
             where={"$and": [{"user_id": user_id}, {"chunk_type": {"$in": list(chunk_types)}}]},
             include=["documents", "metadatas"],
         )
-        rows = sorted(zip(result["documents"], result["metadatas"]), key=lambda r: r[1]["date"], reverse=True)
+        rows = sorted(zip(result["ids"], result["documents"], result["metadatas"]), key=lambda r: r[2]["date"], reverse=True)
         seen: list[str] = []
-        for _, meta in rows:
+        for _, _, meta in rows:
             sid = meta["session_id"]
             if sid not in seen:
                 seen.append(sid)
             if len(seen) >= n_sessions:
                 break
         keep = set(seen)
-        return [{"text": doc, "metadata": meta, "distance": None} for doc, meta in rows if meta["session_id"] in keep]
+        return [{"id": cid, "text": doc, "metadata": meta, "distance": None} for cid, doc, meta in rows if meta["session_id"] in keep]
 
     def retrieve_by_similarity(self, user_id: str, query: str, limit: int = 5, score_threshold: float = DEFAULT_SCORE_THRESHOLD) -> list[dict]:
         result = self.collection.query(query_texts=[query], n_results=limit, where={"user_id": user_id}, include=["documents", "metadatas", "distances"])
-        hits = [{"text": text, "metadata": metadata, "distance": distance}
-                for text, metadata, distance in zip(result["documents"][0], result["metadatas"][0], result["distances"][0])]
+        hits = [{"id": cid, "text": text, "metadata": metadata, "distance": distance}
+                for cid, text, metadata, distance in zip(result["ids"][0], result["documents"][0], result["metadatas"][0], result["distances"][0])]
         return [h for h in hits if h["distance"] <= score_threshold]
 
     def retrieve_by_recency(self, user_id: str, n_sessions: int = 2) -> list[dict]:
@@ -224,6 +224,15 @@ class RagService:
 
     def retrieve_by_comparison(self, user_id: str, n_sessions: int = 2) -> list[dict]:
         return self._recent_session_chunks(user_id, n_sessions)
+
+    def retrieve_by_ids(self, user_id: str, chunk_ids: list[str]) -> list[dict]:
+        """Specific chunks, in the order given. Still filtered on user_id, so another user's IDs return nothing."""
+        if not chunk_ids:
+            return []
+        result = self.collection.get(ids=list(chunk_ids), where={"user_id": user_id}, include=["documents", "metadatas"])
+        by_id = {cid: {"id": cid, "text": doc, "metadata": meta, "distance": None}
+                 for cid, doc, meta in zip(result["ids"], result["documents"], result["metadatas"])}
+        return [by_id[cid] for cid in dict.fromkeys(chunk_ids) if cid in by_id]
 
     def answer(self, request: MentorChatRequest, invoke_llm: Callable[[str], str],
                system_prompt: str = SYSTEM_PROMPT) -> MentorChatResponse:
@@ -242,13 +251,18 @@ class RagService:
             # that finds nothing it still deserves the recent-sessions answer rather than NO_DATA.
             if not hits and is_generic_self_assessment(request.message):
                 hits = self.retrieve_by_recency(request.user_id, n_sessions=2)
+            # A follow-up that only points back ("which of those should I fix first?") has no topic of its own,
+            # and the earlier questions may not either. It's about what the last reply discussed, so answer
+            # from the excerpts that reply was grounded in (the host passes their chunk IDs).
+            if not hits and has_history and request.previous_chunk_ids:
+                hits = self.retrieve_by_ids(request.user_id, request.previous_chunk_ids)
 
         hits = dedupe_by_session(hits)
         if not hits:
             return MentorChatResponse(answer=NO_DATA_MESSAGE, sources=[])
 
         prompt = build_prompt(request, hits, system_prompt)
-        sources = [{"citation": i + 1, "session_id": hit["metadata"]["session_id"],
+        sources = [{"citation": i + 1, "chunk_id": hit["id"], "session_id": hit["metadata"]["session_id"],
                     "date": hit["metadata"]["date"], "topic": hit["metadata"]["topic"],
                     "chunk_type": hit["metadata"]["chunk_type"]} for i, hit in enumerate(hits)]
         return MentorChatResponse(answer=normalize_citations(invoke_llm(prompt)), sources=sources)

@@ -88,7 +88,12 @@ Content-Type: application/json
 }
 ```
 
-It returns an `answer` and `sources`, including session ID, date, topic, and chunk type. The frontend can display source dates and use the session ID to link to `/api/reports/detail/{session_id}`.
+It returns an `answer` and `sources`, including chunk ID, session ID, date, topic, and chunk type. The frontend can display source dates and use the session ID to link to `/api/reports/detail/{session_id}`.
+
+**In this app** (Phase 2) the host is `MentorAgent` (`core/mentor/mentor_agent.py`), not this router. It passes two optional arguments the standalone router doesn't use:
+
+- `RagService.answer(request, invoke_llm, system_prompt=…)`: the versioned prompt from `prompts/mentor/`. Default: `SYSTEM_PROMPT`.
+- `MentorChatRequest.previous_chunk_ids`: the `chunk_id`s the previous reply cited. Used only mid-conversation when a follow-up finds nothing of its own (e.g. "which of those should I fix first?"), which is then answered from those excerpts. The read still filters on `user_id`.
 
 ## Security rule
 

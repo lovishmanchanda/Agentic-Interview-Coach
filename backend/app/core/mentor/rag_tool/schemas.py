@@ -35,6 +35,9 @@ class MentorChatRequest(BaseModel):
     message: str = Field(min_length=1)
     history: list[dict[str, str]] = Field(default_factory=list, max_length=8)
     limit: int = Field(default=5, ge=1, le=10)
+    # Chunk IDs the previous reply cited (its sources' chunk_id). Used only when a mid-conversation
+    # follow-up finds nothing of its own. Every read still filters on user_id.
+    previous_chunk_ids: list[str] = Field(default_factory=list, max_length=20)
 
 
 class MentorChatResponse(BaseModel):

@@ -658,7 +658,7 @@ erDiagram
       "content": "string",
       "timestamp": "datetime",
       // assistant only:
-      "retrieved_chunks": [{"citation": 1, "session_id": "…", "report_id": "…", "date": "…", "topic": "…", "chunk_type": "summary"}],
+      "retrieved_chunks": [{"citation": 1, "chunk_id": "…:summary", "session_id": "…", "report_id": "…", "date": "…", "topic": "…", "chunk_type": "summary"}],
       "actions": [{"type": "drill", "topics": ["dsa"], "role": "…", "interview_type": "technical", "href": "/interview/configure?focus=dsa&…"}],
       "intent": "vague | specific | comparison",
       "prompt_version": "mentor/mentor_v1",
@@ -671,7 +671,7 @@ erDiagram
   "updated_at": "datetime"
 }
 ```
-A turn (question + reply) is written in one update after the reply, so a failed LLM call never leaves a question without an answer, and a new conversation exists only once it has one. The Mentor sees the last 8 messages, with earlier `[n]` citations removed.
+A turn (question + reply) is written in one update after the reply, so a failed LLM call never leaves a question without an answer, and a new conversation exists only once it has one. The Mentor sees the last 8 messages, with earlier `[n]` citations removed. A follow-up that finds no excerpts of its own reuses the `chunk_id`s of the last grounded reply.
 
 #### `agent_runs`
 ```json

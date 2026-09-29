@@ -172,3 +172,42 @@ def test_answer_specific_query_invokes_llm_with_citations(service):
     assert response.sources[0]["citation"] == 1
     assert "[1]" in captured_prompt["prompt"]
     assert response.answer == "You did well on joins [1]."
+
+
+FOLLOW_UP_HISTORY = [{"role": "user", "content": "How am I doing?"},
+                     {"role": "assistant", "content": "Recursion is the main gap."}]
+
+
+def test_follow_up_with_no_hits_reuses_the_previous_replys_excerpts(service):
+    service.index_report(_report("s1", "alice", days_ago=1, topic="python", summary="Generators and recursion in python."))
+    first = service.answer(MentorChatRequest(user_id="alice", message="How am I doing?"), invoke_llm=lambda p: "ok [1]")
+    previous = [s["chunk_id"] for s in first.sources]
+    assert previous == ["s1:summary", "s1:recommendations"]
+
+    prompts = []
+    request = MentorChatRequest(user_id="alice", message="Which of those should I fix first?",
+                                history=FOLLOW_UP_HISTORY, previous_chunk_ids=previous)
+    assert service.retrieve_by_similarity("alice", "Which of those should I fix first?") == []  # nothing of its own
+    response = service.answer(request, invoke_llm=lambda p: prompts.append(p) or "Start with recursion [1].")
+    assert [s["chunk_id"] for s in response.sources] == previous
+    assert "Generators and recursion" in prompts[0]
+
+
+def test_previous_excerpts_are_still_filtered_by_user(service):
+    service.index_report(_report("s-bob", "bob", days_ago=1, topic="python", summary="Bob's python session."))
+    request = MentorChatRequest(user_id="alice", message="Which of those should I fix first?",
+                                history=FOLLOW_UP_HISTORY, previous_chunk_ids=["s-bob:summary"])
+    response = service.answer(request, invoke_llm=lambda p: "should not be called")
+    assert response.sources == []
+
+
+def test_previous_excerpts_are_only_a_fallback(service):
+    service.index_report(_report("s1", "alice", days_ago=5, topic="python", summary="Generators in python."))
+    service.index_report(_report("s2", "alice", days_ago=1, topic="sql", summary="SQL joins and index usage."))
+    request = MentorChatRequest(user_id="alice", message="What about my sql joins?",
+                                history=FOLLOW_UP_HISTORY, previous_chunk_ids=["s1:summary"])
+    response = service.answer(request, invoke_llm=lambda p: "ok")
+    assert {s["session_id"] for s in response.sources} == {"s2"}  # its own hits win
+    # Without history (a new conversation) previous IDs are never used.
+    fresh = MentorChatRequest(user_id="alice", message="Which of those should I fix first?", previous_chunk_ids=["s1:summary"])
+    assert service.answer(fresh, invoke_llm=lambda p: "no").sources == []
