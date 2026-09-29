@@ -346,12 +346,13 @@ Agentic Interview Coach/
 Phase numbers are kept stable so references across docs stay valid, but phases are **built in this order**:
 
 ```
-Phase 0 → Phase 1 (starting with the walking skeleton, 1.0) → Phase 2 → Phase 4 → Phase 3 → Phase 5 → Phase 6
+Phase 0 → Phase 1 (starting with the walking skeleton, 1.0) → Phase 2 → Phase 4 → Phase 3 → Phase 5 → Phase 6 → Phase 7
 ```
 
 - **Phase 4 comes before Phase 3.** Coding is mostly built already (`sandbox_tool`) and is a strong demo feature. Company prep is the least essential and most expensive phase. Building 0 → 1 → 2 → 4 closes the full loop (Interview → Report → Mentor → Drill → Interview again) sooner.
 - **MVP = Phases 0, 1, 2 and 4, text mode only.** Voice (Phase 5) and company prep (Phase 3) come after the MVP. Voice is the riskiest phase (latency, end-of-speech detection), so it stays off the critical path.
-- Phase 6's *upgrade* work comes last, but its foundations (session-ID logging, fake Gateway, evaluator test set) start in Phases 0–1.
+- Phase 6's *upgrade* work comes late, but its foundations (session-ID logging, fake Gateway, evaluator test set) start in Phases 0–1.
+- **Phase 7 (UI/UX design) is the last phase.** Until then every phase ships a *functional, test-grade* UI: correct, accessible and responsive enough to use and test, but not designed. Phase 7 is the production design pass over the whole site, done once the features and flows have stopped moving, so the design isn't redone after every phase.
 
 ---
 
@@ -445,7 +446,7 @@ Phase 0 → Phase 1 (starting with the walking skeleton, 1.0) → Phase 2 → Ph
 | ~~Bank text used verbatim as the interviewer's message~~ ✅ replaced in 1.6: the interviewer agent writes the opening, transitions, follow-ups and closing | — |
 | ~~Technical evaluator only~~ ✅ replaced in 1.7: technical + behavioral (STAR) evaluators, evaluator test set | Phase 4 coding evaluator |
 | ~~Deterministic report, no LLM~~ ✅ replaced in 1.10: Groq writes the words, the numbers stay computed, and the deterministic report is the fallback | — |
-| Mentor with client-sent history, no persistence (`core/mentor/mentor_agent.py`) | Phase 2b conversation persistence |
+| ~~Mentor with client-sent history, no persistence~~ ✅ replaced in Phase 2: saved conversations (`mentor_conversations`), background indexing | — |
 
 **1.1 Question Bank (Hybrid)**
 - Questions live in the Cosmos `question_bank` collection, seeded from `data/seed/` (Phase 0.7). Coding problems carry `test_cases` (visible + hidden), which the graded harness needs.
@@ -618,6 +619,17 @@ Phase 0 → Phase 1 (starting with the walking skeleton, 1.0) → Phase 2 → Ph
 > **Already done in `rag_tool`** (`backend/app/core/mentor/rag_tool/`): semantic chunking with deterministic IDs (`{session_id}:summary`, `:question:{id}`, `:recommendations`), idempotent upsert, per-user filtering, intent-routed retrieval (specific → similarity with a 0.8 distance cutoff; vague → 2 most recent sessions; comparison → N most recent sessions), at most 2 chunks per session, a guardrailed Mentor prompt (grounding, prompt-injection resistance, scope limits), and `[n]` citations with `sources`. Tests: `backend/tests/unit/mentor/`.
 
 #### Tasks
+
+> [!NOTE]
+> **✅ Done (2026-09-29)**, verified live on Groq + Hugging Face (report indexed in the background ~2 s after it's ready; Mentor replies ~1.5–13 s). 423 backend tests. What was built, and where it differs from the plan below:
+> - **2.1** `ReportIndexer` (`core/mentor/indexer.py`): the engine schedules indexing once `INTERVIEW_COMPLETE` is sent; a failure is retried after 2 s, 10 s and 30 s; reports still unindexed are picked up by a sweep at startup and whenever the candidate opens the Mentor (`GET /mentor/welcome`). Chunk IDs stay on the report (`rag_chunk_ids`).
+> - **2.2** `AIGateway.embed()` runs an embedding provider (`gateway/embeddings.py`, HF MiniLM today) with usage logging; rag_tool embeds through it (`GatewayEmbeddings`). **Deviation:** there is no `gateway.search()`. Vector search stays inside rag_tool: it's a local Chroma query that must always filter on `user_id`, and the Azure AI Search move replaces rag_tool's store plus the embedder, nothing else.
+> - **2.3** `MentorAgent` (`core/mentor/mentor_agent.py`): prompt `prompts/mentor/mentor_v1.txt` (rag_tool's prompt plus a practice-request rule and a note that earlier citations were removed); rag_tool gained an optional `system_prompt` argument (default unchanged). The last 8 turns are sent with their `[n]` removed, so the model can't reuse stale numbers. A drill or study question gets a **Weak-Area Drill** action (`/interview/configure?focus=…&role=…&type=…`): the latest score per topic across the last 3 reports of the latest interview's type, below 7.5, weakest first, up to 3. The prompt is told which topics the button covers, so the reply and the button agree. rag_tool's generic-question routing now also covers "drill/quiz/test me (on my weak spots)".
+> - **2.4** `mentor_conversations` (`db/repositories/mentor_repo.py`): one document per conversation with the turns embedded. A turn (question + reply) is written only after the reply, so a failed call leaves nothing half-saved. Each reply stores `retrieved_chunks` (with `report_id`), `actions`, `intent`, `prompt_version` and `latency_ms`. 200 messages per conversation, then 409 `conversation_full`.
+> - **2.5** `POST /mentor/message {message, conversation_id?}`, `GET /mentor/conversations`, `GET /mentor/conversations/{id}` (another candidate's reads as 404), plus `GET /mentor/welcome` (report count, latest report's score and weakest/strongest topic, reports still being indexed).
+> - **2.6** `/mentor?c=<id>`: `MentorSidebar` (a column on desktop, a History toggle on phones), `MentorWelcome` (no reports: what the Mentor does + "Start your first interview"; otherwise a greeting from the latest report, built without an LLM call, and four starters), `ChatBubble` with citation chips and the drill button, `MentorInput` (Enter sends, Shift+Enter new line), `store/mentorStore.js`, and "Try again" that keeps the failed message.
+> - **Eval:** `evaluation/mentor_eval/run_mentor_eval.py` runs the 19 rag_tool cases plus 2 new ones through this stack; all automatic checks pass, and declines and injection resistance read correctly.
+> - **Known gap → Phase 2 follow-up:** a follow-up that only points back ("which of *those* should I fix first?") is searched together with the earlier questions; when those were generic too, it finds nothing (no-data reply) or weak excerpts. Proposed fix (changes rag_tool, needs approval): mid-conversation, when retrieval comes back empty, reuse the excerpts the previous reply was grounded in (already stored per turn). Eval case `followup_pronoun_mid_conversation` tracks it.
 
 **2.1 Report → RAG Adapter + Indexing Trigger**
 - Implement `core/mentor/indexer.py::to_rag_report(report, evaluations, questions) -> rag_tool.InterviewReport`:
@@ -1024,17 +1036,82 @@ NEXT_PROBLEM or WRAP_UP
 - Dashboards on top of the Phase 1 token-budget hook: tokens and cost per session and user, and how often budget-forced wrap-ups happen
 - Alert when spending exceeds thresholds (Azure Cost Management alerts)
 
-**6.6 Product Polish**
-- Loading states for all AI operations (with meaningful messages, not just spinners)
-- Error boundaries and user-friendly error pages
-- Empty states for new users (onboarding flow)
-- Responsive design for tablet use
-- Keyboard navigation and accessibility (ARIA)
+**6.6 Product Polish** → moved to **Phase 7** (7.5 states & feedback, 7.6 accessibility, 7.7 responsive), where it's done as part of the full design pass.
 
 **📌 Suggestions for Phase 6**
 - Observability doesn't start here: session-ID logging starts in Phase 0.2 and the evaluator test set in Phase 1.7. Phase 6 is for *upgrading* them, not starting from scratch.
 - AI evaluation (measuring AI quality) is what makes this project stand out as an engineering project. Invest time here — it demonstrates mature AI system thinking.
 - For prompt versioning: store the prompt version ID alongside every LLM call in the database. When you debug a bad evaluation, you need to know exactly which prompt was used.
+
+---
+
+### Phase 7 — UI/UX Design & Production Frontend
+**Goal**: Turn the working, test-grade frontend into a designed, production-quality product: a consistent visual identity and design system, redesigned key screens, and a UI that is accessible, responsive, fast and tested with real users. No new backend features; the APIs and WebSocket contract (architecture.md §13) stay as they are.
+
+**Duration Estimate**: 2–3 weeks
+
+**Why last:** by now every flow exists (interview, report, Mentor, drills, coding, voice), so screens are designed once, around the real content and states, instead of being redesigned after each phase.
+
+#### Tasks
+
+**7.1 UX Audit & Research**
+- Heuristic review of every current screen (landing, auth, profile wizard, dashboard, configure, practice room, serious room, coding room, report, Mentor): list the friction, inconsistencies and missing states.
+- Map the core journeys end to end: first visit → first interview → report → Mentor → drill → next interview. Define 2–3 personas (e.g. a fresher preparing for campus placements; an experienced engineer targeting a specific company).
+- Success metrics to design for and later measure: time to first interview, interview completion rate, report → Mentor / drill click-through, return within 7 days.
+
+**7.2 Visual Identity & Design System**
+- Brand: product name and logo, voice and tone, illustration or icon style.
+- Design tokens in `app/globals.css` (Tailwind 4 `@theme`): colour palettes for light and dark (brand, neutrals, status), type scale, spacing, radii, elevation, motion. The chart palette stays validated with the dataviz checker for both themes.
+- Theme switcher: light / dark / system, remembered per user.
+- Component library in `components/ui/`: buttons, inputs, selects, choice groups, cards, badges, alerts, toasts, modals/dialogs, tabs, tooltips, dropdowns, skeletons, empty states, avatars, progress/meter. Each with every state (hover, focus, disabled, loading, error).
+- A living style guide page (e.g. `/design`, dev-only) that renders every token and component, so the system is reviewed in the browser rather than in a separate tool.
+
+**7.3 Information Architecture & Navigation**
+- App shell redesign: sidebar / top bar, mobile navigation, page headers, breadcrumbs where they help.
+- The dashboard becomes the home: score trend over time (from past reports), the latest report at a glance, the recommended next drill, and quick-start buttons.
+- Consistent naming across the site (Practice vs Serious, Drill, Mentor, Report).
+
+**7.4 Key Screen Redesigns**
+- **Landing page**: what it does, how it works (Interview → Report → Mentor → Drill), sample report, call to action.
+- **Auth & onboarding**: a shorter profile wizard, then a guided first interview with a short "how it works" tour.
+- **Configure**: presets (e.g. "Quick 3-question practice", "Full mock interview", "Drill my weak areas") with the full options behind "Customise".
+- **Interview room** (practice, serious, coding): a focus mode, an auto-growing answer editor that handles code blocks, keyboard shortcuts, and clear question / follow-up / hint / feedback hierarchy. Serious mode feels like a real interview.
+- **Report**: a clear story from top to bottom (score → what went well → what to fix → next steps → evidence); share link and print / PDF export.
+- **Mentor**: conversation sidebar, suggested prompts, streaming responses, polished citation chips and drill links.
+- **History / progress**: all past interviews, filters, and trends per topic.
+
+**7.5 States & Feedback** (from 6.6)
+- Meaningful loading states for every AI step (skeletons and progress text, not just spinners), streaming and typing indicators, optimistic UI where safe.
+- Toasts for background results; error boundaries and friendly 404 / 500 / offline pages; empty states for every list and first-time screen.
+
+**7.6 Accessibility** (from 6.6)
+- WCAG 2.2 AA: automated axe checks in CI plus a manual screen-reader pass (VoiceOver and NVDA).
+- A complete interview is possible keyboard-only. Focus moves sensibly on each new question, and new questions, hints and results are announced through live regions.
+- Contrast checked in both themes, `prefers-reduced-motion` respected, and usable in forced-colors mode.
+
+**7.7 Responsive & Cross-Browser** (from 6.6)
+- Every screen designed for phone (375 px), tablet and desktop; touch targets at least 44 px.
+- Tested in Chrome, Safari (including iOS) and Firefox.
+
+**7.8 Motion & Micro-interactions**
+- Subtle transitions where they aid understanding (a new question arriving, feedback revealing, charts drawing), never decorative, and off under reduced motion.
+
+**7.9 Frontend Performance**
+- Core Web Vitals targets on key pages: LCP < 2.5 s, INP < 200 ms, CLS < 0.1.
+- Bundle analysis and code-splitting (charts, markdown, Monaco), font and image optimisation; Lighthouse ≥ 90 for performance, accessibility and best practices.
+
+**7.10 Content & Microcopy**
+- A short voice-and-tone guide; rewrite every error, empty-state and button label to match; help / FAQ; a clear note on how AI is used (evaluation, reports, Mentor) and what is stored.
+
+**7.11 Usability Testing**
+- A 5-person test with a task script (take a first interview, read the report, ask the Mentor, start a drill); System Usability Scale (SUS) score; fix the top issues and re-test.
+- Privacy-respecting product analytics events for the funnel in 7.1.
+
+**📌 Suggestions for Phase 7**
+- Design with real data: use actual reports, transcripts and Mentor answers from the earlier phases, including long, empty and error cases, not lorem ipsum.
+- Keep the design system in code (tokens + components + the `/design` page) so it cannot drift from what ships.
+- Redesign the interview room and the report first: they are where users spend their time and form their opinion of the product.
+- Every visual change must keep the §13 WebSocket contract and the existing tests green; the contract test (`tests/integration/test_ws_flow.py`) catches a frontend that expects a field the server doesn't send.
 
 ---
 
@@ -1096,6 +1173,7 @@ Every agent run is logged: inputs, tool calls, outputs, decisions, latency, erro
 | Phase 4 | Serious interview completes; Interviewer blind to scores verified; behavioral STAR evaluation works; a coding submission with the asserts deleted is still graded correctly by the harness; hidden test inputs never reach the client |
 | Phase 5 | Full speech interview completed; STT/TTS pipeline verified; turn detection tested |
 | Phase 6 | AI quality metrics collected; all agent runs logged; prompt versions tracked |
+| Phase 7 | Every screen matches the design system in light and dark; axe reports no serious issues and a keyboard-only interview works; key pages score Lighthouse ≥ 90 (performance, accessibility, best practices) and meet the Core Web Vitals targets; usability test tasks completed, with a SUS score recorded and the top issues fixed |
 
 ### Automated Tests
 ```bash

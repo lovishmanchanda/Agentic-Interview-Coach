@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 
 from app.core.interview.engine import InterviewEngine
-from app.db.repositories.interview_repo import InterviewRepository
+from app.db.repositories.interview_repo import InterviewRepository, as_utc
 from app.dependencies import CurrentUser, get_engine, get_interview_repo
 from app.utils.exceptions import NotFoundError
 from app.utils.responses import ok
@@ -14,14 +14,14 @@ RepoDep = Annotated[InterviewRepository, Depends(get_interview_repo)]
 
 def _public(report: dict) -> dict:
     out = {k: v for k, v in report.items() if k not in ("rag_chunk_ids",)}
-    out["generated_at"] = report["generated_at"].isoformat()
+    out["generated_at"] = as_utc(report["generated_at"]).isoformat()
     return out
 
 
 @router.get("")
 async def list_reports(user: CurrentUser, repo: RepoDep):
     return ok([{"report_id": r["report_id"], "session_id": r["session_id"], "overall": r["scores"]["overall"],
-                "topics": list(r.get("per_topic_scores", {})), "generated_at": r["generated_at"].isoformat()}
+                "topics": list(r.get("per_topic_scores", {})), "generated_at": as_utc(r["generated_at"]).isoformat()}
                for r in await repo.list_reports(user["_id"])])
 
 

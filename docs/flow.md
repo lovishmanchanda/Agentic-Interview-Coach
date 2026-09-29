@@ -151,33 +151,29 @@ flowchart LR
 flowchart TD
     DASH[Dashboard] --> MENTOR_PAGE[Mentor Page\n/mentor]
 
-    MENTOR_PAGE --> LOAD[Backend: Load Mentor context\nFetch candidate_profile from DB]
+    MENTOR_PAGE --> LOAD[GET /mentor/welcome\nReport count + latest report\nRe-queues unindexed reports]
     LOAD --> HISTORY_CHECK{Has interview history?}
 
-    HISTORY_CHECK -- No --> WELCOME[Mentor intro message:\n'Hi, I am your interview coach.\nTake your first interview and\nI will help you improve.']
-    HISTORY_CHECK -- Yes --> RAG_LOAD[rag_tool recency retrieval:\nsummary + recommendations chunks\nof the 2 most recent sessions]
+    HISTORY_CHECK -- No --> WELCOME[MentorWelcome:\nwhat the Mentor does\nCTA: Start your first interview]
+    HISTORY_CHECK -- Yes --> GREETING[Greeting from the latest report\nscore · strongest · weakest topic\nno LLM call + 4 starter questions]
 
-    RAG_LOAD --> CONTEXT_BUILD[Build Mentor prompt:\nNumbered excerpts 1..n\nConversation history last 6 turns]
-
-    CONTEXT_BUILD --> MENTOR_AGENT[Mentor Agent\nGroq gpt-oss-120b via Gateway\nPrompt: mentor/mentor_v1.txt]
-
-    MENTOR_AGENT --> GREETING[Mentor greeting message:\nPersonalized based on last report\ne.g. 'Your DSA score dropped last time.\nLets work on that.']
-
-    GREETING --> CHAT_LOOP[Candidate types message]
+    WELCOME --> CHAT_LOOP[Candidate types message\nor picks a starter]
+    GREETING --> CHAT_LOOP
 
     CHAT_LOOP --> USER_MSG[User message received\ne.g. 'What should I study?'\nor 'How did I do in interviews?'\nor 'I am weak in system design']
 
-    USER_MSG --> EMBED[rag_tool.classify_intent\nspecific · vague · comparison]
+    USER_MSG --> HIST[MentorAgent.chat\nLoad last 8 messages of the conversation\nold citations removed · drill topics if asked]
+    HIST --> EMBED[rag_tool.classify_intent\nspecific · vague · comparison]
 
     EMBED --> RETRIEVE[Retrieve from Chroma\nfiltered by user_id = candidate_id\nsee 4b for each mode]
 
     RETRIEVE --> CHUNKS[Max 2 chunks per session\nNone left → no-data message, no LLM call]
 
-    CHUNKS --> MENTOR_RESPOND[Mentor Agent\nAnswers only from the excerpts\nCites every claim as n]
+    CHUNKS --> MENTOR_RESPOND[Groq gpt-oss-120b via Gateway\nPrompt: mentor/mentor_v1.txt\nAnswers only from the excerpts\nCites every claim as n]
 
     MENTOR_RESPOND --> RESPONSE[Mentor response displayed\nCitation chips: date · topic → report\nOptional Weak-Area Drill link]
 
-    RESPONSE --> STORE_TURN[Store conversation turn in DB\nmentor_conversations\nretrieved_chunks = sources]
+    RESPONSE --> STORE_TURN[Store question + reply together\nmentor_conversations\nretrieved_chunks = sources + report_id]
 
     STORE_TURN --> ACTION{Candidate action}
     ACTION -- Continue chat --> CHAT_LOOP
@@ -202,7 +198,7 @@ flowchart LR
         IQ[interview_questions\nQuestion text · topic]
     end
 
-    subgraph INDEXING["Indexing (background task on REPORT_READY)"]
+    subgraph INDEXING["Indexing (ReportIndexer: background, retried 2s/10s/30s, swept at startup + Mentor visits)"]
         ADAPT[indexer.to_rag_report\nCosmos docs → rag_tool.InterviewReport\ncandidate_id → user_id]
         CHUNK[chunks_for_report\nsession:summary\nsession:question:qid\nsession:recommendations]
         EMBED_IDX[HF all-MiniLM-L6-v2\n384-dim, via Gateway]
@@ -228,7 +224,7 @@ flowchart LR
     style DEDUPE fill:#8b5cf6,color:#fff
 ```
 
-Generic self-assessment questions ("Where am I weakest?", "What should I practise next?") name no topic, so their embeddings sit just past the 0.8 cutoff (measured 0.81–0.84). `is_generic_self_assessment()` routes them to the vague path. It uses a full-string match, so "What are my weaknesses in SQL?" still goes through similarity. Mid-conversation they stay `specific` but fall back to recency when similarity finds nothing. Off-topic questions ("How's my cooking skill?") still get the no-data reply.
+Generic self-assessment questions ("Where am I weakest?", "What should I practise next?", "Drill me on my weak spots") name no topic, so their embeddings sit just past the 0.8 cutoff (measured 0.81–0.84). `is_generic_self_assessment()` routes them to the vague path. It uses a full-string match, so "What are my weaknesses in SQL?" still goes through similarity. Mid-conversation they stay `specific` but fall back to recency when similarity finds nothing. Off-topic questions ("How's my cooking skill?") still get the no-data reply.
 
 Citations: the answer cites excerpts as `[1]`, `[2]`… (full-width `【n】` is normalised to ASCII). `sources[i].citation == i+1` maps each citation to `{session_id, date, topic, chunk_type}`.
 
@@ -243,7 +239,8 @@ Citations: the answer cites excerpts as `[1]`, `[2]`… (full-width `【n】` is
 | "What were my mistakes?" | Retrieves specific evaluation weaknesses with context |
 | "Prepare me for Google" | Triggers Company Prep Agent workflow (Section 5) |
 | "Compare my last two interviews" | Comparison mode: summary + recommendations of the N most recent sessions |
-| "Drill me on my weak spots" | Returns a Weak-Area Drill link to `/interview/configure?topics=…` |
+| "Drill me on my weak spots" (or any study / practise question) | Adds a **Start a weak-area drill** button: `/interview/configure?focus=…&role=…&type=…`, the weakest topics (below 7.5) of the latest interview type, up to 3. The reply is told which topics the button covers |
+| "Which of those should I fix first?" | Known gap: a follow-up that only points back can find no excerpts when the earlier questions were generic too (see implementation_plan.md Phase 2) |
 | Off-topic, or "solve this for me" | Declines and redirects to interview feedback (guardrail in the Mentor prompt) |
 
 > [!NOTE]

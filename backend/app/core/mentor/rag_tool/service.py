@@ -96,7 +96,7 @@ _VAGUE_PHRASES = {
 # Generic "assess me" questions name no topic, so their embedding sits far from every report chunk
 # (measured 0.81-0.84 cosine distance with MiniLM, just past DEFAULT_SCORE_THRESHOLD) and similarity
 # search returns nothing. They are answered from the most recent sessions instead. fullmatch keeps
-# topic-scoped variants ("what are my weaknesses in SQL") on the similarity path.
+# topic-scoped variants ("what are my weaknesses in SQL", "drill me on SQL") on the similarity path.
 _GENERIC_SELF_ASSESSMENT_PATTERN = re.compile(
     r"(?:so |ok(?:ay)? |and |then )?(?:"
     r"where (?:am i|do i) (?:weakest|strongest|struggling|lacking|falling short)"
@@ -106,6 +106,7 @@ _GENERIC_SELF_ASSESSMENT_PATTERN = re.compile(
     r"|what (?:should|do|can|must) i (?:need to )?"
     r"(?:practi[cs]e|study|focus on|work on|improve(?: on)?|revise|prepare|learn)"
     r"|what to (?:practi[cs]e|study|focus on|work on|improve)"
+    r"|(?:drill|quiz|test) me(?: on (?:my )?(?:weak(?:est)? (?:spots?|areas?|points?|topics?)|weakness(?:es)?|gaps?))?"
     r")(?: (?:next|first|now|right now|most|overall|so far|then))?")
 
 _FULLWIDTH_CITATION_PATTERN = re.compile(r"[【〔](\d+)[】〕]")
@@ -170,7 +171,7 @@ def dedupe_by_session(hits: list[dict], max_per_session: int = DEFAULT_DEDUPE_PE
     return kept
 
 
-def build_prompt(request: MentorChatRequest, hits: list[dict]) -> str:
+def build_prompt(request: MentorChatRequest, hits: list[dict], system_prompt: str = SYSTEM_PROMPT) -> str:
     history_block = "\n".join(
         f"{h.get('role', 'user')}: {h.get('content', '')}" for h in request.history[-6:]
     ) or "(none)"
@@ -179,7 +180,7 @@ def build_prompt(request: MentorChatRequest, hits: list[dict]) -> str:
         f"topic: {h['metadata']['topic']}, type: {h['metadata']['chunk_type']})\n{h['text']}"
         for i, h in enumerate(hits)
     )
-    return (f"{SYSTEM_PROMPT}\n\nRecent conversation:\n{history_block}\n\n"
+    return (f"{system_prompt}\n\nRecent conversation:\n{history_block}\n\n"
             f"Report excerpts:\n{excerpt_block}\n\nCandidate question: {request.message}")
 
 
@@ -224,7 +225,9 @@ class RagService:
     def retrieve_by_comparison(self, user_id: str, n_sessions: int = 2) -> list[dict]:
         return self._recent_session_chunks(user_id, n_sessions)
 
-    def answer(self, request: MentorChatRequest, invoke_llm: Callable[[str], str]) -> MentorChatResponse:
+    def answer(self, request: MentorChatRequest, invoke_llm: Callable[[str], str],
+               system_prompt: str = SYSTEM_PROMPT) -> MentorChatResponse:
+        """system_prompt: the host may pass its own versioned copy; SYSTEM_PROMPT is the default."""
         has_history = bool(request.history)
         intent = classify_intent(request.message, has_history)
 
@@ -244,7 +247,7 @@ class RagService:
         if not hits:
             return MentorChatResponse(answer=NO_DATA_MESSAGE, sources=[])
 
-        prompt = build_prompt(request, hits)
+        prompt = build_prompt(request, hits, system_prompt)
         sources = [{"citation": i + 1, "session_id": hit["metadata"]["session_id"],
                     "date": hit["metadata"]["date"], "topic": hit["metadata"]["topic"],
                     "chunk_type": hit["metadata"]["chunk_type"]} for i, hit in enumerate(hits)]

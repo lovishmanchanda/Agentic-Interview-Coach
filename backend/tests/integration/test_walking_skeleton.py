@@ -12,7 +12,7 @@ from app.core.mentor.rag_tool import RagService
 from app.db.seed import load_seed_questions, seed_question_bank
 from app.main import create_app
 from app.utils.exceptions import ServiceUnavailableError
-from tests.fakes import GOOD_EVALUATION, HashEmbeddings
+from tests.fakes import GOOD_EVALUATION, HashEmbeddings, drain_indexing
 from tests.integration.test_profiles_api import PROFILE
 
 ONE_QUESTION = {"question_count": 1}
@@ -68,9 +68,8 @@ def test_full_skeleton_flow(app_client, gateway, rag):
     complete = ws.receive_json()
     assert complete["type"] == "INTERVIEW_COMPLETE" and complete["state"] == "REPORT_READY"
     report_id = complete["payload"]["report_id"]
-    ws.send_json({"type": "PING"})
-    assert ws.receive_json()["type"] == "PONG"  # indexing finished before the loop resumed
     ws.__exit__(None, None, None)
+    drain_indexing(app_client)  # Mentor indexing runs in the background once the report is out
 
     # The evaluator ran on the fast tier with the versioned prompt.
     call = gateway.calls_of("structured")[0]
@@ -204,6 +203,7 @@ def test_reports_and_sessions_are_private(app_client, gateway):
     ws.send_json({"type": "ANSWER", "answer_text": "Buckets."})
     report_id = [ws.receive_json() for _ in range(3)][-1]["payload"]["report_id"]
     ws.__exit__(None, None, None)
+    drain_indexing(app_client)
     assert app_client.get(f"/api/v1/reports/{report_id}", headers=bob_headers).status_code == 404
     # Bob's Mentor never sees Ada's report.
     gateway.script("generate", "should not be called")

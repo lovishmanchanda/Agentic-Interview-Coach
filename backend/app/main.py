@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1 import api_router
 from app.api.ws import router as ws_router
 from app.config import Settings, get_settings
+from app.core.mentor.indexer import ReportIndexer
 from app.core.mentor.setup import build_rag_service
 from app.db.client import create_client, ensure_schema
 from app.gateway import build_gateway
@@ -43,9 +44,12 @@ def create_app(settings: Settings | None = None, *, db=None, gateway=None, rag=N
         if settings.use_inmemory_db:
             await _seed_inmemory(app.state.db, settings)
         app.state.gateway = gateway or build_gateway(settings)
-        app.state.rag = rag if rag is not None else build_rag_service(settings)
+        app.state.rag = rag if rag is not None else build_rag_service(settings, app.state.gateway)
+        app.state.indexer = ReportIndexer(app.state.rag, app.state.db)
+        app.state.indexer.start_sweep()  # reports left unindexed by a restart or an outage
         log.info("app_started", extra={"fields": {"env": settings.app_env}})
         yield
+        await app.state.indexer.close()
         if client is not None:
             await client.close()
 

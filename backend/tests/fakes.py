@@ -39,3 +39,8 @@ class HashEmbeddings(Embeddings):
 
     def embed_query(self, text: str) -> list[float]:
         return self._vector(text)
+
+
+def drain_indexing(client) -> None:
+    """Mentor indexing runs in the background (ReportIndexer); wait for it on the app's event loop."""
+    client.portal.call(client.app.state.indexer.drain)

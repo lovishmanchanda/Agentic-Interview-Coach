@@ -36,7 +36,7 @@ from app.core.interview.question_engine import QuestionEngine, role_key, target_
 from app.db.models.interview import InterviewConfigRequest
 from app.core.interview.report_generator import apply_narrative, build_report, write_narrative
 from app.core.interview.state_machine import DRIVEN, SETTLED, WORKING, InterviewStateMachine, State, next_state_for_action
-from app.core.mentor.indexer import index_session_report
+from app.core.mentor.indexer import ReportIndexer
 from app.db.repositories.interview_repo import InterviewRepository, as_utc, utcnow
 from app.db.repositories.question_repo import QuestionRepository
 from app.gateway import AIGateway
@@ -102,7 +102,7 @@ def _evaluation_view(evaluation: dict) -> dict:
 
 class InterviewEngine:
     def __init__(self, *, repo: InterviewRepository, question_bank: QuestionRepository, gateway: AIGateway,
-                 rag=None, max_answer_chars: int = 5_000, question_token_reserve: int = QUESTION_TOKEN_RESERVE,
+                 indexer: ReportIndexer | None = None, max_answer_chars: int = 5_000, question_token_reserve: int = QUESTION_TOKEN_RESERVE,
                  stale_work: timedelta = STALE_WORK, follow_ups: bool = True, agent: InterviewAgent | None = None,
                  report_writer: bool = True):
         self.repo = repo
@@ -115,7 +115,7 @@ class InterviewEngine:
         self.questions = QuestionEngine(bank=question_bank, repo=repo, gateway=gateway)
         self.gateway = gateway
         self.question_token_reserve = question_token_reserve
-        self.rag = rag
+        self.indexer = indexer
         self.max_answer_chars = max_answer_chars
 
     # ── session lifecycle ────────────────────────────────────────────────────
@@ -541,8 +541,9 @@ class InterviewEngine:
             return None
         await emit(event("INTERVIEW_COMPLETE", REPORT_READY, report_id=report["report_id"],
                          closing_message=moved.get("closing_message")))
-        # After the candidate has their result: index for the Mentor. Failures are logged, not raised.
-        await index_session_report(self.rag, self.repo, report)
+        # After the candidate has their result: index for the Mentor in the background (retried on failure).
+        if self.indexer is not None:
+            self.indexer.schedule(report["report_id"])
         return moved
 
     @staticmethod

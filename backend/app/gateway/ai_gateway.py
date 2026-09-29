@@ -1,17 +1,20 @@
 """AI Gateway: the only door to LLMs, embeddings, search, speech and code execution.
 
 Phase 0 ships the interface plus the cross-cutting parts every provider will share (usage logging,
-per-session token budget). Provider calls are stubbed and raise until Phase 1 wires Groq (every
-LLM call), Phase 2 the Mentor stack, Phase 4 Piston and Phase 5 Speech. Tests and local dev use
-`FakeAIGateway` (gateway/fake_gateway.py), which implements the same interface.
+per-session token budget). Provider calls are stubbed and raise until wired: Groq for every LLM call
+(Phase 1), embeddings for the Mentor (Phase 2, any gateway given an `embedder`), Piston (Phase 4) and
+Speech (Phase 5). Tests and local dev use `FakeAIGateway` (gateway/fake_gateway.py), which implements
+the same interface.
 """
 import logging
 import time
 from collections import defaultdict
 from typing import Any
 
+import anyio
 from pydantic import BaseModel
 
+from app.gateway.embeddings import EmbeddingProvider
 from app.gateway.types import CallContext, CallType, ExecutionResult, FinalMessage, ModelTier, ToolCall
 from app.utils.exceptions import ServiceUnavailableError
 from app.utils.logging import log_event
@@ -20,8 +23,9 @@ log = logging.getLogger("app.gateway")
 
 
 class AIGateway:
-    def __init__(self, *, session_token_budget: int):
+    def __init__(self, *, session_token_budget: int, embedder: EmbeddingProvider | None = None):
         self.session_token_budget = session_token_budget
+        self.embedder = embedder
         self._session_tokens: dict[str, int] = defaultdict(int)
         self._candidate_tokens: dict[str, int] = defaultdict(int)
 
@@ -42,13 +46,23 @@ class AIGateway:
         """One step of a tool loop. tool_choice "required" forces a tool call (e.g. a terminal submit tool)."""
         return await self._not_configured("tools")
 
-    # ── Embeddings / search (Mentor: rag_tool until Azure AI Search) ─────────
+    # ── Embeddings (Mentor) ──────────────────────────────────────────────────
+    # Vector search itself stays in rag_tool (a local Chroma query that must always filter on user_id);
+    # the swap to Azure AI Search replaces the embedder here and rag_tool's store, nothing else.
     async def embed(self, text: str, *, context: CallContext | None = None) -> list[float]:
-        return await self._not_configured("embed")
-
-    async def search(self, query: str, index: str, top_k: int = 5, *,
-                     context: CallContext | None = None) -> list[dict]:
-        return await self._not_configured("search")
+        if self.embedder is None:
+            return await self._not_configured("embed")
+        started = time.perf_counter()
+        try:
+            vector = await anyio.to_thread.run_sync(self.embedder.embed, text)
+        except Exception as exc:  # noqa: BLE001 -- provider SDKs raise many types; callers see one
+            log.warning("embed_failed", extra={"fields": {"model": self.embedder.model, "error": type(exc).__name__}})
+            raise ServiceUnavailableError("The Mentor's search service did not respond. Please try again.",
+                                          code="embed_unavailable") from exc
+        # The HF API doesn't report tokens; a word count is close enough for usage dashboards.
+        self._log_usage(model=self.embedder.model, call_type="embed", tokens_used=len(text.split()),
+                        latency_ms=self._elapsed_ms(started), context=context)
+        return vector
 
     # ── Speech ───────────────────────────────────────────────────────────────
     async def transcribe(self, audio_bytes: bytes, language: str = "en-US", *,

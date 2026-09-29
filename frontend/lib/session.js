@@ -2,6 +2,7 @@
 
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
+import { useMentorStore } from "@/store/mentorStore";
 import { useProfileStore } from "@/store/profileStore";
 
 export async function signOut() {
@@ -15,6 +16,7 @@ export async function signOut() {
   }
   clear();
   useProfileStore.getState().reset();
+  useMentorStore.getState().reset();
 }
 
 /** Only allow same-site relative paths as post-login redirects (no open redirects, no javascript: URLs). */

@@ -27,17 +27,17 @@ function remarkBreakTags() {
 
 /**
  * Renders a Mentor reply as markdown (lists, bold, tables, code). Citations become chips linking to the cited
- * session's report. Raw HTML in the reply is not rendered (react-markdown's default), so model output can't
+ * session's report (the server adds each source's report_id). Raw HTML in the reply is not rendered (react-markdown's default), so model output can't
  * inject markup.
  */
-export default function MentorAnswer({ text, sources, reportBySession }) {
+export default function MentorAnswer({ text, sources }) {
   const components = {
     a({ href = "", children }) {
       if (href.startsWith(CITE_PREFIX)) {
         const source = sources[Number(href.slice(CITE_PREFIX.length)) - 1];
         if (!source) return <span>[{children}]</span>;
         const label = `${source.date} · ${source.topic}`;
-        const reportId = reportBySession[source.session_id];
+        const reportId = source.report_id;
         return reportId ? (
           <Link href={`/interview/report/${reportId}`} className={`${CHIP} hover:underline`} title="Open this report">
             {label}

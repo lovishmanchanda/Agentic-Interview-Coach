@@ -121,7 +121,12 @@ export const api = {
     get: (reportId) => request(`/api/v1/reports/${encodeURIComponent(reportId)}`),
   },
   mentor: {
-    send: (message, history = []) => request("/api/v1/mentor/message", { method: "POST", body: { message, history } }),
+    // No conversationId: starts a new conversation. The server keeps the history.
+    send: (message, conversationId) =>
+      request("/api/v1/mentor/message", { method: "POST", body: { message, ...(conversationId ? { conversation_id: conversationId } : {}) } }),
+    welcome: () => request("/api/v1/mentor/welcome"),
+    conversations: () => request("/api/v1/mentor/conversations"),
+    conversation: (id) => request(`/api/v1/mentor/conversations/${encodeURIComponent(id)}`),
   },
 };
 

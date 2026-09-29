@@ -140,5 +140,17 @@ class InterviewRepository:
         cursor = self.reports.find({"candidate_id": candidate_id}, _NO_ID).sort("generated_at", DESCENDING)
         return await cursor.to_list(length=limit)
 
+    async def report_ids_for_sessions(self, candidate_id: str, session_ids: list[str]) -> dict[str, str]:
+        """session_id -> report_id, only for this candidate's reports."""
+        cursor = self.reports.find({"candidate_id": candidate_id, "session_id": {"$in": session_ids}},
+                                   {"_id": 0, "session_id": 1, "report_id": 1})
+        return {r["session_id"]: r["report_id"] for r in await cursor.to_list(length=len(session_ids) or 1)}
+
+    async def unindexed_reports(self, candidate_id: str | None = None, *, limit: int = 200) -> list[dict]:
+        """Reports the Mentor hasn't indexed yet, oldest first (report_id only)."""
+        query = {"rag_indexed": {"$ne": True}, **({"candidate_id": candidate_id} if candidate_id else {})}
+        cursor = self.reports.find(query, {"_id": 0, "report_id": 1}).sort("generated_at", ASCENDING)
+        return await cursor.to_list(length=limit)
+
     async def update_report(self, report_id: str, changes: dict) -> None:
         await self.reports.update_one({"report_id": report_id}, {"$set": changes})

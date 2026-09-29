@@ -207,7 +207,7 @@ components/
 │   ├── MentorInput.jsx          # Text input + send button
 │   ├── MentorWelcome.jsx        # First-time / no-history state
 │   ├── MentorSidebar.jsx        # Past conversation list
-│   └── ContextPanel.jsx         # Show what context mentor is using (debug)
+│   └── MentorAnswer.jsx         # Markdown reply + citation chips
 │
 ├── voice/                       # Voice UI components
 │   ├── MicrophoneButton.jsx     # Record start/stop
@@ -237,8 +237,8 @@ store/
 ├── profileStore.js      # { profile, updateProfile() }
 ├── interviewStore.js    # { sessionId, sessionState, currentQuestion,
 │                        #   messages, isConnected, connectWS(), sendAnswer() }
-├── mentorStore.js       # { conversationId, messages, isLoading,
-│                        #   sendMessage(), loadHistory() }
+├── mentorStore.js       # { welcome, conversations, activeId, messages, sending,
+│                        #   openConversation(), newConversation(), send() }
 └── reportStore.js       # { reports, currentReport }
 ```
 
@@ -650,18 +650,28 @@ erDiagram
   "_id": "ObjectId",
   "conversation_id": "string (indexed)",
   "candidate_id": "string (indexed)",
+  "title": "string",                   // the first question, trimmed to 60 chars
   "messages": [
     {
+      "message_id": "string",
       "role": "user | assistant",
       "content": "string",
       "timestamp": "datetime",
-      "retrieved_chunks": ["string"]  // chunk IDs used for this response (assistant only)
+      // assistant only:
+      "retrieved_chunks": [{"citation": 1, "session_id": "…", "report_id": "…", "date": "…", "topic": "…", "chunk_type": "summary"}],
+      "actions": [{"type": "drill", "topics": ["dsa"], "role": "…", "interview_type": "technical", "href": "/interview/configure?focus=dsa&…"}],
+      "intent": "vague | specific | comparison",
+      "prompt_version": "mentor/mentor_v1",
+      "latency_ms": 1500
     }
   ],
+  "message_count": 4,                  // capped at 200; then 409 conversation_full
+  "last_message_preview": "string",   // plain text, for the sidebar
   "created_at": "datetime",
   "updated_at": "datetime"
 }
 ```
+A turn (question + reply) is written in one update after the reply, so a failed LLM call never leaves a question without an answer, and a new conversation exists only once it has one. The Mentor sees the last 8 messages, with earlier `[n]` citations removed.
 
 #### `agent_runs`
 ```json
@@ -750,7 +760,7 @@ erDiagram
 | `candidate_answers` | `session_id`, `question_id` |
 | `evaluations` | `session_id`, `candidate_id` |
 | `interview_reports` | `report_id`, `session_id`, `candidate_id` |
-| `mentor_conversations` | `candidate_id`, `created_at` |
+| `mentor_conversations` | `conversation_id` (unique), (`candidate_id`, `updated_at`) |
 | `agent_runs` | `candidate_id`, `agent_name`, `started_at` |
 | `question_bank` | `type`, `topic`, `difficulty`, `roles` (compound) |
 | `companies` | `name` |
@@ -766,6 +776,8 @@ Not a Cosmos collection. It's a **rebuildable** index derived from `interview_re
 | Metadata | `user_id` (= `candidate_id`), `session_id`, `date`, `interview_type`, `report_topic`, `chunk_type`, `topic`, `score`, `question_id` (question chunks) |
 | Isolation | Every read filters `where={"user_id": …}` |
 | Rebuild | Safe to delete and re-index from Cosmos at any time |
+| Indexing | `ReportIndexer`, in the background once the report is sent; retried after 2 s, 10 s, 30 s; a sweep at startup and on each Mentor visit catches anything left (`rag_indexed: false`) |
+| Embeddings | Through `AIGateway.embed()` (`GatewayEmbeddings`), so they're logged with the LLM calls |
 
 Moving to Azure AI Search later keeps the same chunk IDs and metadata as index fields.
 
@@ -866,9 +878,10 @@ class AIGateway:
     async def generate_with_tools(messages, tools) -> ToolCall | FinalMessage   # Interview Agent ReAct loop
     async def stream(prompt, context) -> AsyncGenerator[str]
 
-    # Embedding + Search (Mentor: rag_tool's HF embeddings + Chroma now; Azure AI Search later)
+    # Embeddings (Mentor: HF all-MiniLM-L6-v2 via an EmbeddingProvider; gateway/embeddings.py)
     async def embed(text: str) -> list[float]
-    async def search(query: str, index: str, top_k: int) -> list[Document]
+    # No search(): vector search stays in rag_tool (a local Chroma query that always filters on user_id).
+    # Azure AI Search later replaces rag_tool's store and the embedding provider.
 
     # Speech
     async def transcribe(audio_bytes: bytes, language: str) -> str
@@ -1419,9 +1432,10 @@ flowchart TD
 | `GET` | `/api/v1/profiles/me` | ✅ | Get candidate profile |
 | `POST` | `/api/v1/profiles` | ✅ | Create candidate profile |
 | `PUT` | `/api/v1/profiles/me` | ✅ | Update candidate profile |
-| `POST` | `/api/v1/mentor/message` | ✅ | `{ message, conversation_id? }` → `{ answer, sources: [{citation, session_id, date, topic, chunk_type}], conversation_id }` |
-| `GET` | `/api/v1/mentor/conversations` | ✅ | List past Mentor conversations |
-| `GET` | `/api/v1/mentor/conversations/{id}` | ✅ | Get full conversation history |
+| `POST` | `/api/v1/mentor/message` | ✅ | `{ message, conversation_id? }` (omit the ID to start one) → `{ conversation_id, title, answer, sources: [{citation, session_id, report_id, date, topic, chunk_type}], actions: [drill], messages: [the saved user + assistant turn] }`. 404 `conversation_not_found` for someone else's ID, 409 `conversation_full` |
+| `GET` | `/api/v1/mentor/conversations` | ✅ | Past conversations, most recent first (title, preview, message count) |
+| `GET` | `/api/v1/mentor/conversations/{id}` | ✅ | One conversation with its messages, sources and actions |
+| `GET` | `/api/v1/mentor/welcome` | ✅ | The Mentor page's opening state: report count, latest report (score, weakest/strongest topic), reports still being indexed (and re-queues them) |
 | `POST` | `/api/v1/interviews` | ✅ | Create interview session from `InterviewConfigRequest` (anything omitted comes from the profile; `focus_topics` for a Weak-Area Drill). 422 `option_unavailable` for behavioral/coding/voice until they ship |
 | `GET` | `/api/v1/interviews/options?role=` | ✅ | Start-page data: profile defaults, topics for the role, choices not built yet |
 | `GET` | `/api/v1/interviews` | ✅ | List interview sessions |

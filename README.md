@@ -46,7 +46,7 @@ CI runs all of these on every push/PR (`.github/workflows/ci.yml`).
 
 | Doc | What it's for |
 |---|---|
-| [docs/implementation_plan.md](docs/implementation_plan.md) | Master plan: stack, repo layout, phases 0–6, execution order & MVP cut, verification |
+| [docs/implementation_plan.md](docs/implementation_plan.md) | Master plan: stack, repo layout, phases 0–7 (7 = UI/UX design, last), execution order & MVP cut, verification |
 | [docs/architecture.md](docs/architecture.md) | Components, Cosmos schema, AI Gateway, WebSocket/REST contract (§13 is the event source of truth) |
 | [docs/flow.md](docs/flow.md) | User journeys, state machine, coding, Mentor and report flows |
 | [docs/interview-agent-implementation-plan.md](docs/interview-agent-implementation-plan.md) | The Interview Agent ReAct loop and its tools |
@@ -65,7 +65,7 @@ CI runs all of these on every push/PR (`.github/workflows/ci.yml`).
 | Question bank seed (20 questions incl. 3 coding problems with hidden tests) | `data/seed/question_bank/`, `backend/scripts/seed.py` | ✅ |
 | Frontend: landing, login, register, profile wizard, dashboard shell | `frontend/app/`, `components/`, `store/`, `lib/api.js` | ✅ |
 | Local dev without Azure, Docker Compose, CI | `docker-compose.yml`, `.github/workflows/ci.yml` | ✅ |
-| Mentor RAG (`rag_tool`) | `backend/app/core/mentor/rag_tool/` | ✅ Built. Starts when `HF_TOKEN` is set; chat wiring in Phase 2. [Guide](docs/modules/rag-tool/INTEGRATION.md) |
+| Mentor RAG (`rag_tool`) | `backend/app/core/mentor/rag_tool/` | ✅ Built. Starts when `HF_TOKEN` is set. [Guide](docs/modules/rag-tool/INTEGRATION.md) |
 | Coding sandbox (`sandbox_tool`) | `backend/app/core/coding/sandbox_tool/` (local only for now) | ⚠️ Built, not in Git yet: it joins the repo in Phase 4 with the fixes in `plan-review.md` §C (Piston URL from config instead of hard-coded). [Guide](docs/modules/coding-sandbox.md) |
 | **Phase 1 — Interview engine** | | ✅ Done |
 | 1.0 Walking skeleton: one question → Groq evaluation → report → RAG index → Mentor cites it | `backend/app/core/interview/engine.py`, `app/api/ws.py`, `frontend/app/(app)/interview/` | ✅ Verified live on Groq + HF |
@@ -80,6 +80,11 @@ CI runs all of these on every push/PR (`.github/workflows/ci.yml`).
 | 1.3 Interview state machine: validated transitions, state history, crash/reconnect recovery, `GET /interviews/{id}/state` | `backend/app/core/interview/state_machine.py` | ✅ |
 | 1.2 Interview configuration: type, practice/serious mode, role, level, difficulty, company, question count, focus topics (Weak-Area Drill) | `backend/app/db/models/interview.py`, `frontend/app/(app)/interview/configure/` | ✅ |
 | Mentor: generic "where am I weakest?" questions answered from recent sessions; markdown replies | `core/mentor/rag_tool/service.py`, `frontend/components/mentor/` | ✅ |
+| **Phase 2 — Mentor** | | ✅ Done |
+| Background report indexing with retries and a catch-up sweep; embeddings through the AI Gateway | `backend/app/core/mentor/indexer.py`, `app/gateway/embeddings.py` | ✅ |
+| Mentor agent: versioned prompt, saved conversations, Weak-Area Drill button, welcome from your latest report | `backend/app/core/mentor/mentor_agent.py`, `app/api/v1/mentor.py`, `prompts/mentor/` | ✅ |
+| Mentor UI: conversation sidebar, welcome and starters, citation chips, drill button | `frontend/app/(app)/mentor/`, `frontend/components/mentor/`, `store/mentorStore.js` | ✅ |
+| Mentor eval: 21 cases (grounding, declines, injection, citations) | `evaluation/mentor_eval/run_mentor_eval.py` | ✅ |
 
 ## Layout
 

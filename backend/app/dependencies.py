@@ -61,7 +61,7 @@ def get_interview_repo(db: DbDep) -> InterviewRepository:
 def build_engine(state) -> InterviewEngine:
     """Also used by the WebSocket handler, which has app.state but no Request."""
     return InterviewEngine(repo=InterviewRepository(state.db), question_bank=QuestionRepository(state.db),
-                           gateway=state.gateway, rag=state.rag, max_answer_chars=state.settings.max_answer_chars,
+                           gateway=state.gateway, indexer=state.indexer, max_answer_chars=state.settings.max_answer_chars,
                            stale_work=timedelta(seconds=state.settings.stale_work_seconds),
                            follow_ups=state.settings.interview_follow_ups,
                            agent=InterviewAgent(state.gateway, AgentRunRepository(state.db))

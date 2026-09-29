@@ -4,7 +4,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel
 
-CallType = Literal["generate", "structured", "tools", "embed", "search", "transcribe", "synthesize", "execute"]
+CallType = Literal["generate", "structured", "tools", "embed", "transcribe", "synthesize", "execute"]
 ModelTier = Literal["default", "fast"]
 
 ExecutionStatus = Literal["accepted", "wrong_answer", "time_limit", "runtime_error", "compile_error", "internal_error"]

@@ -70,6 +70,7 @@ def test_classify_intent_specific():
     "Where am I weakest?", "What should I practise next?", "What should I practice next?",
     "What are my weak areas", "What are my biggest weaknesses?", "What should I focus on first?",
     "So where do I need to improve?", "What are my strengths?",
+    "Drill me on my weak spots", "Quiz me", "Test me on my weaknesses", "drill me on my weakest topics",
 ])
 def test_generic_self_assessment_is_vague_without_history(message):
     assert is_generic_self_assessment(message)
@@ -78,7 +79,7 @@ def test_generic_self_assessment_is_vague_without_history(message):
 
 @pytest.mark.parametrize("message", [
     "What are my weaknesses in SQL?", "What should I practise for system design?",
-    "How's my cooking skill?", "Where am I weakest in recursion?",
+    "How's my cooking skill?", "Where am I weakest in recursion?", "Drill me on SQL joins",
 ])
 def test_topic_scoped_questions_stay_specific(message):
     assert not is_generic_self_assessment(message)

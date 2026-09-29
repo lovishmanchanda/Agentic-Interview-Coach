@@ -29,8 +29,8 @@ class LLMOutputError(AppError):
 
 class GroqAIGateway(AIGateway):
     def __init__(self, *, api_key: str, default_model: str, fast_model: str, session_token_budget: int,
-                 client: Any = None, timeout_s: float = 60.0):
-        super().__init__(session_token_budget=session_token_budget)
+                 client: Any = None, timeout_s: float = 60.0, embedder=None):
+        super().__init__(session_token_budget=session_token_budget, embedder=embedder)
         self.client = client or groq.AsyncGroq(api_key=api_key, timeout=timeout_s, max_retries=2)
         self.models: dict[str, str] = {"default": default_model, "fast": fast_model}
 

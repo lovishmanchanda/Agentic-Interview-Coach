@@ -1,93 +1,110 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 
-import MentorAnswer from "@/components/mentor/MentorAnswer";
+import MentorChat from "@/components/mentor/MentorChat";
+import MentorInput from "@/components/mentor/MentorInput";
+import MentorSidebar from "@/components/mentor/MentorSidebar";
+import MentorWelcome from "@/components/mentor/MentorWelcome";
 import Alert from "@/components/ui/Alert";
 import Button from "@/components/ui/Button";
 import Spinner from "@/components/ui/Spinner";
-import { api } from "@/lib/api";
+import { useAuthStore } from "@/store/authStore";
+import { useMentorStore } from "@/store/mentorStore";
 
-const STARTERS = ["How am I doing?", "Where am I weakest?", "What should I practise next?"];
+function errorText(error) {
+  if (error.code === "mentor_disabled") return "The Mentor isn't configured on the server (HF_TOKEN missing).";
+  return error.message;
+}
 
-export default function MentorPage() {
-  const [messages, setMessages] = useState([]);
+function MentorView() {
+  const router = useRouter();
+  const conversationParam = useSearchParams().get("c");
+  const firstName = useAuthStore((s) => s.user?.name?.split(" ")[0]);
+  const {
+    welcome, welcomeError, conversations, activeId, messages, conversationStatus, sending, error, failedMessage,
+    loadWelcome, loadConversations, openConversation, newConversation, send,
+  } = useMentorStore();
   const [draft, setDraft] = useState("");
-  const [sending, setSending] = useState(false);
-  const [error, setError] = useState(null);
-  const [reportBySession, setReportBySession] = useState({});
-  const bottomRef = useRef(null);
 
   useEffect(() => {
-    api.interviews.list()
-      .then((sessions) => setReportBySession(Object.fromEntries(sessions.filter((s) => s.report_id).map((s) => [s.session_id, s.report_id]))))
-      .catch(() => {});
-  }, []);
+    loadWelcome();
+    loadConversations();
+  }, [loadWelcome, loadConversations]);
 
+  // The URL is the source of truth for which conversation is open (so links and Back work).
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages, sending]);
+    if (conversationParam) openConversation(conversationParam);
+    else newConversation();
+  }, [conversationParam, openConversation, newConversation]);
 
-  async function send(text) {
-    const message = text.trim();
-    if (!message || sending) return;
-    const history = messages.slice(-8).map(({ role, content }) => ({ role, content }));
-    setMessages((m) => [...m, { role: "user", content: message }]);
+  async function submit(text) {
     setDraft("");
-    setSending(true);
-    setError(null);
-    try {
-      const reply = await api.mentor.send(message, history);
-      setMessages((m) => [...m, { role: "assistant", content: reply.answer, sources: reply.sources }]);
-    } catch (err) {
-      setError(err.code === "mentor_disabled" ? "The Mentor isn't configured on the server (HF_TOKEN missing)." : err.message);
-    } finally {
-      setSending(false);
-    }
+    const id = await send(text);
+    if (id && id !== conversationParam) router.replace(`/mentor?c=${id}`, { scroll: false });
+    if (!id) setDraft((current) => current || text); // keep what they wrote so nothing is lost
   }
 
+  const isNew = activeId === null && messages.length === 0;
+  const unavailable = welcome && !welcome.mentor_available;
+
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Mentor</h1>
-        <p className="mt-1 text-sm text-muted">Answers come only from your own interview reports, with the sessions cited.</p>
-      </div>
+    <div className="grid gap-6 md:grid-cols-[15rem_minmax(0,1fr)]">
+      <MentorSidebar conversations={conversations} activeId={activeId} />
 
-      {messages.length === 0 && (
-        <div className="flex flex-wrap gap-2">
-          {STARTERS.map((s) => (
-            <button key={s} type="button" onClick={() => send(s)}
-              className="rounded-full border border-border px-4 py-2 text-sm hover:border-primary hover:text-primary">
-              {s}
-            </button>
-          ))}
+      <div className="flex min-h-[calc(100dvh-10rem)] min-w-0 flex-col gap-6">
+        <header>
+          <h1 className="text-2xl font-semibold">Mentor</h1>
+          <p className="mt-1 text-sm text-muted">Answers come only from your own interview reports, with the sessions cited.</p>
+        </header>
+
+        {unavailable && <Alert tone="error">{errorText({ code: "mentor_disabled" })}</Alert>}
+        {welcome?.pending_reports > 0 && (
+          <p className="text-xs text-muted">
+            {welcome.pending_reports === 1 ? "One report is" : `${welcome.pending_reports} reports are`} still being
+            prepared for the Mentor, so answers may not include {welcome.pending_reports === 1 ? "it" : "them"} yet.
+          </p>
+        )}
+
+        <div className="flex-1">
+          {conversationStatus === "loading" && <Spinner label="Loading conversation…" />}
+          {conversationStatus === "error" && (
+            <Alert tone="error" title="Couldn't open this conversation">
+              {errorText(error)} <Button href="/mentor" variant="ghost" size="sm">Start a new one</Button>
+            </Alert>
+          )}
+          {isNew && !welcome && !welcomeError && <Spinner label="Loading…" />}
+          {isNew && welcome && !unavailable && (
+            <MentorWelcome welcome={welcome} name={firstName} onPick={submit} />
+          )}
+          {messages.length > 0 && <MentorChat messages={messages} sending={sending} />}
         </div>
-      )}
 
-      <ol className="space-y-4">
-        {messages.map((m, i) => (
-          <li key={i} className={m.role === "user" ? "ml-auto max-w-[85%]" : "max-w-[85%]"}>
-            <div className={`rounded-2xl px-4 py-3 text-sm ${m.role === "user" ? "rounded-tr-sm bg-primary text-primary-foreground" : "rounded-tl-sm border border-border bg-surface"}`}>
-              {m.role === "assistant" ? (
-                <MentorAnswer text={m.content} sources={m.sources || []} reportBySession={reportBySession} />
-              ) : (
-                <p className="whitespace-pre-wrap">{m.content}</p>
-              )}
-            </div>
-          </li>
-        ))}
-      </ol>
-      {sending && <Spinner label="Mentor is thinking…" />}
-      {error && <Alert tone="error">{error}</Alert>}
+        {error && conversationStatus !== "error" && (
+          <Alert tone="error">
+            {errorText(error)}
+            {failedMessage && error.code !== "conversation_full" && (
+              <Button variant="ghost" size="sm" className="ml-2" onClick={() => submit(failedMessage)}>Try again</Button>
+            )}
+            {error.code === "conversation_full" && <Button href="/mentor" variant="ghost" size="sm" className="ml-2">New conversation</Button>}
+          </Alert>
+        )}
 
-      <form onSubmit={(e) => { e.preventDefault(); send(draft); }} className="flex gap-3">
-        <label htmlFor="mentor-input" className="sr-only">Message the Mentor</label>
-        <input id="mentor-input" value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={2000}
-          placeholder="Ask about your interviews…"
-          className="h-11 flex-1 rounded-xl border border-border bg-surface px-4 text-sm focus:border-primary focus:outline-none" />
-        <Button type="submit" disabled={!draft.trim()} loading={sending}>Send</Button>
-      </form>
-      <div ref={bottomRef} />
+        {conversationStatus !== "error" && !unavailable && (
+          <div className="sticky bottom-0 -mx-1 bg-background px-1 pt-2">
+            <MentorInput value={draft} onChange={setDraft} onSend={submit} sending={sending} autoFocus={isNew} />
+          </div>
+        )}
+      </div>
     </div>
+  );
+}
+
+export default function MentorPage() {
+  return (
+    <Suspense fallback={<Spinner label="Loading…" />}>
+      <MentorView />
+    </Suspense>
   );
 }

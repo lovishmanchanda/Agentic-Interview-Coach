@@ -31,8 +31,10 @@ class UnscriptedCallError(AssertionError):
 
 
 class FakeAIGateway(AIGateway):
-    def __init__(self, *, session_token_budget: int = 60_000):
-        super().__init__(session_token_budget=session_token_budget)
+    def __init__(self, *, session_token_budget: int = 60_000, embedder=None):
+        # embedder: a real provider (keyless dev with HF_TOKEN set) keeps the Mentor's Chroma collection
+        # consistent with live runs; without one, embed() returns deterministic hash vectors.
+        super().__init__(session_token_budget=session_token_budget, embedder=embedder)
         self._queues: dict[str, deque] = defaultdict(deque)
         self.calls: list[tuple[CallType, dict[str, Any]]] = []
 
@@ -87,13 +89,12 @@ class FakeAIGateway(AIGateway):
         self._account("tools", " ".join(str(m.get("content", "")) for m in messages), context, started)
         return out
 
-    # ── Embeddings / search ──
+    # ── Embeddings ──
     async def embed(self, text, *, context=None) -> list[float]:
+        if self.embedder is not None and not self._queues["embed"]:
+            self.calls.append(("embed", {"text": text, "context": context}))
+            return await super().embed(text, context=context)
         return self._next("embed", {"text": text, "context": context}, default=lambda: _hash_vector(text))
-
-    async def search(self, query, index, top_k=5, *, context=None) -> list[dict]:
-        return self._next("search", {"query": query, "index": index, "top_k": top_k, "context": context},
-                          default=lambda: [])
 
     # ── Speech ──
     async def transcribe(self, audio_bytes, language="en-US", *, context=None) -> str:
