@@ -6,7 +6,7 @@ import { useEffect } from "react";
 import Alert from "@/components/ui/Alert";
 import Button from "@/components/ui/Button";
 import Spinner from "@/components/ui/Spinner";
-import { clearUserData } from "@/lib/session";
+import { clearUserData, isSigningOut } from "@/lib/session";
 import { useAuthStore } from "@/store/authStore";
 import { useProfileStore } from "@/store/profileStore";
 
@@ -29,7 +29,7 @@ export default function AuthGuard({ children }) {
     if (!accessToken) {
       // Also reached when the session ends without Sign out: it expired, or another tab signed out.
       clearUserData();
-      router.replace(`/login?next=${encodeURIComponent(pathname)}`);
+      if (!isSigningOut()) router.replace(`/login?next=${encodeURIComponent(pathname)}`);
       return;
     }
     load().catch(() => {});
@@ -40,6 +40,8 @@ export default function AuthGuard({ children }) {
     if (status === "ready" && pathname === SETUP_PATH) router.replace("/dashboard");
   }, [status, pathname, router]);
 
+  // Signing out: show nothing (the room behind stays) while the landing page takes over.
+  if (!accessToken && isSigningOut()) return null;
   if (!hasHydrated || !accessToken || status === "idle" || status === "loading") {
     return <FullPageSpinner />;
   }

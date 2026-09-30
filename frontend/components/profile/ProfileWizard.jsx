@@ -1,15 +1,18 @@
 "use client";
 
+import { AnimatePresence, motion } from "motion/react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import Alert from "@/components/ui/Alert";
 import Button from "@/components/ui/Button";
+import ChoiceGroup from "@/components/ui/ChoiceGroup";
 import { Input, Select, Textarea } from "@/components/ui/Field";
 import { fieldErrors } from "@/lib/api";
 import { DIFFICULTIES, EXPERIENCE_LEVELS, IO_MODES, SKILL_SUGGESTIONS, TARGET_ROLES } from "@/lib/profileOptions";
 import { useAuthStore } from "@/store/authStore";
 import { useProfileStore } from "@/store/profileStore";
+import { toast } from "@/store/toastStore";
 
 import SkillsInput from "./SkillsInput";
 
@@ -42,6 +45,10 @@ function toPayload(form) {
   };
 }
 
+// Voice isn't built yet (Phase 5): shown, but not selectable.
+const IO_CHOICES = IO_MODES.map((m) => (m.value === "voice" ? { ...m, label: "Voice", disabled: true, reason: "Coming soon" } : m));
+const EASE = [0.16, 1, 0.3, 1];
+
 function validateStep(key, form) {
   const errors = {};
   if (key === "personal" && !form.personal.name.trim()) errors["personal.name"] = "Enter your name";
@@ -56,6 +63,7 @@ export default function ProfileWizard({ mode = "create" }) {
   const { profile, save } = useProfileStore();
   const [form, setForm] = useState(() => initialForm(profile, userName));
   const [stepIndex, setStepIndex] = useState(0);
+  const [direction, setDirection] = useState(1); // which way the steps slide
   const [errors, setErrors] = useState({});
   const [status, setStatus] = useState({ saving: false, error: null, saved: false });
 
@@ -71,6 +79,7 @@ export default function ProfileWizard({ mode = "create" }) {
       if (Object.keys(stepErrors).length) return;
     }
     setErrors({});
+    setDirection(index > stepIndex ? 1 : -1);
     setStepIndex(index);
   }
 
@@ -85,6 +94,7 @@ export default function ProfileWizard({ mode = "create" }) {
     try {
       await save(toPayload(form));
       if (mode === "create") {
+        toast.success("VERA is ready when you are. Take your first interview from your desk.", { title: "You're all set" });
         router.replace("/dashboard");
         return;
       }
@@ -98,20 +108,28 @@ export default function ProfileWizard({ mode = "create" }) {
   return (
     <div className="space-y-6">
       <nav aria-label="Profile sections">
-        <ol className="grid grid-cols-4 gap-2">
+        <ol className="grid grid-cols-4 gap-2 sm:gap-3">
           {STEPS.map((s, index) => {
-            const state = index === stepIndex ? "current" : index < stepIndex || mode === "edit" ? "reachable" : "upcoming";
+            const done = index < stepIndex;
+            const current = index === stepIndex;
             return (
               <li key={s.key}>
                 <button
                   type="button"
                   onClick={() => goTo(index)}
                   disabled={mode === "create" && index > stepIndex + 1}
-                  aria-current={index === stepIndex ? "step" : undefined}
-                  className="w-full text-left disabled:cursor-not-allowed"
+                  aria-current={current ? "step" : undefined}
+                  className="group w-full text-left disabled:cursor-not-allowed"
                 >
-                  <span className={`block h-1.5 rounded-full ${state === "upcoming" ? "bg-border" : "bg-primary"} ${state === "current" ? "" : "opacity-60"}`} />
-                  <span className={`mt-2 block text-xs font-medium ${index === stepIndex ? "text-foreground" : "text-muted"}`}>{s.title}</span>
+                  <span className="relative block h-1 overflow-hidden rounded-full bg-border">
+                    <motion.span className="absolute inset-y-0 left-0 rounded-full bg-primary" initial={false}
+                      animate={{ width: done || current || mode === "edit" ? "100%" : "0%", opacity: current ? 1 : 0.55 }}
+                      transition={{ duration: 0.5, ease: EASE }} />
+                  </span>
+                  <span className="mt-2.5 flex items-center gap-1.5">
+                    <span className={`font-mono text-[11px] ${current ? "text-primary" : "text-subtle"}`}>0{index + 1}</span>
+                    <span className={`hidden text-xs font-medium sm:inline ${current ? "text-foreground" : "text-muted"}`}>{s.title}</span>
+                  </span>
                 </button>
               </li>
             );
@@ -119,10 +137,14 @@ export default function ProfileWizard({ mode = "create" }) {
         </ol>
       </nav>
 
-      <div>
-        <h2 className="text-xl font-semibold">{step.title}</h2>
-        <p className="mt-1 text-sm text-muted">{step.description}</p>
-      </div>
+      <AnimatePresence mode="wait" initial={false} custom={direction}>
+        <motion.div key={step.key} initial={{ opacity: 0, x: 24 * direction }} animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -24 * direction }} transition={{ duration: 0.3, ease: EASE }}>
+          <p className="font-mono text-xs uppercase tracking-[0.2em] text-muted">Step {stepIndex + 1} of {STEPS.length}</p>
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight">{step.title}</h2>
+          <p className="mt-1 text-sm text-muted">{step.description}</p>
+        </motion.div>
+      </AnimatePresence>
 
       {status.error && <Alert tone="error">{status.error}</Alert>}
       {status.saved && <Alert tone="success">Profile saved.</Alert>}
@@ -139,7 +161,8 @@ export default function ProfileWizard({ mode = "create" }) {
           <>
             <Input label="Name" required value={form.personal.name} onChange={set("personal", "name")} error={errors["personal.name"]} autoComplete="name" />
             <Input label="Education" hint="e.g. BSc Computer Science, 2025" value={form.personal.education} onChange={set("personal", "education")} error={errors["personal.education"]} />
-            <Select label="Experience" options={EXPERIENCE_LEVELS} value={form.personal.experience_level} onChange={set("personal", "experience_level")} />
+            <ChoiceGroup legend="Experience" name="experience" options={EXPERIENCE_LEVELS} value={form.personal.experience_level}
+              onChange={(value) => setForm((f) => ({ ...f, personal: { ...f.personal, experience_level: value } }))} />
           </>
         )}
 
@@ -164,9 +187,12 @@ export default function ProfileWizard({ mode = "create" }) {
 
         {step.key === "preferences" && (
           <>
-            <Select label="Answer by" options={IO_MODES} value={form.preferences.input_mode} onChange={set("preferences", "input_mode")} />
-            <Select label="Interviewer responds with" options={IO_MODES} value={form.preferences.output_mode} onChange={set("preferences", "output_mode")} />
-            <Select label="Difficulty" options={DIFFICULTIES} value={form.preferences.preferred_difficulty} onChange={set("preferences", "preferred_difficulty")} />
+            <ChoiceGroup legend="Difficulty" name="difficulty" options={DIFFICULTIES} value={form.preferences.preferred_difficulty}
+              onChange={(value) => setForm((f) => ({ ...f, preferences: { ...f.preferences, preferred_difficulty: value } }))} />
+            <ChoiceGroup legend="You answer by" name="input_mode" options={IO_CHOICES} value={form.preferences.input_mode}
+              onChange={(value) => setForm((f) => ({ ...f, preferences: { ...f.preferences, input_mode: value } }))} />
+            <ChoiceGroup legend="VERA responds with" name="output_mode" options={IO_CHOICES} value={form.preferences.output_mode}
+              onChange={(value) => setForm((f) => ({ ...f, preferences: { ...f.preferences, output_mode: value } }))} />
           </>
         )}
 
@@ -177,7 +203,7 @@ export default function ProfileWizard({ mode = "create" }) {
                 Back
               </Button>
               <Button type="submit" loading={status.saving}>
-                {isLast ? "Finish setup" : "Continue"}
+                {isLast ? "Finish setup" : "Continue"} <span aria-hidden="true">→</span>
               </Button>
             </>
           ) : (

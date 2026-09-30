@@ -3,10 +3,15 @@ __pycache__/
 *.py[cod]
 .venv/
 .pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 
 # Node / Next.js
 node_modules/
 .next/
+.eslintcache
+*.log
 
 # Secrets
 .env
@@ -22,6 +27,8 @@ data/*
 Thumbs.db
 .vscode/
 .idea/
+# Local Claude Code / tool settings (launch configs, permissions)
+.claude/
 
 # Personal progress log -- kept local, never pushed
 workingflow.md

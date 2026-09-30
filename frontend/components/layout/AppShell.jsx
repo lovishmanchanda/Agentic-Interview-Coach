@@ -3,6 +3,8 @@
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
+import PageTransition from "@/components/motion/PageTransition";
+
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
 
@@ -23,7 +25,9 @@ export default function AppShell({ children }) {
       )}
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar onMenu={() => setNavOpen(true)} />
-        <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 md:px-8">{children}</main>
+        <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 md:px-8">
+          <PageTransition>{children}</PageTransition>
+        </main>
       </div>
     </div>
   );

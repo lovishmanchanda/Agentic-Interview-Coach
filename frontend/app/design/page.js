@@ -8,7 +8,9 @@ import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Spinner from "@/components/ui/Spinner";
 
+import ComponentsDemo from "./ComponentsDemo";
 import Playground from "./Playground";
+import RoomDemo from "./RoomDemo";
 
 export const metadata = { title: "Design system" };
 
@@ -179,11 +181,23 @@ export default function DesignPage() {
         </div>
       </Section>
 
+      <Section title="Components (7.3)">
+        <ComponentsDemo />
+      </Section>
+
       <Section title="Forms and charts">
         <Playground />
       </Section>
 
-      <Section title="Motion">
+      <Section title="The interview room (3D) and motion">
+        <p className="max-w-3xl text-sm text-muted">
+          One scene for the whole site. Switch presets to watch the camera, the chair and the two lights move between
+          them. On the desk preset, click a report sheet or the card under the lamp.
+        </p>
+        <RoomDemo />
+      </Section>
+
+      <Section title="Motion tokens">
         <ul className="grid gap-2 font-mono text-sm sm:grid-cols-2">
           <li>--duration-fast 150ms · hovers, presses</li>
           <li>--duration-base 250ms · reveals, toggles</li>

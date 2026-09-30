@@ -10,7 +10,7 @@ export default function ChoiceGroup({ legend, hint, options, value, onChange, mu
     if (!multiple) return onChange(v);
     onChange(value.includes(v) ? value.filter((x) => x !== v) : [...value, v]);
   };
-  const pad = size === "lg" ? "px-4 py-3 text-left" : "px-3 py-1.5";
+  const pad = size === "lg" ? "px-4 py-3.5 text-left" : "px-3.5 py-2";
 
   return (
     <fieldset>
@@ -20,12 +20,12 @@ export default function ChoiceGroup({ legend, hint, options, value, onChange, mu
           <label
             key={o.value}
             title={o.disabled ? o.reason : undefined}
-            className={`rounded-lg border text-sm transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary ${pad} ${
+            className={`rounded-xl border text-sm transition-[border-color,background-color,color] duration-200 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary ${pad} ${
               o.disabled
                 ? "cursor-not-allowed border-border opacity-50"
                 : selected(o.value)
-                  ? "cursor-pointer border-primary bg-primary-soft text-primary"
-                  : "cursor-pointer border-border hover:border-primary"
+                  ? "cursor-pointer border-primary/70 bg-primary-soft text-foreground shadow-[inset_0_0_0_1px_var(--primary)]"
+                  : "cursor-pointer border-border-strong bg-background/40 text-muted hover:border-subtle hover:text-foreground"
             } ${size === "lg" ? "min-w-40 flex-1" : ""}`}
           >
             <input

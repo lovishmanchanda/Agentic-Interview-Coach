@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { InterviewerAvatar, MentorAvatar } from "@/components/brand/AgentAvatar";
+import DeskHero from "@/components/dashboard/DeskHero";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -72,14 +73,10 @@ export default function DashboardPage() {
   const role = labelFor(TARGET_ROLES, profile.target.role);
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-semibold">Hi {firstName} 👋</h1>
-        <p className="mt-1 text-muted">
-          Preparing for <span className="font-medium text-foreground">{role}</span>
-          {profile.target.company ? ` at ${profile.target.company}` : ""}.
-        </p>
-      </div>
+    <div>
+      <DeskHero firstName={firstName} role={role} company={profile.target.company} />
+      {/* The rest of the dashboard sits on solid black, below the window onto the desk */}
+      <div className="relative -mx-4 space-y-8 bg-background px-4 pb-4 md:-mx-8 md:px-8">
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card title="Take the seat with VERA" description="Your interviewer: adaptive questions, instant structured feedback, and a report."
@@ -114,6 +111,7 @@ export default function DashboardPage() {
           </div>
         </dl>
       </Card>
+      </div>
     </div>
   );
 }

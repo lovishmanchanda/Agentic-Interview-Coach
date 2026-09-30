@@ -158,6 +158,7 @@ export const api = {
     llmCalls: (params = {}) => request(`/api/v1/admin/llm-calls?${new URLSearchParams(params)}`),
   },
   reports: {
+    list: () => request("/api/v1/reports"), // newest first: { report_id, session_id, overall, topics, generated_at }
     get: (reportId) => request(`/api/v1/reports/${encodeURIComponent(reportId)}`),
   },
   mentor: {

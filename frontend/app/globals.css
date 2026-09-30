@@ -84,6 +84,7 @@
   /* Fonts come from next/font in app/layout.js (self-hosted, no request to Google at runtime). */
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --font-serif: var(--font-instrument-serif), ui-serif, Georgia, serif;
 
   /* Type scale: display for hero moments; the rest is Tailwind's default scale */
   --text-display: 4.5rem;
@@ -98,6 +99,27 @@
   /* The agents' "thinking" states: ARIA's lamp breathes, VERA's spotlight brightens */
   --animate-breathe: breathe 2.4s ease-in-out infinite;
   --animate-spotlight: spotlight 1.6s ease-in-out infinite;
+  --animate-marquee: marquee 40s linear infinite;
+  --animate-blink: blink 1.4s steps(2, jump-none) infinite;
+  --animate-shimmer: shimmer 1.8s ease-in-out infinite;
+  --animate-dialog-in: dialog-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+
+  @keyframes shimmer {
+    to { transform: translateX(100%); }
+  }
+  @keyframes dialog-in {
+    from { opacity: 0; transform: translateY(12px) scale(0.98); }
+    to { opacity: 1; transform: none; }
+  }
+
+  @keyframes marquee {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.15; }
+  }
 
   @keyframes breathe {
     0%, 100% { opacity: 0.7; transform: scale(0.9); }
@@ -107,6 +129,23 @@
     0%, 100% { opacity: 0.65; }
     50% { opacity: 1; }
   }
+}
+
+/* Section headings on marketing pages: big, tight, and fluid from phone to desktop. */
+@utility section-title {
+  font-size: clamp(2.25rem, 5.6vw, 4.5rem);
+  line-height: 1;
+  letter-spacing: -0.045em;
+  font-weight: 600;
+}
+
+/* The small uppercase label above a section title. */
+@utility eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--muted);
 }
 
 body {
@@ -131,6 +170,17 @@ body {
   background: var(--raised);
   border: 1px solid var(--border);
   box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.04);
+}
+
+/* Film grain over a whole page (landing): a tiny SVG noise tile, fixed, never intercepting clicks. */
+.grain::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
 }
 
 /* Reduced motion: every transition and animation becomes instant. Motion components also check this. */
