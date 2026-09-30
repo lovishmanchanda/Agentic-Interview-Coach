@@ -244,3 +244,30 @@ Top to bottom:
 **A new desk** (`EmptyDesk`) explains the loop in three steps instead of drawing empty charts.
 
 **Backend:** `GET /api/v1/reports` now includes `interview_type`, `per_topic_scores` and `duration_seconds`. This is read-only, and the walking-skeleton test asserts it.
+
+## Interview experience (7.8)
+
+**Start an interview** (`app/(app)/interview/configure/page.js`):
+- Starting points as big radio cards (`PresetPicker`, presets in `lib/interviewPresets.js`): Quick practice, Behavioural round, Coding round, Full mock. Once a report has a weakest topic, "Drill <topic>" leads as the recommended card (it keeps that topic's interview type, so a competency drills as behavioural).
+- The orange outline glides between cards (one shared `layoutId`). The selected preset is *derived* from the choices, so editing them under "Customise" shows "Custom" rather than a stale preset.
+- "Customise" opens every option in place (height animation). A link that pre-fills choices (`?focus=…&type=…`, from a report, ARIA or a prep plan) opens it.
+- **VERA's brief** (`InterviewBrief`) says what's coming in her words ("I'll ask you 3 technical questions for the Software Engineer role…"), with the mode, length, difficulty, topics and company, and the Start button ("Take the seat"). It sits beside the options from 1280 px up (sticky); on smaller screens it comes right after the presets, before Customise.
+- Drill links everywhere use `drillHref(topics, { type, role })` in `lib/interviewOptions.js`.
+
+**The interview room** (`app/(app)/interview/session/[sessionId]/page.js`, `components/interview/room/`). The socket logic is unchanged; only the layout is new.
+- **Header** (`RoomHeader`): VERA's avatar (lit while she's thinking), the interview type, mode · role · company · drill, a segmented progress bar (done segments solid orange, the current one shimmering, "+ follow-up"), the elapsed clock in serious mode, and "Leave" (the interview is saved and resumes from the desk).
+- **Rounds** (`Round.jsx`, `groupRounds`): each VERA question with what followed it. The current question is **on stage**: large type under a steel spotlight cone that breathes while she thinks, arriving word by word (`RevealText`, blur → sharp, capped at ~1.2 s). Earlier rounds fold into one-line rows (number, question, score badge) that open in place; the round just scored stays open, so its feedback is still in view when the next question arrives. Follow-ups hang off their question with a steel rule.
+- **Evaluation** (`EvaluationCard`): a score ring that draws and counts up (tier colour, the tier also in words), dimension mini-bars, "What worked" / "To improve" lists, the next step (orange = an action), and "What a strong answer covers" folded. Parts arrive in sequence.
+- **Answer box** (`AnswerComposer`): docked to the bottom; grows with the text up to 30 % of the screen; ⌘/Ctrl + Enter submits (`aria-keyshortcuts`); the timer ring, count and hint live in its footer. It stays in place, disabled, while VERA is busy.
+- **Timer** (`QuestionTimer`): a small steel ring filling toward the suggested time; amber past it, and the words say so.
+- **The end** (`InterviewDone`): "That's a *wrap.*", VERA's closing words, then the handoff: "VERA has written your report and passed it to ARIA", with Read your report and Talk it through with ARIA.
+- **Serious mode** is the same room, quieter: no hints, no scores, the question fades in rather than arriving word by word.
+- **Accessibility:** a polite live region announces each question, hint, score and the finish; a new question puts the cursor in the answer box on mouse/keyboard devices (not on touch, where the keyboard would cover the question).
+
+**Coding room** (`components/coding/`): a small IDE.
+- The problem panel (VERA's label, topic/difficulty badges, time, examples as numbered cards, constraints) stays put on wide screens and scrolls on its own.
+- The editor is a window with a file tab (`solution.py`, `Solution.java`…), the language, the timer, and a status strip (language, graded or not, character count).
+- **Monaco theme `interviewos`**: graphite background, grey gutter, an orange cursor and bracket match, steel selection; orange keywords, steel types, muted italic comments; Geist Mono.
+- **Console** (`OutputPanel`): the verdict pill, a pass/fail strip (one segment per test), and each test sliding in; "Running every test…" while it waits.
+
+**Fixed along the way:** the global `:focus-visible` outline was unlayered CSS, so it beat every component's own `focus-visible:outline-none` + ring (double rings site-wide). It now lives in `@layer base`.

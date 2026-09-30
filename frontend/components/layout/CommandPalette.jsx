@@ -5,7 +5,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { ArrowRightIcon, ChatIcon, CodeIcon, LogoutIcon, SearchIcon, SparkIcon } from "@/components/ui/icons";
 import Kbd from "@/components/ui/Kbd";
-import { topicLabel } from "@/lib/interviewOptions";
+import { drillHref, topicLabel } from "@/lib/interviewOptions";
 import { ADMIN_ITEM, NAV_ITEMS } from "@/lib/navigation";
 import { signOut } from "@/lib/session";
 import { useAuthStore } from "@/store/authStore";
@@ -19,7 +19,7 @@ function useCommands(query) {
   return useMemo(() => {
     const suggested = [
       shell.inProgress && { id: "resume", group: "Suggested", label: "Resume your interview", hint: "Pick up where you left off", Icon: ArrowRightIcon, href: `/interview/session/${shell.inProgress.session_id}` },
-      shell.weakestTopic && { id: "drill", group: "Suggested", label: `Drill ${topicLabel(shell.weakestTopic)}`, hint: "Your weakest topic last time", Icon: SparkIcon, href: `/interview/configure?focus=${encodeURIComponent(shell.weakestTopic)}` },
+      shell.weakestTopic && { id: "drill", group: "Suggested", label: `Drill ${topicLabel(shell.weakestTopic)}`, hint: "Your weakest topic last time", Icon: SparkIcon, href: drillHref(shell.weakestTopic, { type: shell.weakestType }) },
       shell.latestReportId && { id: "report", group: "Suggested", label: "Open your latest report", hint: "What went well, what to fix", Icon: ArrowRightIcon, href: `/interview/report/${shell.latestReportId}` },
     ].filter(Boolean);
     const go = [...NAV_ITEMS, ...(isAdmin ? [ADMIN_ITEM] : [])].map((n) => ({ id: n.href, group: "Go to", label: n.label, hint: n.hint, Icon: n.Icon, href: n.href }));
@@ -32,7 +32,7 @@ function useCommands(query) {
     const all = [...suggested, ...go, ...actions].filter((c) => !q || `${c.label} ${c.hint}`.toLowerCase().includes(q));
     if (q) all.push({ id: "ask", group: "Ask ARIA", label: `Ask ARIA: “${query.trim()}”`, hint: "Answered from your own reports", Icon: ChatIcon, href: `/mentor?q=${encodeURIComponent(query.trim())}` });
     return all;
-  }, [query, isAdmin, shell.inProgress, shell.weakestTopic, shell.latestReportId]);
+  }, [query, isAdmin, shell.inProgress, shell.weakestTopic, shell.weakestType, shell.latestReportId]);
 }
 
 /**

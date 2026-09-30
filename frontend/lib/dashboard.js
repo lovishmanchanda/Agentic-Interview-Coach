@@ -2,7 +2,7 @@
  * The dashboard's numbers, derived from the API's lists (GET /reports, /interviews, /prep/plans, /mentor/welcome).
  * Pure functions: nothing here fetches or renders, and nothing is made up. Reports arrive newest first.
  */
-import { topicLabel } from "@/lib/interviewOptions";
+import { drillHref, topicLabel } from "@/lib/interviewOptions";
 import { practiceStreak } from "@/store/shellStore";
 
 export const STRONG = 7.5; // the evaluator's tier boundaries (see ScoreBars)
@@ -100,7 +100,7 @@ export function nextStep(sessions, welcome, reportCount) {
   const open = sessions.find((s) => !s.report_id && s.state !== "REPORT_READY");
   if (open) return { title: "Resume your interview", detail: `${open.config.interview_type} · in progress`, href: `/interview/session/${open.session_id}` };
   const weakest = welcome?.latest?.weakest_topic;
-  if (weakest) return { title: `Drill ${topicLabel(weakest)}`, detail: "Your weakest topic last time", href: `/interview/configure?focus=${encodeURIComponent(weakest)}` };
+  if (weakest) return { title: `Drill ${topicLabel(weakest)}`, detail: "Your weakest topic last time", href: drillHref(weakest, { type: welcome.latest.interview_type }) };
   if (reportCount) return { title: "Take another interview", detail: "Keep the streak going", href: "/interview/configure" };
   return { title: "Take your first interview", detail: "About fifteen minutes with VERA", href: "/interview/configure" };
 }

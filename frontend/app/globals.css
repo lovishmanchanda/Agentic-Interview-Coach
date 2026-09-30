@@ -160,9 +160,12 @@ body {
   color: var(--primary-foreground);
 }
 
-:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 2px;
+/* In the base layer so a component's own focus style (focus-visible:outline-none + a ring) can replace it. */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
 }
 
 /* Elevation is a border plus a faint top highlight, not a drop shadow (shadows vanish on black). */

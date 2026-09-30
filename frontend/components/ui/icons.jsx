@@ -30,3 +30,9 @@ export const CodeIcon = (p) => <Icon {...p}><path d="m8 8-4 4 4 4M16 8l4 4-4 4M1
 export const LogoutIcon = (p) => <Icon {...p}><path d="M14 5h5v14h-5" /><path d="M10 8l-4 4 4 4M6 12h10" /></Icon>;
 export const MenuIcon = (p) => <Icon {...p}><path d="M4 8h16M4 16h16" /></Icon>;
 export const ShieldIcon = (p) => <Icon {...p}><path d="M12 3 5 6v6c0 4.2 3 7.5 7 9 4-1.5 7-4.8 7-9V6z" /></Icon>;
+export const TargetIcon = (p) => <Icon {...p}><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="4" /><path d="M12 12h.01" /></Icon>;
+export const ClockIcon = (p) => <Icon {...p}><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></Icon>;
+export const BulbIcon = (p) => <Icon {...p}><path d="M9 17h6M10 20.5h4" /><path d="M12 3.5a5.5 5.5 0 0 0-3.2 10c.7.5 1.2 1.3 1.2 2.1v.4h4v-.4c0-.8.5-1.6 1.2-2.1a5.5 5.5 0 0 0-3.2-10z" /></Icon>;
+export const SlidersIcon = (p) => <Icon {...p}><path d="M5 7h9M18 7h1M5 17h1M10 17h9" /><circle cx="16" cy="7" r="2" /><circle cx="8" cy="17" r="2" /></Icon>;
+export const PlayIcon = (p) => <Icon {...p}><path d="M8 5.5v13l10.5-6.5z" /></Icon>;
+export const ChevronDownIcon = (p) => <Icon {...p}><path d="m6 9 6 6 6-6" /></Icon>;

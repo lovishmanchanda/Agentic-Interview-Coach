@@ -30,6 +30,7 @@ export const useShellStore = create((set, get) => ({
   reports: 0,
   latestReportId: null,
   weakestTopic: null,
+  weakestType: null, // the interview type the weakest topic came from (a competency is a behavioral topic)
   mentorAvailable: true,
   pendingReports: 0,
 
@@ -50,11 +51,12 @@ export const useShellStore = create((set, get) => ({
       reports: reports.length,
       latestReportId: reports[0]?.report_id ?? null,
       weakestTopic: welcome?.latest?.weakest_topic ?? null,
+      weakestType: welcome?.latest?.interview_type ?? null,
       mentorAvailable: welcome ? welcome.mentor_available : true,
       pendingReports: welcome?.pending_reports ?? 0,
     });
   },
 
   reset: () => set({ status: "idle", streak: 0, interviews: 0, inProgress: null, reports: 0, latestReportId: null,
-    weakestTopic: null, pendingReports: 0 }),
+    weakestTopic: null, weakestType: null, pendingReports: 0 }),
 }));

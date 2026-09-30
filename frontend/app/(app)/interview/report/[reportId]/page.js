@@ -12,7 +12,7 @@ import Card from "@/components/ui/Card";
 import Spinner from "@/components/ui/Spinner";
 import { api } from "@/lib/api";
 import { formatDuration } from "@/lib/format";
-import { INTERVIEW_MODES, INTERVIEW_TYPES, topicLabel, dimensionLabel } from "@/lib/interviewOptions";
+import { INTERVIEW_MODES, INTERVIEW_TYPES, drillHref, topicLabel, dimensionLabel } from "@/lib/interviewOptions";
 import { labelFor } from "@/lib/profileOptions";
 
 const SEVERITY_TONE = { high: "warning", medium: "neutral", low: "neutral" };
@@ -52,9 +52,7 @@ export default function ReportPage() {
     ...(report.suggested_preparation_plan?.priority_topics || []),
     ...report.weak_areas.map((w) => w.topic),
   ])].slice(0, 5);
-  const drillHref = `/interview/configure?focus=${drillTopics.map(encodeURIComponent).join(",")}`
-    + (report.config?.role ? `&role=${encodeURIComponent(report.config.role)}` : "")
-    + (report.config?.interview_type ? `&type=${report.config.interview_type}` : "");
+  const drillLink = drillHref(drillTopics, { role: report.config?.role, type: report.config?.interview_type });
   const stats = report.stats;
   const questionRows = (report.question_scores || []).map((q, i) => ({
     key: q.question_id,
@@ -98,7 +96,7 @@ export default function ReportPage() {
         <div className="flex flex-wrap gap-3">
           <Button href="/mentor">Talk to Mentor</Button>
           {drillTopics.length > 0 && (
-            <Button href={drillHref} variant="secondary"
+            <Button href={drillLink} variant="secondary"
               title={`Drill: ${drillTopics.map(topicLabel).join(", ")}`}>
               Practise weak areas
             </Button>

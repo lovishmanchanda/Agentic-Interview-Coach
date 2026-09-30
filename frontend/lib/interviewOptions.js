@@ -42,6 +42,14 @@ const TOPIC_LABELS = {
   css_layout: "CSS layout",
 };
 
+/** The configure page pre-filled for a drill: /interview/configure?focus=dsa,os&type=technical (&role=…). */
+export function drillHref(topics, { type, role } = {}) {
+  const list = (Array.isArray(topics) ? topics : [topics]).filter(Boolean);
+  return `/interview/configure?focus=${list.map(encodeURIComponent).join(",")}`
+    + (role ? `&role=${encodeURIComponent(role)}` : "")
+    + (type ? `&type=${type}` : "");
+}
+
 /** Evaluation dimensions: "time_complexity" -> "Time complexity". */
 export function dimensionLabel(name) {
   const words = name.replace(/_/g, " ");
