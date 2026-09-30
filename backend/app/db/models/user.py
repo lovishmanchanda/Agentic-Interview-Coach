@@ -39,12 +39,13 @@ class LoginRequest(BaseModel):
 
 
 class RefreshRequest(BaseModel):
-    refresh_token: str = Field(min_length=1)
+    # Omitted by the web app: in cookie mode the refresh token travels in an httpOnly cookie instead.
+    refresh_token: str | None = Field(default=None, min_length=1)
 
 
 class TokenPair(BaseModel):
     access_token: str
-    refresh_token: str
+    refresh_token: str | None  # None in cookie mode: the token is only in the httpOnly cookie
     token_type: Literal["bearer"] = "bearer"
     expires_in: int  # access token lifetime, seconds
 

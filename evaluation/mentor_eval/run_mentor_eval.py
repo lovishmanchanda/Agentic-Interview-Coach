@@ -30,6 +30,7 @@ import anyio.from_thread
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "backend"))
+sys.path.insert(0, str(ROOT / "evaluation"))
 
 from app.core.mentor.mentor_agent import MentorAgent  # noqa: E402
 from app.core.mentor.rag_tool import InterviewReport, MentorChatRequest, RagService  # noqa: E402
@@ -137,6 +138,10 @@ def main() -> int:
         out = RESULTS_DIR / f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}_mentor.json"
         out.write_text(json.dumps({"prompt": args.prompt, "rows": rows}, indent=2, ensure_ascii=False))
         print(f"saved {out.relative_to(ROOT)}")
+        import history
+        checks = [v for r in rows for v in r["checks"].values()]
+        history.append("mentor_eval", args.prompt, {"n": len(rows), "auto_checks_passed": round(sum(checks) / len(checks), 3)
+                                                    if checks else None, "failed_cases": len(failed)})
     return 1 if failed else 0
 
 

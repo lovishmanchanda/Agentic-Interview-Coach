@@ -5,7 +5,7 @@ import math
 from app.agents.prep.candidate_profiler import CandidateSnapshot
 from app.agents.prep.schemas import PlanOutput
 from app.agents.prep.vocabulary import KIND_OF
-from app.core.prompts import render_prompt
+from app.core.prompts import render_for
 from app.gateway import AIGateway
 from app.gateway.types import CallContext
 
@@ -61,9 +61,8 @@ def validate(plan: dict, allowed: set[str]) -> dict:
 
 async def write_plan(*, gateway: AIGateway, context: CallContext, company_name: str, company: dict | None,
                      jd: dict | None, candidate: CandidateSnapshot, analysis: dict, weeks: int | None) -> dict:
-    context.prompt_version = PLANNER_PROMPT
-    prompt = render_prompt(
-        PLANNER_PROMPT, company=company_name, experience_level=candidate.experience_level,
+    prompt = render_for(
+        context, PLANNER_PROMPT, company=company_name, experience_level=candidate.experience_level,
         target_role=candidate.target_role, interviews_done=str(candidate.interviews_done),
         weeks_line=f"The candidate wants to be ready in {weeks} week(s)." if weeks else "",
         company_notes=_company_notes(company), jd_notes=_jd_notes(jd),

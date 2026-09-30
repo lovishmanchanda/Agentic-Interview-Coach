@@ -11,6 +11,7 @@ engine sees them.
 """
 import json
 import logging
+import time
 import uuid
 
 import anyio
@@ -93,6 +94,9 @@ async def interview_socket(websocket: WebSocket, session_id: str):
     await websocket.accept()
 
     emit = best_effort_sender(websocket)
+    metrics = websocket.app.state.metrics
+    metrics.ws_opened()
+    opened_at = time.monotonic()
 
     try:
         user = await _authenticate(websocket)
@@ -165,3 +169,5 @@ async def interview_socket(websocket: WebSocket, session_id: str):
             await websocket.close(code=1011, reason="internal_error")
         except RuntimeError:
             pass
+    finally:
+        metrics.ws_closed(time.monotonic() - opened_at)

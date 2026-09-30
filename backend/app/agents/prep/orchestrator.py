@@ -65,8 +65,8 @@ class PrepOrchestrator:
                 log_event(log, "prep_step_failed", level=logging.WARNING, step=name, error=type(exc).__name__)
                 return None
 
-        def context() -> CallContext:
-            return CallContext(candidate_id=candidate_id, extra={"agent": AGENT_NAME, "run_id": run_id})
+        contexts = {name: CallContext(candidate_id=candidate_id, extra={"agent": AGENT_NAME, "run_id": run_id})
+                    for name in ("research", "jd", "planner")}
 
         # Research and JD analysis don't depend on each other: run them together.
         async def no_jd():
@@ -75,8 +75,8 @@ class PrepOrchestrator:
         has_jd = bool(jd_text and jd_text.strip())
         research, jd = await asyncio.gather(
             step("research_company", lambda: research_company(company_name, repo=self.companies, gateway=self.gateway,
-                                                              context=context())),
-            step("analyze_jd", lambda: analyze_jd(jd_text.strip(), gateway=self.gateway, context=context()))
+                                                              context=contexts["research"])),
+            step("analyze_jd", lambda: analyze_jd(jd_text.strip(), gateway=self.gateway, context=contexts["jd"]))
             if has_jd else no_jd())
         if not has_jd:
             steps.append({"step": "analyze_jd", "status": "skipped"})
@@ -97,7 +97,7 @@ class PrepOrchestrator:
                       "strengths": len(analysis["strengths"])})
 
         plan = await step("write_plan", lambda: write_plan(
-            gateway=self.gateway, context=context(), company_name=company_name, company=company, jd=jd,
+            gateway=self.gateway, context=contexts["planner"], company_name=company_name, company=company, jd=jd,
             candidate=candidate, analysis=analysis, weeks=weeks))
         plan_source = "llm"
         if plan is None:
@@ -114,6 +114,7 @@ class PrepOrchestrator:
             "markdown": render(company_name=company_name, company=company, company_source=company_source, plan=plan,
                                analysis=analysis, jd=jd, plan_source=plan_source),
             "run_id": run_id, "created_at": utcnow(),
+            "prompt_versions": {name: ctx.prompt_version for name, ctx in contexts.items() if ctx.prompt_version},
         }
         await self.plans.save(doc)
         await self.runs.record({"run_id": run_id, "agent_name": AGENT_NAME, "candidate_id": candidate_id,

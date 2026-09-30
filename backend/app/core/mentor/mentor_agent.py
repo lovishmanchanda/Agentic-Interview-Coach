@@ -20,7 +20,7 @@ from app.agents.prep.orchestrator import PrepOrchestrator
 from app.core.mentor.indexer import ReportIndexer, index_prep_plan
 from app.core.mentor.rag_tool import MentorChatRequest
 from app.core.mentor.rag_tool.service import classify_intent
-from app.core.prompts import render_prompt
+from app.core.prompts import render_for
 from app.db.repositories.interview_repo import InterviewRepository, as_utc, utcnow
 from app.db.repositories.mentor_repo import MentorConversationRepository
 from app.gateway import AIGateway
@@ -126,9 +126,8 @@ class MentorAgent:
         previous = previous_chunk_ids(recent)
 
         drill = await self.drill_suggestion(candidate_id) if _DRILL_PATTERN.search(message) else None
-        system_prompt = render_prompt(MENTOR_PROMPT_VERSION, practice_note=self._practice_note(drill))
-        context = CallContext(candidate_id=candidate_id, prompt_version=MENTOR_PROMPT_VERSION,
-                              extra={"conversation_id": conversation_id})
+        context = CallContext(candidate_id=candidate_id, extra={"conversation_id": conversation_id})
+        system_prompt = render_for(context, MENTOR_PROMPT_VERSION, practice_note=self._practice_note(drill))
 
         def invoke_llm(prompt: str) -> str:
             return anyio.from_thread.run(lambda: self.gateway.generate(prompt, context=context, temperature=0))
@@ -145,7 +144,7 @@ class MentorAgent:
             {"message_id": uuid.uuid4().hex, "role": "user", "content": message, "timestamp": asked_at},
             {"message_id": uuid.uuid4().hex, "role": "assistant", "content": response.answer, "timestamp": utcnow(),
              "retrieved_chunks": sources, "actions": actions, "intent": classify_intent(message, bool(history)),
-             "prompt_version": MENTOR_PROMPT_VERSION, "latency_ms": int((time.perf_counter() - started) * 1000)},
+             "prompt_version": context.prompt_version, "latency_ms": int((time.perf_counter() - started) * 1000)},
         ]
         saved = await self.conversations.append_turn(conversation_id=conversation_id, candidate_id=candidate_id,
                                                      title=_title(message), messages=turn)
@@ -174,7 +173,7 @@ class MentorAgent:
             {"message_id": uuid.uuid4().hex, "role": "assistant", "content": doc["markdown"], "timestamp": utcnow(),
              "retrieved_chunks": [plan_chunk] if plan_chunk else [], "actions": doc["actions"], "intent": "company_prep",
              "prep_plan_id": doc["plan_id"],
-             "prompt_version": "prep/planner_v1", "latency_ms": int((time.perf_counter() - started) * 1000)},
+             "prompt_version": doc["prompt_versions"].get("planner"), "latency_ms": int((time.perf_counter() - started) * 1000)},
         ]
         saved = await self.conversations.append_turn(conversation_id=conversation_id, candidate_id=candidate_id,
                                                      title=_title(text), messages=turn)

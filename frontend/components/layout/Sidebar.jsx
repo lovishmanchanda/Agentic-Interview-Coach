@@ -2,8 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect } from "react";
 
 import Badge from "@/components/ui/Badge";
+import { api } from "@/lib/api";
+import { useAuthStore } from "@/store/authStore";
 
 export const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: "M3 12l9-8 9 8M5 10v10h14V10" },
@@ -12,8 +15,16 @@ export const NAV_ITEMS = [
   { href: "/profile", label: "Profile", icon: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm-7 9a7 7 0 0 1 14 0" },
 ];
 
+const ADMIN_ITEM = { href: "/admin", label: "Admin", icon: "M4 19h16M7 16V9m5 7V5m5 11v-4" };
+
 export default function Sidebar({ open, onNavigate }) {
   const pathname = usePathname();
+  const isAdmin = useAuthStore((s) => Boolean(s.user?.is_admin));
+  // is_admin comes from /users/me (the login response doesn't carry it).
+  useEffect(() => {
+    api.users.me().then((me) => useAuthStore.getState().setUser(me)).catch(() => {});
+  }, []);
+  const items = isAdmin ? [...NAV_ITEMS, ADMIN_ITEM] : NAV_ITEMS;
   return (
     <aside
       className={`fixed inset-y-0 left-0 z-40 w-64 border-r border-border bg-surface transition-transform md:static md:translate-x-0 ${
@@ -25,7 +36,7 @@ export default function Sidebar({ open, onNavigate }) {
         <span className="font-semibold">Interview Coach</span>
       </div>
       <nav aria-label="Main" className="space-y-1 p-3">
-        {NAV_ITEMS.map((item) => {
+        {items.map((item) => {
           const base = item.match ?? item.href;
           const active = pathname === base || pathname.startsWith(`${base}/`);
           return (

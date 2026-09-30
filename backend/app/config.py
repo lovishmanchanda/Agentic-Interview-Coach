@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     jwt_issuer: str = "ai-interview-coach"
     access_token_minutes: int = 30
     refresh_token_days: int = 7
+    # Cookie mode (the web app): the refresh token lives in an httpOnly cookie that page scripts can't read.
+    # SameSite "none" is needed only when the frontend and API are on different sites (e.g. two *.azurewebsites.net).
+    refresh_cookie_name: str = "aic_refresh"
+    refresh_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
+    refresh_cookie_secure: bool | None = None  # None: secure everywhere except local/test (plain http)
 
     # ── Database (Cosmos DB MongoDB API; plain MongoDB locally) ──
     cosmos_connection_string: str = "mongodb://localhost:27017"
@@ -45,6 +50,15 @@ class Settings(BaseSettings):
     groq_interview_model: str = "openai/gpt-oss-120b"  # interviewer agent, report generator
     groq_fast_model: str = "openai/gpt-oss-20b"         # evaluate_answer and other high-volume calls
     session_token_budget: int = 60_000
+    # Estimated USD per 1M tokens (input, output) for the cost reports. Check Groq's pricing page and override.
+    groq_price_default_in: float = 0.15
+    groq_price_default_out: float = 0.75
+    groq_price_fast_in: float = 0.10
+    groq_price_fast_out: float = 0.50
+    # Per candidate per UTC day, checked when an interview, Mentor message or prep plan starts (0 = no limit).
+    daily_token_limit_per_user: int = Field(default=400_000, ge=0)
+    # Store full prompt/output text in llm_calls (debugging). Off by default: prompts contain candidates' answers.
+    llm_trace_content: bool = False
     use_fake_gateway: bool | None = None  # None -> fake in local/test, real elsewhere
 
     # ── Mentor RAG (rag_tool) ──
@@ -70,6 +84,10 @@ class Settings(BaseSettings):
     interviews_per_hour: int = Field(default=20, ge=1)         # per candidate: each one is several LLM calls
     prep_plans_per_hour: int = Field(default=5, ge=1)          # per candidate: research + JD + plan (Phase 3)
     max_request_bytes: int = Field(default=1_000_000, ge=10_000)
+
+    # ── Observability (Phase 6) ──
+    admin_emails: list[str] = []            # these accounts can open the admin dashboard and prompt settings
+    applicationinsights_connection_string: str = ""  # set in Azure to export traces/metrics to App Insights
 
     # ── Voice ──
     speech_key: str = ""

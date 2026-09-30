@@ -24,7 +24,7 @@ import uuid
 
 from pydantic import BaseModel, Field
 
-from app.core.prompts import render_prompt
+from app.core.prompts import render_for
 from app.db.repositories.interview_repo import InterviewRepository
 from app.db.repositories.question_repo import QuestionRepository
 from app.gateway import AIGateway
@@ -161,15 +161,14 @@ class QuestionEngine:
             (t for t in topics if t not in covered), topics[session.get("questions_asked", 0) % len(topics)])
         already_asked = [q["question_text"] for q in await self.repo.session_questions(session["session_id"])]
         prompt_id = BEHAVIORAL_GENERATION_PROMPT if behavioral else GENERATION_PROMPT
-        prompt = render_prompt(
-            prompt_id,
+        prompt = render_for(
+            context, prompt_id,
             role=config["role"],
             experience_level=config["experience_level"],
             topic=topic,
             difficulty=session["target_difficulty"],
             already_asked="\n".join(f"- {text}" for text in already_asked) or "- (none yet)",
         )
-        context.prompt_version = prompt_id
         generated = await self.gateway.generate_structured(prompt, GeneratedQuestion, context=context)
         log_event(log, "question_generated", topic=topic, difficulty=session["target_difficulty"])
         return {

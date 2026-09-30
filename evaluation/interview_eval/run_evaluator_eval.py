@@ -34,6 +34,7 @@ from statistics import mean
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "backend"))
+sys.path.insert(0, str(ROOT / "evaluation"))
 
 from app.core.evaluation.answer_evaluator import EVALUATORS, Evaluator, evaluate_answer, performance_tier  # noqa: E402
 from app.gateway.types import CallContext  # noqa: E402
@@ -241,6 +242,9 @@ def main() -> int:
         out.write_text(json.dumps({"summaries": summaries, "rows": run.rows, "failures": run.failures,
                                    "model": settings.groq_fast_model}, indent=2))
         print(f"\nsaved {out.relative_to(ROOT)}")
+        import history
+        for s in summaries.values():
+            history.append("evaluator_eval", s["prompt"], {k: v for k, v in s.items() if isinstance(v, (int, float))})
     return 0 if ok else 1
 
 

@@ -23,7 +23,7 @@ export class ApiError extends Error {
 const REFRESHABLE_CODES = new Set(["token_expired", "invalid_token"]);
 let refreshInFlight = null;
 
-async function rawRequest(path, { method = "GET", body, token } = {}) {
+async function rawRequest(path, { method = "GET", body, token, cookie = false } = {}) {
   let response;
   try {
     response = await fetch(`${API_URL}${path}`, {
@@ -31,7 +31,10 @@ async function rawRequest(path, { method = "GET", body, token } = {}) {
       headers: {
         ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        // Cookie mode: the API keeps the refresh token in an httpOnly cookie scoped to /api/v1/auth.
+        ...(cookie ? { "X-Auth-Mode": "cookie" } : {}),
       },
+      ...(cookie ? { credentials: "include" } : {}),
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
   } catch {
@@ -59,13 +62,10 @@ async function rawRequest(path, { method = "GET", body, token } = {}) {
 }
 
 async function refreshTokens() {
-  const { refreshToken, setTokens, clear } = useAuthStore.getState();
-  if (!refreshToken) {
-    clear();
-    throw new ApiError({ status: 401, code: "session_expired", message: "Please sign in again." });
-  }
+  const { setTokens, clear } = useAuthStore.getState();
   try {
-    const tokens = await rawRequest("/api/v1/auth/refresh", { method: "POST", body: { refresh_token: refreshToken } });
+    // No token in the body: the browser sends the httpOnly refresh cookie.
+    const tokens = await rawRequest("/api/v1/auth/refresh", { method: "POST", cookie: true });
     setTokens(tokens);
     return tokens.access_token;
   } catch (error) {
@@ -74,10 +74,10 @@ async function refreshTokens() {
   }
 }
 
-export async function request(path, { method, body, auth = true } = {}) {
+export async function request(path, { method, body, auth = true, cookie = false } = {}) {
   const token = auth ? useAuthStore.getState().accessToken : undefined;
   try {
-    return await rawRequest(path, { method, body, token });
+    return await rawRequest(path, { method, body, token, cookie });
   } catch (error) {
     if (!auth || !(error instanceof ApiError) || error.status !== 401 || !REFRESHABLE_CODES.has(error.code)) {
       throw error;
@@ -93,10 +93,9 @@ export async function request(path, { method, body, auth = true } = {}) {
 export const api = {
   health: () => request("/api/v1/health", { auth: false }),
   auth: {
-    register: (data) => request("/api/v1/auth/register", { method: "POST", body: data, auth: false }),
-    login: (data) => request("/api/v1/auth/login", { method: "POST", body: data, auth: false }),
-    logout: (refreshToken) =>
-      request("/api/v1/auth/logout", { method: "POST", body: { refresh_token: refreshToken }, auth: false }),
+    register: (data) => request("/api/v1/auth/register", { method: "POST", body: data, auth: false, cookie: true }),
+    login: (data) => request("/api/v1/auth/login", { method: "POST", body: data, auth: false, cookie: true }),
+    logout: () => request("/api/v1/auth/logout", { method: "POST", auth: false, cookie: true }),
   },
   users: {
     me: () => request("/api/v1/users/me"),
@@ -119,6 +118,15 @@ export const api = {
     // A practice run of the current coding problem's visible tests. Not recorded; Submit goes over the socket.
     runCode: (sessionId, { code, language }) =>
       request(`/api/v1/interviews/${encodeURIComponent(sessionId)}/code/run`, { method: "POST", body: { code, language } }),
+  },
+  // Admin dashboard (Phase 6): admins only (the admin role or ADMIN_EMAILS on the server).
+  admin: {
+    metrics: () => request("/api/v1/admin/metrics"),
+    usage: (days = 7) => request(`/api/v1/admin/usage?days=${days}`),
+    prompts: () => request("/api/v1/admin/prompts"),
+    setPrompt: (name, weights) => request(`/api/v1/admin/prompts/${name}`, { method: "PUT", body: { weights } }),
+    resetPrompt: (name) => request(`/api/v1/admin/prompts/${name}`, { method: "DELETE" }),
+    llmCalls: (params = {}) => request(`/api/v1/admin/llm-calls?${new URLSearchParams(params)}`),
   },
   reports: {
     get: (reportId) => request(`/api/v1/reports/${encodeURIComponent(reportId)}`),

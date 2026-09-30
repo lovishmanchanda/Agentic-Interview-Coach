@@ -12,7 +12,7 @@ from app.db.repositories.prep_repo import PrepPlanRepository
 from app.db.repositories.profile_repo import ProfileRepository
 from app.db.repositories.interview_repo import InterviewRepository
 from app.db.repositories.mentor_repo import MentorConversationRepository
-from app.dependencies import CurrentUser
+from app.dependencies import CurrentUser, DailyLimitedUser
 from app.utils.exceptions import NotFoundError
 from app.utils.rate_limit import enforce
 from app.utils.responses import ok
@@ -40,7 +40,7 @@ class MentorMessageRequest(BaseModel):
 
 
 @router.post("/message")
-async def mentor_message(body: MentorMessageRequest, user: CurrentUser, mentor: MentorDep, request: Request):
+async def mentor_message(body: MentorMessageRequest, user: DailyLimitedUser, mentor: MentorDep, request: Request):
     enforce(request.app.state.limiters["mentor"], user["_id"],
             "You're sending messages quickly. Wait a moment and try again.")
     return ok(await mentor.chat(candidate_id=user["_id"], message=body.message.strip() or body.message,
@@ -55,7 +55,7 @@ class PrepareRequest(BaseModel):
 
 
 @router.post("/prepare")
-async def mentor_prepare(body: PrepareRequest, user: CurrentUser, mentor: MentorDep, request: Request):
+async def mentor_prepare(body: PrepareRequest, user: DailyLimitedUser, mentor: MentorDep, request: Request):
     """Company preparation (Phase 3) with an optional job description; the plan is posted into the conversation."""
     enforce(request.app.state.limiters["mentor"], user["_id"],
             "You're sending messages quickly. Wait a moment and try again.")

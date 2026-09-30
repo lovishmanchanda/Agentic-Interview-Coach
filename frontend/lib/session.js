@@ -6,13 +6,11 @@ import { useMentorStore } from "@/store/mentorStore";
 import { useProfileStore } from "@/store/profileStore";
 
 export async function signOut() {
-  const { refreshToken, clear } = useAuthStore.getState();
-  if (refreshToken) {
-    try {
-      await api.auth.logout(refreshToken);
-    } catch {
-      // Best effort: the local session is cleared regardless.
-    }
+  const { clear } = useAuthStore.getState();
+  try {
+    await api.auth.logout(); // revokes the refresh token and clears its httpOnly cookie
+  } catch {
+    // Best effort: the local session is cleared regardless.
   }
   clear();
   useProfileStore.getState().reset();

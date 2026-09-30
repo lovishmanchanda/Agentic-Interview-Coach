@@ -36,16 +36,40 @@ class _JsonRejected(Exception):
         self.failed_generation = failed_generation
 
 
-def _json_rejection(exc: "groq.BadRequestError") -> str | None:
+def _provider_error(exc: Exception) -> ServiceUnavailableError:
+    """One error type for every provider failure; the code says which."""
+    if isinstance(exc, groq.RateLimitError):
+        return ServiceUnavailableError("The AI service is busy. Please try again in a moment.", code="llm_rate_limited")
+    if isinstance(exc, groq.AuthenticationError):
+        log.error("groq_auth_failed")  # never log the key
+        return ServiceUnavailableError("The AI service is not configured correctly.", code="llm_auth_failed")
+    if isinstance(exc, (groq.APITimeoutError, groq.APIConnectionError)):
+        return ServiceUnavailableError("The AI service did not respond. Please try again.", code="llm_unavailable")
+    log.error("groq_api_error", extra={"fields": {"status": getattr(exc, "status_code", None)}})
+    return ServiceUnavailableError("The AI service returned an error. Please try again.", code="llm_unavailable")
+
+
+def _rejection(exc: "groq.BadRequestError", code: str) -> str | None:
+    """The model's output, when Groq refused it for the given reason (json_validate_failed, tool_use_failed)."""
     body = exc.body if isinstance(exc.body, dict) else {}
     error = body.get("error", body) if isinstance(body.get("error", body), dict) else {}
-    return str(error.get("failed_generation") or "") if error.get("code") == "json_validate_failed" else None
+    return str(error.get("failed_generation") or "") if error.get("code") == code else None
+
+
+def _json_rejection(exc: "groq.BadRequestError") -> str | None:
+    return _rejection(exc, "json_validate_failed")
+
+
+class _ToolUseRejected(Exception):
+    """Groq refused a tool-calling reply (HTTP 400 tool_use_failed): the model wrote its answer as plain JSON or
+    called a tool that doesn't exist. Seen live with tool_choice="required"; a second try usually works."""
 
 
 class GroqAIGateway(AIGateway):
     def __init__(self, *, api_key: str, default_model: str, fast_model: str, session_token_budget: int,
-                 client: Any = None, timeout_s: float = 60.0, embedder=None, executor=None):
-        super().__init__(session_token_budget=session_token_budget, embedder=embedder, executor=executor)
+                 client: Any = None, timeout_s: float = 60.0, embedder=None, executor=None, pricing=None):
+        super().__init__(session_token_budget=session_token_budget, embedder=embedder, executor=executor,
+                         pricing=pricing)
         self.client = client or groq.AsyncGroq(api_key=api_key, timeout=timeout_s, max_retries=2)
         self.models: dict[str, str] = {"default": default_model, "fast": fast_model}
 
@@ -54,33 +78,35 @@ class GroqAIGateway(AIGateway):
                     context: CallContext | None, **kwargs):
         model = self.models[tier]
         started = time.perf_counter()
+        prompt_text = "\n\n".join(str(m.get("content") or "") for m in messages)
         try:
             response = await self.client.chat.completions.create(model=model, messages=messages, **kwargs)
-        except groq.RateLimitError as exc:
-            raise ServiceUnavailableError("The AI service is busy. Please try again in a moment.",
-                                          code="llm_rate_limited") from exc
-        except groq.AuthenticationError as exc:
-            log.error("groq_auth_failed")  # never log the key
-            raise ServiceUnavailableError("The AI service is not configured correctly.",
-                                          code="llm_auth_failed") from exc
-        except groq.BadRequestError as exc:
-            if (failed := _json_rejection(exc)) is not None:
-                self._log_usage(model=model, call_type=call_type, tokens_used=0,
-                                latency_ms=self._elapsed_ms(started), context=context)
+        except groq.APIError as exc:
+            bad_request = isinstance(exc, groq.BadRequestError)
+            if bad_request and (tool_failed := _rejection(exc, "tool_use_failed")) is not None:
+                self._log_usage(model=model, call_type=call_type, tokens_used=0, latency_ms=self._elapsed_ms(started),
+                                context=context, tier=tier, status="error", error="tool_use_failed",
+                                prompt_text=prompt_text, output_text=tool_failed)
+                raise _ToolUseRejected() from exc
+            failed = _json_rejection(exc) if bad_request else None
+            error = None if failed is not None else _provider_error(exc)
+            self._log_usage(model=model, call_type=call_type, tokens_used=0, latency_ms=self._elapsed_ms(started),
+                            context=context, tier=tier, status="error",
+                            error="json_validate_failed" if failed is not None else error.code,
+                            prompt_text=prompt_text, output_text=failed)
+            if failed is not None:
                 raise _JsonRejected(failed) from exc
-            log.error("groq_api_error", extra={"fields": {"status": exc.status_code}})
-            raise ServiceUnavailableError("The AI service returned an error. Please try again.",
-                                          code="llm_unavailable") from exc
-        except (groq.APITimeoutError, groq.APIConnectionError) as exc:
-            raise ServiceUnavailableError("The AI service did not respond. Please try again.",
-                                          code="llm_unavailable") from exc
-        except groq.APIStatusError as exc:
-            log.error("groq_api_error", extra={"fields": {"status": exc.status_code}})
-            raise ServiceUnavailableError("The AI service returned an error. Please try again.",
-                                          code="llm_unavailable") from exc
+            raise error from exc
         usage = getattr(response, "usage", None)
+        message = response.choices[0].message if getattr(response, "choices", None) else None
+        output = (message.content or "") if message is not None else ""
+        if message is not None and getattr(message, "tool_calls", None):
+            output = "; ".join(f"{c.function.name}({c.function.arguments})" for c in message.tool_calls)
         self._log_usage(model=model, call_type=call_type, tokens_used=getattr(usage, "total_tokens", 0) or 0,
-                        latency_ms=self._elapsed_ms(started), context=context)
+                        latency_ms=self._elapsed_ms(started), context=context, tier=tier,
+                        prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+                        completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
+                        prompt_text=prompt_text, output_text=output)
         return response
 
     # ── public LLM methods ───────────────────────────────────────────────────
@@ -119,9 +145,17 @@ class GroqAIGateway(AIGateway):
 
     async def generate_with_tools(self, messages: list[dict], tools: list[dict], *,
                                   context: CallContext | None = None, tier: ModelTier = "default",
-                                  tool_choice: str = "auto") -> ToolCall | FinalMessage:
-        response = await self._chat(messages, call_type="tools", tier=tier, context=context,
-                                    tools=tools, tool_choice=tool_choice, temperature=0.3, max_completion_tokens=2_000)
+                                  tool_choice: str | dict = "auto") -> ToolCall | FinalMessage:
+        for attempt in range(2):
+            try:
+                response = await self._chat(messages, call_type="tools", tier=tier, context=context,
+                                            tools=tools, tool_choice=tool_choice, temperature=0.3,
+                                            max_completion_tokens=2_000)
+                break
+            except _ToolUseRejected as exc:
+                log.warning("llm_tool_use_retry", extra={"fields": {"attempt": attempt}})
+                if attempt:
+                    raise LLMOutputError("The AI didn't call a tool as required.") from exc
         message = response.choices[0].message
         if message.tool_calls:
             call = message.tool_calls[0]

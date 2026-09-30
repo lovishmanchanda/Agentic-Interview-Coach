@@ -80,6 +80,11 @@ CI runs all of these on every push/PR (`.github/workflows/ci.yml`).
 | 1.3 Interview state machine: validated transitions, state history, crash/reconnect recovery, `GET /interviews/{id}/state` | `backend/app/core/interview/state_machine.py` | ✅ |
 | 1.2 Interview configuration: type, practice/serious mode, role, level, difficulty, company, question count, focus topics (Weak-Area Drill) | `backend/app/db/models/interview.py`, `frontend/app/(app)/interview/configure/` | ✅ |
 | Mentor: generic "where am I weakest?" questions answered from recent sessions; markdown replies | `core/mentor/rag_tool/service.py`, `frontend/components/mentor/` | ✅ |
+| **Phase 6 — Observability, AI evals, cost** | | ✅ Done |
+| Every AI call recorded (`llm_calls`: prompt version, tokens, cost, latency, errors), admin dashboard (`/admin`), alerts, daily token cap per user | `backend/app/gateway/usage.py`, `app/utils/metrics.py`, `app/api/v1/admin.py`, `frontend/app/(app)/admin/` | ✅ |
+| Prompt registry: switch versions, A/B split and roll back without a deploy | `backend/app/core/prompts.py`, admin page | ✅ |
+| AI quality evals with trend history: interviewer agent (12 scenarios), question quality (LLM judge), evaluator and Mentor sets | `evaluation/agent_eval/`, `evaluation/question_eval/`, `evaluation/trends.py` | ✅ |
+| Refresh token in an httpOnly cookie (web app) | `backend/app/api/v1/auth.py`, `frontend/lib/api.js` | ✅ |
 | **Phase 3 — Company preparation** | | ✅ Done |
 | "Prepare me for Google": company research (10 curated + AI-researched, cached), JD analysis, gap analysis from your scores, week-by-week plan with practice buttons, inside the Mentor | `backend/app/agents/prep/`, `prompts/prep/`, `data/seed/companies/`, `frontend/components/mentor/PrepareForm.jsx` | ✅ |
 | **Phase 4 — Coding interviews** | | ✅ Done (verified on the Piston VM) |

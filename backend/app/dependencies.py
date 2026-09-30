@@ -14,7 +14,7 @@ from app.db.repositories.profile_repo import ProfileRepository
 from app.db.repositories.question_repo import QuestionRepository
 from app.db.repositories.user_repo import RefreshTokenRepository, UserRepository
 from app.gateway import AIGateway
-from app.utils.exceptions import AuthError, ForbiddenError
+from app.utils.exceptions import AuthError, ForbiddenError, TooManyRequestsError
 from app.utils.logging import bind_context
 from app.utils.security import decode_token
 
@@ -92,6 +92,35 @@ async def get_current_user(
 
 
 CurrentUser = Annotated[dict, Depends(get_current_user)]
+
+
+def is_admin(user: dict, settings: Settings) -> bool:
+    """The admin role, or an email listed in ADMIN_EMAILS (how the first admin is made)."""
+    return user.get("role") == "admin" or user.get("email", "").lower() in {e.lower() for e in settings.admin_emails}
+
+
+async def require_admin(user: CurrentUser, settings: SettingsDep) -> dict:
+    if not is_admin(user, settings):
+        raise ForbiddenError("Admins only", code="admin_only")
+    return user
+
+
+AdminUser = Annotated[dict, Depends(require_admin)]
+
+
+async def check_daily_limit(user: CurrentUser, request: Request) -> dict:
+    """Refuses new AI work once a candidate's tokens today reach DAILY_TOKEN_LIMIT_PER_USER (6.5). Checked where
+    work starts (interview, Mentor message, prep plan), never mid-interview; the session budget bounds that."""
+    from app.db.repositories.usage_repo import UsageRepository
+
+    limit = request.app.state.settings.daily_token_limit_per_user
+    if limit and await UsageRepository(request.app.state.db).tokens_today(user["_id"]) >= limit:
+        raise TooManyRequestsError("You've reached today's AI usage limit. It resets at midnight UTC.",
+                                   code="daily_limit")
+    return user
+
+
+DailyLimitedUser = Annotated[dict, Depends(check_daily_limit)]
 
 
 def require_role(*roles: str):

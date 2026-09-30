@@ -18,7 +18,7 @@ from statistics import mean
 
 from pydantic import BaseModel, Field
 
-from app.core.prompts import render_prompt
+from app.core.prompts import render_for
 from app.db.repositories.interview_repo import as_utc, utcnow
 from app.gateway import AIGateway
 from app.gateway.types import CallContext
@@ -188,7 +188,9 @@ def _notes(report: dict, questions: list[dict], evaluations: list[dict]) -> str:
     for i, row in enumerate(report["question_scores"], start=1):
         q = by_question.get(row["question_id"], {})
         e = next((e for e in reversed(evaluations) if e["question_id"] == row["question_id"]), {})
-        label = "Follow-up" if row["is_follow_up"] else f"Question {row['number'] or i}"
+        parent = by_question.get(q.get("parent_question_id"), {})
+        label = (f"Follow-up to question {parent.get('question_number') or row['number']}" if row["is_follow_up"]
+                 else f"Question {row['number'] or i}")
         blocks.append("\n".join([
             f"{label} [{row['topic']}] {row['score']}/10 ({row['performance_tier']})"
             + (" · used a hint" if row["hints_used"] else ""),
@@ -207,8 +209,9 @@ async def write_narrative(gateway: AIGateway, session: dict, report: dict, quest
         return None
     config = session["config"]
     topics = list(report["per_topic_scores"])
-    prompt = render_prompt(
-        NARRATIVE_PROMPT,
+    context = CallContext(session_id=session["session_id"], candidate_id=session["candidate_id"])
+    prompt = render_for(
+        context, NARRATIVE_PROMPT,
         interview_type=config["interview_type"],
         role=config["role"],
         experience_level=config["experience_level"],
@@ -219,8 +222,6 @@ async def write_narrative(gateway: AIGateway, session: dict, report: dict, quest
         topic_list=", ".join(topics),
         notes=_notes(report, questions, evaluations),
     )
-    context = CallContext(session_id=session["session_id"], candidate_id=session["candidate_id"],
-                          prompt_version=NARRATIVE_PROMPT)
     started = time.perf_counter()
     try:
         narrative = await gateway.generate_structured(prompt, ReportNarrative, context=context)
@@ -229,7 +230,7 @@ async def write_narrative(gateway: AIGateway, session: dict, report: dict, quest
         return None
     log_event(log, "report_narrative_written", session_id=session["session_id"],
               latency_ms=int((time.perf_counter() - started) * 1000))
-    return narrative
+    return {**narrative, "prompt_version": context.prompt_version}
 
 
 def apply_narrative(report: dict, narrative: dict) -> dict:
@@ -257,5 +258,5 @@ def apply_narrative(report: dict, narrative: dict) -> dict:
             "steps": [step.strip() for step in narrative["study_plan"] if step.strip()][:6],
         },
         "narrative_source": "llm",
-        "prompt_version_used": NARRATIVE_PROMPT,
+        "prompt_version_used": narrative.get("prompt_version", NARRATIVE_PROMPT),
     }

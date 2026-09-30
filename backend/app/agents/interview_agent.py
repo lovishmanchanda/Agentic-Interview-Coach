@@ -25,7 +25,7 @@ from pydantic import ValidationError
 
 from app.agents.interview_agent_schemas import (
     ACTION_TO_ADAPTATION,
-    TOOLS,
+    tools_for,
     AgentDecision,
     HintOutput,
     OpeningOutput,
@@ -37,7 +37,7 @@ from app.core.interview.context_builder import (
     recommendation_text,
 )
 from app.core.interview.state_machine import InvalidTransitionError, State, next_state_for_action
-from app.core.prompts import render_prompt
+from app.core.prompts import render_for
 from app.db.repositories.agent_run_repo import AgentRunRepository
 from app.db.repositories.interview_repo import utcnow
 from app.gateway import AIGateway
@@ -51,6 +51,10 @@ OPENING_PROMPT = "interviewer/opening_v1"
 HINT_PROMPT = "interviewer/hint_v1"
 MAX_STEPS = 4        # model calls per decision: at most 2 info tools, 1 rejected proposal, 1 accepted
 MAX_REJECTIONS = 1   # "re-prompted once, then falls back to the AdaptationEngine"
+# Naming the tool leaves the model no way to answer in plain text. Used when there's nothing else for it to do:
+# one allowed move, info tools used up, or the last step. (Found by the agent eval: with a single allowed move the
+# model often wrote the decision as plain JSON and Groq refused it with tool_use_failed.)
+SUBMIT_ONLY = {"type": "function", "function": {"name": "submit_decision"}}
 
 
 def _bullets(items: list[str]) -> str:
@@ -79,8 +83,9 @@ class InterviewAgent:
     async def opening(self, session: dict) -> str | None:
         config = session["config"]
         focus = session.get("focus_topics") or []
-        prompt = render_prompt(
-            OPENING_PROMPT,
+        context = CallContext(session_id=session["session_id"], candidate_id=session["candidate_id"])
+        prompt = render_for(
+            context, OPENING_PROMPT,
             interview_type=config["interview_type"],
             candidate_name=first_name(session.get("candidate_name")),
             role=config["role"],
@@ -89,41 +94,38 @@ class InterviewAgent:
             interview_mode=config["interview_mode"],
             focus_note=f" The candidate asked to practise: {', '.join(focus)}." if focus else "",
         )
-        context = CallContext(session_id=session["session_id"], candidate_id=session["candidate_id"],
-                              prompt_version=OPENING_PROMPT)
         started = time.perf_counter()
         try:
             result = await self.gateway.generate_structured(prompt, OpeningOutput, context=context)
             opening = result["opening"].strip()
-            await self._record(session, "opening", started, outcome="accepted", output={"opening": opening})
+            await self._record(session, "opening", started, prompt_version=context.prompt_version, outcome="accepted", output={"opening": opening})
             return opening
         except Exception as exc:  # noqa: BLE001 -- the interview must go on without the agent
             log.warning("interviewer_opening_failed", exc_info=True)
-            await self._record(session, "opening", started, outcome="fallback", error=_describe(exc))
+            await self._record(session, "opening", started, prompt_version=context.prompt_version, outcome="fallback", error=_describe(exc))
             return None
 
     # ── a hint (practice mode) ───────────────────────────────────────────────
     async def hint(self, session: dict, question: dict, draft_text: str) -> str | None:
         """One nudge towards what the draft is missing, without giving the answer. Fast tier: it's short."""
-        prompt = render_prompt(
-            HINT_PROMPT,
+        context = CallContext(session_id=session["session_id"], candidate_id=session["candidate_id"])
+        prompt = render_for(
+            context, HINT_PROMPT,
             interview_type=session["config"]["interview_type"],
             question_text=question["question_text"],
             expected_concepts=_bullets(question.get("expected_concepts") or []),
             draft_text=draft_text.strip() or "(nothing written yet)",
         )
-        context = CallContext(session_id=session["session_id"], candidate_id=session["candidate_id"],
-                              prompt_version=HINT_PROMPT)
         started = time.perf_counter()
         try:
             result = await self.gateway.generate_structured(prompt, HintOutput, context=context, tier="fast")
             hint = result["hint"].strip()
-            await self._record(session, "hint", started, outcome="accepted", output={"hint": hint},
+            await self._record(session, "hint", started, prompt_version=context.prompt_version, outcome="accepted", output={"hint": hint},
                                extra={"question_id": question["question_id"]})
             return hint
         except Exception as exc:  # noqa: BLE001 -- the engine has a deterministic fallback hint
             log.warning("interviewer_hint_failed", exc_info=True)
-            await self._record(session, "hint", started, outcome="fallback", error=_describe(exc),
+            await self._record(session, "hint", started, prompt_version=context.prompt_version, outcome="fallback", error=_describe(exc),
                                extra={"question_id": question["question_id"]})
             return None
 
@@ -136,8 +138,9 @@ class InterviewAgent:
         summary = evaluation_summary(evaluation)
         config = session["config"]
         allowed_actions = [a for a, adapt in ACTION_TO_ADAPTATION.items() if adapt in allowed]
-        prompt = render_prompt(
-            DECISION_PROMPT,
+        context = CallContext(session_id=session["session_id"], candidate_id=session["candidate_id"])
+        prompt = render_for(
+            context, DECISION_PROMPT,
             interview_type=config["interview_type"],
             role=config["role"],
             experience_level=config["experience_level"],
@@ -156,8 +159,6 @@ class InterviewAgent:
         )
         messages: list[dict] = [{"role": "system", "content": prompt},
                                 {"role": "user", "content": "The candidate has answered. Decide the next step."}]
-        context = CallContext(session_id=session["session_id"], candidate_id=session["candidate_id"],
-                              prompt_version=DECISION_PROMPT)
         tools = {
             "get_performance_summary": lambda: performance_summary(session),
             "get_question_details": lambda: {"expected_concepts": question.get("expected_concepts", []),
@@ -166,7 +167,9 @@ class InterviewAgent:
         try:
             while run.steps < MAX_STEPS:
                 run.steps += 1
-                out = await self.gateway.generate_with_tools(messages, TOOLS, context=context, tool_choice="required")
+                must_submit = len(allowed_actions) == 1 or not tools or run.steps == MAX_STEPS
+                out = await self.gateway.generate_with_tools(messages, tools_for(allowed_actions), context=context,
+                                                             tool_choice=SUBMIT_ONLY if must_submit else "required")
                 if isinstance(out, FinalMessage):  # plain text instead of a tool call
                     messages += [{"role": "assistant", "content": out.content},
                                  {"role": "user", "content": "Call submit_decision with your decision."}]
@@ -201,7 +204,7 @@ class InterviewAgent:
             run.error = f"no decision after {run.steps} steps"
         log_event(log, "interviewer_decision", session_id=session["session_id"], outcome=run.outcome,
                   action=run.decision.action if run.decision else None, steps=run.steps, rejections=len(run.rejections))
-        await self._record(session, "decide", started, outcome=run.outcome, error=run.error,
+        await self._record(session, "decide", started, prompt_version=context.prompt_version, outcome=run.outcome, error=run.error,
                            output=run.decision.model_dump() if run.decision else None,
                            extra={"steps": run.steps, "tool_calls": run.tool_calls, "rejections": run.rejections,
                                   "allowed": sorted(allowed), "recommended": recommended,
@@ -221,14 +224,15 @@ class InterviewAgent:
         return None
 
     async def _record(self, session: dict, step: str, started: float, *, outcome: str, error: str | None = None,
-                      output: dict | None = None, extra: dict | None = None) -> None:
+                      output: dict | None = None, extra: dict | None = None, prompt_version: str | None = None) -> None:
         if self.runs is None:
             return
         try:
             await self.runs.record({
                 "run_id": uuid.uuid4().hex, "agent_name": self.name, "step": step,
                 "session_id": session["session_id"], "candidate_id": session["candidate_id"],
-                "prompt_version": {"decide": DECISION_PROMPT, "opening": OPENING_PROMPT, "hint": HINT_PROMPT}[step],
+                "prompt_version": prompt_version or {"decide": DECISION_PROMPT, "opening": OPENING_PROMPT,
+                                                     "hint": HINT_PROMPT}[step],
                 "outcome": outcome, "error": error, "output": output, **(extra or {}),
                 "latency_ms": int((time.perf_counter() - started) * 1000), "started_at": utcnow(),
             })

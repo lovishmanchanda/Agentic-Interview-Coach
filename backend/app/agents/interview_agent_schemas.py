@@ -42,6 +42,17 @@ class HintOutput(BaseModel):
 
 
 # Tool definitions in the OpenAI / Groq function-calling format.
+def tools_for(allowed_actions: list[str]) -> list[dict]:
+    """The tools with submit_decision's action list narrowed to what's allowed this turn, so the model can't
+    propose a move the engine would reject (it still validates every proposal)."""
+    import copy
+
+    tools = copy.deepcopy(TOOLS)
+    submit = next(t for t in tools if t["function"]["name"] == "submit_decision")
+    submit["function"]["parameters"]["properties"]["action"]["enum"] = list(allowed_actions)
+    return tools
+
+
 TOOLS = [
     {"type": "function", "function": {
         "name": "get_performance_summary",

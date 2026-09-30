@@ -1028,6 +1028,17 @@ NEXT_PROBLEM or WRAP_UP
 
 **Duration Estimate**: 1–2 weeks
 
+> [!NOTE]
+> **✅ Done (2026-09-29).** 532 backend tests.
+> - **6.1** Every AI call is a document in `llm_calls` (model, tier, prompt version, session, candidate, agent, tokens in/out, estimated cost, latency, status/error), written in batches by `gateway/usage.py`; failures are recorded too. Prompt/output text only with `LLM_TRACE_CONTENT`. Agent runs record the prompt version actually used.
+> - **6.2 (deviation: no Azure keys)** In-process metrics (`utils/metrics.py`: requests per endpoint, AI calls, WebSocket sessions; p50/p95 over 15 min) with alert rules (5xx > 5 %, AI errors > 10 %, AI p95 > 20 s, request p95 > 2 s) logged as `alert_triggered`, and an **admin dashboard** at `/admin` (admins: the admin role or `ADMIN_EMAILS`). `APPLICATIONINSIGHTS_CONNECTION_STRING` turns on the Azure Monitor OpenTelemetry export in deployment.
+> - **6.3** Eval suite with trend history (`evaluation/results/history.jsonl`, `evaluation/trends.py`): interviewer-agent eval (12 scenarios: valid decision, expected move, redundant follow-ups, serious-mode neutrality, score leaks; provider errors counted apart), question-quality eval (generator × LLM judge: relevance, difficulty, role fit, clarity, near-duplicates), and the Phase 1/2 evaluator and Mentor sets now log to the same history.
+> - **6.4** Prompt registry (`core/prompts.py`, `prompt_settings`): every call goes through `render_for()`, which picks the active version (A/B split stable per session) and records it. Admin API/page: switch, split, roll back (history kept) with no deploy. New variants `interviewer/interviewer_v2` (don't re-ask what was covered) and `report/report_v2` (a follow-up can close its parent's gap); v1 stays the default.
+> - **6.5** `DAILY_TOKEN_LIMIT_PER_USER` (400k) checked where AI work starts (never mid-interview); usage and estimated cost per day / model / prompt version / candidate; budget- and time-limit wrap-ups counted.
+> - **Security backlog:** the web app's refresh token is now an httpOnly cookie (§12.1 cookie mode), never in localStorage.
+> - **Found by the agent eval and fixed:** with a single allowed move the model often answered in plain JSON and Groq refused it (`tool_use_failed`), so the interview lost the agent's wording. Fix: the gateway retries `tool_use_failed` once, the agent names the tool when submitting is the only option, and the tool's action list only offers the allowed moves.
+> - **Capacity finding:** this Groq account allows 8,000 tokens/min on `gpt-oss-120b`; one interviewer decision is ~6,000 tokens, so the free tier supports about one live interview at a time. Production needs a paid tier (or moving the agent to the fast model); the dashboard's AI-error tile shows when it's hit.
+
 #### Tasks
 
 **6.1 Structured Logging**

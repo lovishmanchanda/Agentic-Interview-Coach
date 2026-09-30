@@ -673,6 +673,22 @@ erDiagram
 ```
 A turn (question + reply) is written in one update after the reply, so a failed LLM call never leaves a question without an answer, and a new conversation exists only once it has one. The Mentor sees the last 8 messages, with earlier `[n]` citations removed. A follow-up that finds no excerpts of its own reuses the `chunk_id`s of the last grounded reply.
 
+#### `llm_calls` (Phase 6)
+One document per AI call (LLM, embedding), written in batches by `gateway/usage.py::LLMCallRecorder`:
+```json
+{
+  "at": "datetime (indexed with candidate_id; with prompt_version)", "model": "openai/gpt-oss-120b", "call_type": "structured",
+  "tier": "fast", "prompt_version": "evaluator/technical_v1", "session_id": "…", "candidate_id": "…", "agent": "prep_orchestrator",
+  "tokens": 1500, "prompt_tokens": 1000, "completion_tokens": 500, "cost_usd": 0.000525, "latency_ms": 1800,
+  "status": "ok | error", "error": "llm_rate_limited | tool_use_failed | json_validate_failed | …",
+  "prompt_text": "only with LLM_TRACE_CONTENT", "output_text": "only with LLM_TRACE_CONTENT"
+}
+```
+Retention in deployment: a Cosmos TTL on `_ts` (e.g. 30 days).
+
+#### `prompt_settings` (Phase 6)
+`{name: "interviewer/interviewer", weights: {"v1": 90, "v2": 10}, updated_by, updated_at, history: [previous weights]}`: the prompt registry (`core/prompts.py`). No document or empty weights = the version named in code.
+
 #### `agent_runs`
 ```json
 {
@@ -1393,14 +1409,14 @@ flowchart TD
 
     TOKENS --> STORE_RT[Store refresh_token hash in DB\nfor rotation validation]
 
-    CLIENT[Client stores tokens\nMemory + httpOnly cookie optional] --> API_REQ[API request with\nAuthorization: Bearer access_token]
+    CLIENT[Web app: access token in localStorage 30 min\nrefresh token in an httpOnly cookie only] --> API_REQ[API request with\nAuthorization: Bearer access_token]
 
     API_REQ --> MIDDLEWARE[FastAPI dependency\nget_current_user]
     MIDDLEWARE --> DECODE[Decode + validate JWT\nchecks: signature, expiry, issuer]
     DECODE -- Invalid --> ERR401_2[401 Unauthorized]
     DECODE -- Valid --> HANDLER[Route handler\nwith user context]
 
-    ACCESS_EXPIRE[Access token expires] --> REFRESH[POST /api/v1/auth/refresh\nrefresh_token in body]
+    ACCESS_EXPIRE[Access token expires] --> REFRESH[POST /api/v1/auth/refresh\nweb: the httpOnly cookie, allowed Origin only\nother clients: refresh_token in body]
     REFRESH --> ROTATE[Validate + rotate refresh token\nIssue new access + refresh token]
     ROTATE --> CLIENT
 
@@ -1408,6 +1424,8 @@ flowchart TD
     style ERR401 fill:#ef4444,color:#fff
     style ERR401_2 fill:#ef4444,color:#fff
 ```
+
+**Cookie mode (Phase 6, as built):** the web app sends `X-Auth-Mode: cookie` on register, login, refresh and logout. The server then sets the refresh token as an `HttpOnly` cookie (`aic_refresh`, `Path=/api/v1/auth`, `SameSite=lax` by default, `Secure` outside local/test) and returns `refresh_token: null` in the body, so page scripts can never read a long-lived credential. A cookie refresh is refused (403 `bad_origin`) unless the `Origin` is an allowed CORS origin. Rotation and reuse detection are unchanged. Other clients keep sending the token in the body. If the frontend and API end up on different sites, set `REFRESH_COOKIE_SAMESITE=none`.
 
 ### 12.2 Data Boundary Rules
 
@@ -1479,6 +1497,11 @@ Known and accepted for now: tokens in `localStorage` (§12.1 trade-off; moving t
 | `GET` | `/api/v1/mentor/conversations/{id}` | ✅ | One conversation with its messages, sources and actions |
 | `POST` | `/api/v1/mentor/prepare` | ✅ | Company preparation (Phase 3): `{ company, jd_text?, weeks?, conversation_id? }` → the same shape as `/mentor/message` plus `prep_plan_id`; the plan is posted into the conversation. "Prepare me for X" in `/mentor/message` does the same. `PREP_PLANS_PER_HOUR` per candidate |
 | `GET` | `/api/v1/prep/plans` · `/api/v1/prep/plans/{id}` | ✅ | The candidate's saved plans (someone else's reads as 404) |
+| `GET` | `/api/v1/admin/metrics` | ✅ admin | Last 15 min on this worker: requests per endpoint (count, 5xx, p50/p95), AI calls per type/model, WebSocket sessions, firing alerts |
+| `GET` | `/api/v1/admin/usage?days=` | ✅ admin | From `llm_calls`: tokens, estimated cost, errors, latency per day / model / prompt version / call type, top candidates, budget and time-limit wrap-ups |
+| `GET` | `/api/v1/admin/prompts` | ✅ admin | Every prompt, its versions on disk, active weights, and per-version evaluation averages and agent outcomes (A/B comparison) |
+| `PUT` · `DELETE` | `/api/v1/admin/prompts/{area}/{name}` | ✅ admin | Set weights (`{"v1": 90, "v2": 10}`, must add up to 100) or go back to the code default. No deploy; other workers pick it up within 30 s |
+| `GET` | `/api/v1/admin/llm-calls?session_id=&status=&prompt_version=` | ✅ admin | Recent AI calls, for tracing a bad result |
 | `GET` | `/api/v1/mentor/welcome` | ✅ | The Mentor page's opening state: report count, latest report (score, weakest/strongest topic), reports still being indexed (and re-queues them) |
 | `POST` | `/api/v1/interviews` | ✅ | Create interview session from `InterviewConfigRequest` (anything omitted comes from the profile; `focus_topics` for a Weak-Area Drill). 422 `option_unavailable` for behavioral/coding/voice until they ship |
 | `GET` | `/api/v1/interviews/options?role=` | ✅ | Start-page data: profile defaults, topics for the role, choices not built yet |

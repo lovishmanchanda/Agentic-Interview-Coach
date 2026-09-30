@@ -9,12 +9,14 @@ the same interface.
 import logging
 import time
 from collections import defaultdict
+from datetime import datetime, timezone
 from typing import Any
 
 import anyio
 from pydantic import BaseModel
 
 from app.gateway.embeddings import EmbeddingProvider
+from app.gateway.usage import LLMCallRecorder, Pricing
 from app.gateway.types import CallContext, CallType, ExecutionResult, FinalMessage, ModelTier, ToolCall
 from app.utils.exceptions import ServiceUnavailableError
 from app.utils.logging import log_event
@@ -23,8 +25,12 @@ log = logging.getLogger("app.gateway")
 
 
 class AIGateway:
-    def __init__(self, *, session_token_budget: int, embedder: EmbeddingProvider | None = None, executor=None):
+    def __init__(self, *, session_token_budget: int, embedder: EmbeddingProvider | None = None, executor=None,
+                 pricing: Pricing | None = None):
         self.session_token_budget = session_token_budget
+        self.pricing = pricing or Pricing({})
+        self.recorder: LLMCallRecorder | None = None  # set at startup (app.main); tests may leave it off
+        self.metrics = None                            # utils.metrics.Metrics, set at startup
         self.embedder = embedder
         self.executor = executor  # core/coding/sandbox_client.PistonExecutor, when PISTON_URL is set
         self._session_tokens: dict[str, int] = defaultdict(int)
@@ -43,7 +49,7 @@ class AIGateway:
 
     async def generate_with_tools(self, messages: list[dict], tools: list[dict], *,
                                   context: CallContext | None = None, tier: ModelTier = "default",
-                                  tool_choice: str = "auto") -> ToolCall | FinalMessage:
+                                  tool_choice: str | dict = "auto") -> ToolCall | FinalMessage:
         """One step of a tool loop. tool_choice "required" forces a tool call (e.g. a terminal submit tool)."""
         return await self._not_configured("tools")
 
@@ -101,14 +107,28 @@ class AIGateway:
         return self._session_tokens[session_id]
 
     def _log_usage(self, *, model: str, call_type: CallType, tokens_used: int, latency_ms: int,
-                   context: CallContext | None) -> None:
+                   context: CallContext | None, tier: str | None = None, prompt_tokens: int = 0,
+                   completion_tokens: int = 0, status: str = "ok", error: str | None = None,
+                   prompt_text: str | None = None, output_text: str | None = None) -> None:
         ctx = context or CallContext()
         if ctx.session_id:
             self._session_tokens[ctx.session_id] += tokens_used
         if ctx.candidate_id:
             self._candidate_tokens[ctx.candidate_id] += tokens_used
-        log_event(log, "ai_call", model=model, call_type=call_type, tokens=tokens_used, latency_ms=latency_ms,
+        cost = self.pricing.cost(model, prompt_tokens, completion_tokens, tokens_used)
+        log_event(log, "ai_call", level=logging.INFO if status == "ok" else logging.WARNING, model=model,
+                  call_type=call_type, tokens=tokens_used, latency_ms=latency_ms, status=status, error=error,
                   session_id=ctx.session_id, candidate_id=ctx.candidate_id, prompt_version=ctx.prompt_version)
+        if self.metrics is not None and call_type != "execute":
+            self.metrics.observe_llm(call_type, model, latency_ms, status == "ok")
+        if self.recorder is not None:
+            self.recorder.record({
+                "at": datetime.now(timezone.utc), "model": model, "call_type": call_type, "tier": tier,
+                "prompt_version": ctx.prompt_version, "session_id": ctx.session_id, "candidate_id": ctx.candidate_id,
+                "agent": ctx.extra.get("agent"), "tokens": tokens_used, "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens, "cost_usd": cost, "latency_ms": latency_ms,
+                "status": status, "error": error, "prompt_text": prompt_text, "output_text": output_text,
+            })
 
     @staticmethod
     def _elapsed_ms(started: float) -> int:

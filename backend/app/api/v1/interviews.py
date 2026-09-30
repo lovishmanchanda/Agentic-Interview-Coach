@@ -10,7 +10,7 @@ from app.db.models.interview import UNAVAILABLE, InterviewConfigRequest, Intervi
 from app.db.models.question import CodingLanguage
 from app.db.repositories.interview_repo import InterviewRepository
 from app.db.repositories.profile_repo import ProfileRepository
-from app.dependencies import CurrentUser, get_engine, get_interview_repo, get_profile_repo
+from app.dependencies import CurrentUser, DailyLimitedUser, get_engine, get_interview_repo, get_profile_repo
 from app.utils.exceptions import ConflictError, UnprocessableError
 from app.utils.rate_limit import enforce
 from app.utils.responses import ok
@@ -68,8 +68,8 @@ async def interview_options(user: CurrentUser, engine: EngineDep, profiles: Prof
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-async def create_interview(body: InterviewConfigRequest, user: CurrentUser, engine: EngineDep, profiles: ProfilesDep,
-                           request: Request):
+async def create_interview(body: InterviewConfigRequest, user: DailyLimitedUser, engine: EngineDep,
+                           profiles: ProfilesDep, request: Request):
     profile = await _require_profile(profiles, user["_id"])
     enforce(request.app.state.limiters["interviews"], user["_id"],
             "You've started a lot of interviews in the last hour. Try again later.")

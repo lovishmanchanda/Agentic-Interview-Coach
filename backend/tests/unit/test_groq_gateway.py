@@ -130,3 +130,24 @@ def test_other_bad_requests_are_still_503s():
     gw, _ = _gateway(other)
     with pytest.raises(ServiceUnavailableError):
         run(gw.generate_structured("rate it", Verdict))
+
+
+def _tool_use_failed():
+    request = httpx.Request("POST", "https://x")
+    body = {"error": {"code": "tool_use_failed", "message": "Tool choice is required, but model did not call a tool",
+                      "failed_generation": '{"action": "wrap_up"}'}}
+    return groq.BadRequestError("tool_use_failed", response=httpx.Response(400, request=request), body=body)
+
+
+def test_a_tool_use_rejection_is_retried_once():
+    """Seen live: with tool_choice="required" the model sometimes writes plain JSON; Groq answers 400."""
+    call = SimpleNamespace(id="c1", function=SimpleNamespace(name="submit_decision", arguments='{"action": "wrap_up"}'))
+    gw, client = _gateway(_tool_use_failed(), _response(tool_calls=[call]))
+    result = run(gw.generate_with_tools([{"role": "user", "content": "go"}], [{"type": "function"}], tool_choice="required"))
+    assert result == ToolCall(name="submit_decision", arguments={"action": "wrap_up"}, id="c1") and len(client.calls) == 2
+
+
+def test_two_tool_use_rejections_are_a_bad_output_error():
+    gw, _ = _gateway(_tool_use_failed(), _tool_use_failed())
+    with pytest.raises(LLMOutputError):
+        run(gw.generate_with_tools([], [], tool_choice="required"))

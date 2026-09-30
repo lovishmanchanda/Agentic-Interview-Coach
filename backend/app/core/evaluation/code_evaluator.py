@@ -11,7 +11,7 @@ import time
 from pydantic import BaseModel
 
 from app.core.evaluation.answer_evaluator import _bullets, _EvaluationBase, _score, performance_tier
-from app.core.prompts import render_prompt
+from app.core.prompts import render_for
 from app.gateway import AIGateway
 from app.gateway.types import CallContext, ExecutionResult
 
@@ -62,8 +62,8 @@ def weighted_overall(dimensions: dict[str, float]) -> float:
 async def evaluate_code(gateway: AIGateway, *, question: dict, code: str, language: str, explanation: str,
                         execution: ExecutionResult, profile: dict | None, context: CallContext,
                         time_taken_s: int | None = None) -> dict:
-    prompt = render_prompt(
-        CODING_PROMPT,
+    prompt = render_for(
+        context, CODING_PROMPT,
         role=(profile or {}).get("target", {}).get("role", "software_engineer"),
         experience_level=(profile or {}).get("personal", {}).get("experience_level", "fresher"),
         topic=question.get("topic", "general"), difficulty=question.get("difficulty", "medium"),
@@ -74,7 +74,6 @@ async def evaluate_code(gateway: AIGateway, *, question: dict, code: str, langua
         time_taken=f"{round(time_taken_s / 60)} min" if time_taken_s else "unknown",
         language=language, code=code, explanation=explanation.strip() or "(no explanation given)",
     )
-    context.prompt_version = CODING_PROMPT
     started = time.perf_counter()
     result = await gateway.generate_structured(prompt, CodingEvaluationOutput, context=context, tier="fast")
     dimensions = dict(result["dimensions"])
@@ -84,5 +83,5 @@ async def evaluate_code(gateway: AIGateway, *, question: dict, code: str, langua
     return {
         **result, "dimensions": dimensions, "overall_score": overall,
         "evaluation_type": "coding", "performance_tier": performance_tier(overall),
-        "prompt_version": CODING_PROMPT, "latency_ms": int((time.perf_counter() - started) * 1000),
+        "prompt_version": context.prompt_version, "latency_ms": int((time.perf_counter() - started) * 1000),
     }

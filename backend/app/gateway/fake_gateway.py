@@ -57,9 +57,10 @@ class FakeAIGateway(AIGateway):
             raise item
         return item(args) if callable(item) else item
 
-    def _account(self, call_type: CallType, text: str, context: CallContext | None, started: float) -> None:
+    def _account(self, call_type: CallType, text: str, context: CallContext | None, started: float,
+                 tier: str | None = None) -> None:
         self._log_usage(model=FAKE_MODEL, call_type=call_type, tokens_used=max(1, len(text.split())),
-                        latency_ms=self._elapsed_ms(started), context=context)
+                        latency_ms=self._elapsed_ms(started), context=context, tier=tier, prompt_text=text)
 
     # ── LLM ──
     async def generate(self, prompt, *, context=None, tier="default", temperature=0.3, max_tokens=2_000) -> str:

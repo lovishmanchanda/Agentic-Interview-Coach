@@ -1,5 +1,7 @@
 """FastAPI entry point: `uvicorn app.main:app --reload` from backend/."""
+import asyncio
 import logging
+import time
 import uuid
 from contextlib import asynccontextmanager
 
@@ -14,6 +16,9 @@ from app.core.mentor.indexer import ReportIndexer
 from app.core.mentor.setup import build_rag_service
 from app.db.client import create_client, ensure_schema
 from app.gateway import build_gateway
+from app.core.prompts import PromptRegistry, set_registry
+from app.gateway.usage import LLMCallRecorder
+from app.utils.metrics import Metrics
 from app.utils.exceptions import register_exception_handlers
 from app.utils.logging import bind_context, clear_context, configure_logging
 from app.utils.rate_limit import SlidingWindowLimiter
@@ -47,12 +52,24 @@ def create_app(settings: Settings | None = None, *, db=None, gateway=None, rag=N
         if settings.use_inmemory_db:
             await _seed_inmemory(app.state.db, settings)
         app.state.gateway = gateway or build_gateway(settings)
+        # Every AI call is recorded in llm_calls (6.1); writes are batched in the background.
+        app.state.gateway.recorder = LLMCallRecorder(app.state.db, trace_content=settings.llm_trace_content)
+        app.state.gateway.recorder.start()
+        app.state.gateway.metrics = app.state.metrics
+        # Prompt versions and A/B splits (6.4), refreshed so a change on any worker reaches every worker.
+        app.state.prompts = PromptRegistry(app.state.db)
+        await app.state.prompts.refresh()
+        set_registry(app.state.prompts)
+        refresher = asyncio.create_task(_refresh_prompts(app.state.prompts), name="prompt-registry-refresh")
         app.state.rag = rag if rag is not None else build_rag_service(settings, app.state.gateway)
         app.state.indexer = ReportIndexer(app.state.rag, app.state.db)
         app.state.indexer.start_sweep()  # reports left unindexed by a restart or an outage
         log.info("app_started", extra={"fields": {"env": settings.app_env}})
         yield
+        refresher.cancel()
+        set_registry(None)
         await app.state.indexer.close()
+        await app.state.gateway.recorder.close()
         if client is not None:
             await client.close()
 
@@ -62,6 +79,8 @@ def create_app(settings: Settings | None = None, *, db=None, gateway=None, rag=N
                   docs_url="/docs" if docs else None, redoc_url="/redoc" if docs else None,
                   openapi_url="/openapi.json" if docs else None)
     app.state.settings = settings
+    app.state.metrics = Metrics()
+    _configure_azure_monitor(settings)
     app.state.limiters = {
         "login_email": SlidingWindowLimiter(settings.login_failures_per_15_min, 15 * 60),
         "login_ip": SlidingWindowLimiter(settings.login_failures_per_15_min * 3, 15 * 60),
@@ -90,7 +109,11 @@ def create_app(settings: Settings | None = None, *, db=None, gateway=None, rag=N
         clear_context()
         request_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex
         bind_context(request_id=request_id[:64])
+        started = time.perf_counter()
         response = await call_next(request)
+        if request.method != "OPTIONS":  # CORS preflights aren't traffic
+            app.state.metrics.observe_http(f"{request.method} {_route_template(request)}", response.status_code,
+                                           (time.perf_counter() - started) * 1000)
         response.headers["X-Request-ID"] = request_id[:64]
         return response
 
@@ -98,6 +121,41 @@ def create_app(settings: Settings | None = None, *, db=None, gateway=None, rag=N
     app.include_router(api_router)
     app.include_router(ws_router)
     return app
+
+
+PROMPT_REFRESH_S = 30
+
+
+def _route_template(request: Request) -> str:
+    """"/api/v1/interviews/abc/state" -> "/api/v1/interviews/{session_id}/state", so metrics group by endpoint, not
+    by ID. The matched route's path is relative to its router here; its router prefix comes from the URL."""
+    route = request.scope.get("route")
+    template = getattr(route, "path", None)
+    if not template:
+        return "unmatched"
+    parts, route_parts = request.url.path.split("/"), template.split("/")
+    prefix = "/".join(parts[:max(1, len(parts) - (len(route_parts) - 1))])
+    return template if not prefix or template.startswith(prefix + "/") else prefix + template
+
+
+async def _refresh_prompts(registry: PromptRegistry) -> None:
+    while True:
+        await asyncio.sleep(PROMPT_REFRESH_S)
+        await registry.refresh()
+
+
+def _configure_azure_monitor(settings: Settings) -> None:
+    """Exports traces, metrics and logs to Application Insights when a connection string is set (deployment).
+    The package is installed in the deployment image: pip install azure-monitor-opentelemetry."""
+    if not settings.applicationinsights_connection_string:
+        return
+    try:
+        from azure.monitor.opentelemetry import configure_azure_monitor
+    except ImportError:
+        log.warning("azure_monitor_unavailable", extra={"fields": {"fix": "pip install azure-monitor-opentelemetry"}})
+        return
+    configure_azure_monitor(connection_string=settings.applicationinsights_connection_string)
+    log.info("azure_monitor_enabled")
 
 
 async def _seed_inmemory(db, settings: Settings) -> None:

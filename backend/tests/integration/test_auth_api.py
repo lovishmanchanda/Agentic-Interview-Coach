@@ -95,3 +95,42 @@ def test_logout_invalidates_refresh_token(client, register):
     assert client.post("/api/v1/auth/refresh", json={"refresh_token": refresh}).status_code == 401
     # Logging out twice (or with junk) is harmless.
     assert client.post("/api/v1/auth/logout", json={"refresh_token": "junk"}).status_code == 200
+
+
+COOKIE = {"X-Auth-Mode": "cookie"}
+
+
+def test_cookie_mode_keeps_the_refresh_token_out_of_javascripts_reach(client):
+    created = client.post("/api/v1/auth/register", headers=COOKIE,
+                          json={"email": "c@example.com", "password": "correct-horse-1", "name": "C"})
+    assert created.status_code == 201
+    assert created.json()["data"]["tokens"]["refresh_token"] is None  # not in the body
+    set_cookie = created.headers["set-cookie"].lower()
+    assert "aic_refresh=" in set_cookie and "httponly" in set_cookie and "path=/api/v1/auth" in set_cookie
+    assert "samesite=lax" in set_cookie
+
+    first = client.cookies.get("aic_refresh")
+    refreshed = client.post("/api/v1/auth/refresh", headers={**COOKIE, "Origin": "http://localhost:3000"})
+    assert refreshed.status_code == 200 and refreshed.json()["data"]["access_token"]
+    assert refreshed.json()["data"]["refresh_token"] is None and client.cookies.get("aic_refresh") != first  # rotated
+
+    # The old cookie is single-use: presenting it again revokes every session (reuse detection).
+    client.cookies.set("aic_refresh", first, path="/api/v1/auth")
+    assert client.post("/api/v1/auth/refresh", headers=COOKIE).json()["error"]["code"] == "refresh_reused"
+
+
+def test_cookie_refresh_from_another_site_is_refused(client):
+    client.post("/api/v1/auth/register", headers=COOKIE,
+                json={"email": "d@example.com", "password": "correct-horse-1", "name": "D"})
+    evil = client.post("/api/v1/auth/refresh", headers={**COOKIE, "Origin": "https://evil.example"})
+    assert evil.status_code == 403 and evil.json()["error"]["code"] == "bad_origin"
+
+
+def test_logout_clears_the_cookie(client):
+    client.post("/api/v1/auth/login", headers=COOKIE, json={"email": "e@example.com", "password": "x"})  # no account
+    client.post("/api/v1/auth/register", headers=COOKIE,
+                json={"email": "e@example.com", "password": "correct-horse-1", "name": "E"})
+    assert client.post("/api/v1/auth/logout", headers=COOKIE).status_code == 200
+    assert client.cookies.get("aic_refresh") is None
+    missing = client.post("/api/v1/auth/refresh", headers=COOKIE)
+    assert missing.status_code == 401 and missing.json()["error"]["code"] == "missing_token"

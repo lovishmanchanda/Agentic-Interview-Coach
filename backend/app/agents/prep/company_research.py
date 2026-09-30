@@ -9,7 +9,7 @@ from dataclasses import dataclass
 
 from app.agents.prep.schemas import CompanyResearchOutput
 from app.agents.prep.vocabulary import BEHAVIORAL, CODING, TECHNICAL, known
-from app.core.prompts import render_prompt
+from app.core.prompts import render_for
 from app.db.models.company import Company, company_key
 from app.db.repositories.company_repo import CompanyRepository
 from app.gateway import AIGateway
@@ -38,9 +38,8 @@ async def research_company(name: str, *, repo: CompanyRepository, gateway: AIGat
     if stored:
         return Research(stored, "curated" if stored.get("source") == "curated" else "cached")
 
-    context.prompt_version = RESEARCH_PROMPT
     out = await gateway.generate_structured(
-        render_prompt(RESEARCH_PROMPT, company=name, technical_topics=", ".join(TECHNICAL),
+        render_for(context, RESEARCH_PROMPT, company=name, technical_topics=", ".join(TECHNICAL),
                       coding_topics=", ".join(CODING), behavioral_topics=", ".join(BEHAVIORAL)),
         CompanyResearchOutput, context=context)
     if not out["known"]:

@@ -161,3 +161,23 @@ def test_opening(scripted, expected):
     assert asyncio.run(InterviewAgent(gw).opening(SESSION)) == expected
     prompt = gw.calls_of("structured")[0]["prompt"]
     assert "Candidate: Ada, applying for Software Engineer" in prompt and "${" not in prompt
+
+
+def test_the_tool_is_named_when_submitting_is_the_only_option():
+    """Found by the agent eval: with one allowed move the model often wrote plain JSON (Groq: tool_use_failed)."""
+    from app.agents.interview_agent import SUBMIT_ONLY
+    gw = FakeAIGateway().script("tools", submit(action="wrap_up", lead_in="Thanks, that's all."))
+    run = run_decide(gw, allowed={"complete"}, recommended="complete")
+    assert run.decision.action == "wrap_up" and gw.calls_of("tools")[0]["tool_choice"] == SUBMIT_ONLY
+    # After both info tools are used, and on the last step, too.
+    gw = FakeAIGateway().script("tools", ToolCall("get_performance_summary", {}, id="c1"),
+                                ToolCall("get_question_details", {}, id="c2"), submit(**FOLLOW_UP))
+    run_decide(gw)
+    assert [c["tool_choice"] for c in gw.calls_of("tools")] == ["required", "required", SUBMIT_ONLY]
+
+
+def test_the_action_list_offered_is_only_what_is_allowed():
+    gw = FakeAIGateway().script("tools", submit(action="wrap_up", lead_in="Thanks."))
+    run_decide(gw, allowed={"complete"}, recommended="complete")
+    [tool] = [t for t in gw.calls_of("tools")[0]["tools"] if t["function"]["name"] == "submit_decision"]
+    assert tool["function"]["parameters"]["properties"]["action"]["enum"] == ["wrap_up"]

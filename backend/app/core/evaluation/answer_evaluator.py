@@ -15,7 +15,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from app.core.prompts import render_prompt
+from app.core.prompts import render_for, render_prompt
 from app.gateway import AIGateway
 from app.gateway.types import CallContext
 
@@ -95,9 +95,9 @@ async def evaluate_answer(gateway: AIGateway, *, question: dict, answer_text: st
                           context: CallContext, evaluator: Evaluator | None = None) -> dict:
     """Returns the output fields plus evaluation_type, performance_tier, prompt_version and latency_ms.
     `evaluator` overrides the choice by question type (the eval runner uses it to test a prompt version)."""
+    explicit = evaluator is not None
     evaluator = evaluator or evaluator_for(question)
-    prompt = render_prompt(
-        evaluator.prompt_id,
+    values = dict(
         role=(profile or {}).get("target", {}).get("role", "software_engineer"),
         experience_level=(profile or {}).get("personal", {}).get("experience_level", "fresher"),
         topic=question.get("topic", "general"),
@@ -107,13 +107,17 @@ async def evaluate_answer(gateway: AIGateway, *, question: dict, answer_text: st
         rubric=_bullets([f"{k}: {v}" for k, v in question.get("evaluation_rubric", {}).items()]),
         answer_text=answer_text.strip() or "(no answer given)",
     )
-    context.prompt_version = evaluator.prompt_id
+    if explicit:  # the eval runner pins a version to measure it
+        context.prompt_version = evaluator.prompt_id
+        prompt = render_prompt(evaluator.prompt_id, **values)
+    else:
+        prompt = render_for(context, evaluator.prompt_id, **values)
     started = time.perf_counter()
     result = await gateway.generate_structured(prompt, evaluator.schema, context=context, tier="fast")
     return {
         **result,
         "evaluation_type": evaluator.type,
         "performance_tier": performance_tier(result["overall_score"]),
-        "prompt_version": evaluator.prompt_id,
+        "prompt_version": context.prompt_version,
         "latency_ms": int((time.perf_counter() - started) * 1000),
     }

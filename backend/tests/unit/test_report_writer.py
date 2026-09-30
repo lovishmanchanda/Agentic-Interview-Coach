@@ -78,12 +78,12 @@ def test_write_narrative_prompt_has_notes_not_answers():
     gw = FakeAIGateway().script("structured", NARRATIVE)
     report = _report()
     narrative = asyncio.run(write_narrative(gw, SESSION_T, report, QUESTIONS, EVALUATIONS))
-    assert narrative == ReportNarrative.model_validate(NARRATIVE).model_dump()
+    assert narrative == {**ReportNarrative.model_validate(NARRATIVE).model_dump(), "prompt_version": "report/report_v1"}
     call = gw.calls_of("structured")[0]
     assert call["tier"] == "default" and call["context"].prompt_version == NARRATIVE_PROMPT
     prompt = call["prompt"]
     assert 'Topics covered (use exactly these names in "topic" fields): dsa, dbms' in prompt
-    assert "Question 1 [dsa] 6.5/10 (adequate) · used a hint" in prompt and "Follow-up [dsa] 8.0/10" in prompt
+    assert "Question 1 [dsa] 6.5/10 (adequate) · used a hint" in prompt and "Follow-up to question 1 [dsa] 8.0/10" in prompt
     assert "<<<NOTES" in prompt and "${" not in prompt
 
 

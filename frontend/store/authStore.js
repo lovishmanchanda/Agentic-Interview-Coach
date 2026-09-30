@@ -4,31 +4,28 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
 /**
- * Auth session. Persisted to localStorage so a reload keeps you signed in.
- * Trade-off: tokens in localStorage are readable by any script on the page, so XSS must be
- * prevented (never render untrusted HTML). Moving the refresh token to an httpOnly cookie is a
- * later hardening step (architecture.md §12.1, "httpOnly cookie optional").
+ * Auth session. The short-lived access token (30 min) is persisted to localStorage so a reload keeps you signed
+ * in. The long-lived refresh token is never visible to page scripts: the API keeps it in an httpOnly cookie
+ * ("cookie mode", architecture.md §12.1), so an XSS bug can't steal a lasting session.
  */
 export const useAuthStore = create(
   persist(
     (set) => ({
       user: null,
       accessToken: null,
-      refreshToken: null,
       hasHydrated: false,
 
-      setSession: ({ user, tokens }) =>
-        set({ user, accessToken: tokens.access_token, refreshToken: tokens.refresh_token }),
-      setTokens: (tokens) => set({ accessToken: tokens.access_token, refreshToken: tokens.refresh_token }),
+      setSession: ({ user, tokens }) => set({ user, accessToken: tokens.access_token }),
+      setTokens: (tokens) => set({ accessToken: tokens.access_token }),
       setUser: (user) => set({ user }),
-      clear: () => set({ user: null, accessToken: null, refreshToken: null }),
+      clear: () => set({ user: null, accessToken: null }),
       markHydrated: () => set({ hasHydrated: true }),
     }),
     {
       name: "aic-auth",
       // window.localStorage throws on the server, so persistence is skipped during prerender.
       storage: createJSONStorage(() => window.localStorage),
-      partialize: ({ user, accessToken, refreshToken }) => ({ user, accessToken, refreshToken }),
+      partialize: ({ user, accessToken }) => ({ user, accessToken }),
       // localStorage is synchronous, so this can run inside create() before `useAuthStore` is
       // assigned. Use the state's own action rather than referencing the store variable.
       onRehydrateStorage: () => (state) => state?.markHydrated(),
