@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
 import { MentorAvatar } from "@/components/brand/AgentAvatar";
+import AgentStatus from "@/components/brand/AgentStatus";
 import MentorChat from "@/components/mentor/MentorChat";
 import MentorInput from "@/components/mentor/MentorInput";
 import MentorSidebar from "@/components/mentor/MentorSidebar";
@@ -74,12 +75,14 @@ function MentorView() {
       <MentorSidebar conversations={conversations} activeId={activeId} />
 
       <div className="flex min-h-[calc(100dvh-10rem)] min-w-0 flex-col gap-6">
-        <header>
-          <div className="flex items-center gap-3">
-            <MentorAvatar size="size-10" />
-            <div>
-              <h1 className="text-2xl font-semibold">ARIA</h1>
-              <p className="text-sm text-muted">Your mentor. Answers come only from your own interview reports, with the sessions cited.</p>
+        <header className="relative">
+          <div aria-hidden="true" className="pointer-events-none absolute -left-10 -top-16 h-48 w-72 rounded-full bg-primary/10 blur-3xl" />
+          <div className="relative flex items-center gap-4">
+            <MentorAvatar size="size-12" active={sending} />
+            <div className="min-w-0">
+              <p className="eyebrow text-[10px] max-sm:hidden">Adaptive Reflection &amp; Intelligent Assistance</p>
+              <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">ARIA</h1>
+              <p className="text-sm text-muted">Your mentor. She answers only from your own interview reports, and cites them.</p>
             </div>
           </div>
         </header>
@@ -93,7 +96,7 @@ function MentorView() {
         )}
 
         <div className="flex-1">
-          {conversationStatus === "loading" && <Spinner label="Loading conversation…" />}
+          {conversationStatus === "loading" && <AgentStatus agent="mentor" text="Opening your conversation…" />}
           {conversationStatus === "error" && (
             <Alert tone="error" title="Couldn't open this conversation">
               {errorText(error)} <Button href="/mentor" variant="ghost" size="sm">Start a new one</Button>
@@ -103,7 +106,7 @@ function MentorView() {
           {isNew && welcome && !unavailable && !showPrepare && (
             <MentorWelcome welcome={welcome} name={firstName} onPick={submit} onPrepare={() => setShowPrepare(true)} />
           )}
-          {messages.length > 0 && <MentorChat messages={messages} sending={sending} pendingKind={pendingKind} />}
+          {messages.length > 0 && <MentorChat messages={messages} sending={sending} pendingKind={pendingKind} reportCount={welcome?.report_count ?? 0} />}
           {showPrepare && (
             <div className="mt-4">
               <PrepareForm busy={sending} onSubmit={submitPrepare} onCancel={() => setShowPrepare(false)} />
@@ -125,10 +128,10 @@ function MentorView() {
         )}
 
         {conversationStatus !== "error" && !unavailable && (
-          <div className="sticky bottom-16 -mx-1 bg-background px-1 pb-2 pt-2 md:bottom-9">{/* above the phone tab bar (4rem) and the desktop status line (2.25rem) */}
+          <div className="sticky bottom-16 -mx-1 bg-gradient-to-t from-background from-75% to-transparent px-1 pb-2 pt-6 md:bottom-9">{/* above the phone tab bar (4rem) and the desktop status line (2.25rem) */}
             {!showPrepare && !isNew && (
               <button type="button" onClick={() => setShowPrepare(true)} disabled={sending}
-                className="mb-1 text-xs font-medium text-primary hover:underline disabled:opacity-50">
+                className="mb-2 ml-2 text-xs font-medium text-primary hover:underline disabled:opacity-50">
                 Prepare for a company…
               </button>
             )}

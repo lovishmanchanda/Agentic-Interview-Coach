@@ -8,6 +8,7 @@ import RevealText from "@/components/motion/RevealText";
 import Badge from "@/components/ui/Badge";
 import { BulbIcon, ChevronDownIcon } from "@/components/ui/icons";
 import Skeleton from "@/components/ui/Skeleton";
+import { EXECUTION_STATUS } from "@/lib/interviewOptions";
 
 import EvaluationCard from "../EvaluationCard";
 
@@ -64,12 +65,27 @@ function Hint({ entry }) {
   );
 }
 
+/** Your answer. A coding answer also shows how the server's run went, with up to three failing tests. */
 function Answer({ entry }) {
+  const run = entry.execution;
+  const failed = (run?.test_results || []).filter((t) => !t.passed && t.input != null).slice(0, 3);
   return (
     <div className="rounded-2xl border border-border-strong bg-raised/60 px-4 py-3 text-sm">
-      <p className="mb-1 text-xs font-medium text-muted">You{entry.code ? ` · ${entry.language} solution` : ""}</p>
+      <p className="mb-1 text-xs font-medium text-muted">
+        You{entry.code ? ` · ${entry.language} solution` : ""}
+        {run && (
+          <span className={run.status === "accepted" ? "text-success" : "text-warning"}>
+            {" · "}{EXECUTION_STATUS[run.status]?.label || run.status}{run.graded ? ` · ${run.passed_tests}/${run.total_tests} tests` : " · not graded"}
+          </span>
+        )}
+      </p>
       {entry.code && <pre className="mb-2 max-h-72 overflow-auto rounded-lg bg-background p-3 font-mono text-xs">{entry.code}</pre>}
-      {entry.content && <p className="whitespace-pre-wrap leading-relaxed">{entry.content}</p>}
+      {entry.content && <p className="whitespace-pre-wrap leading-relaxed">{entry.code ? <span className="font-medium">Approach: </span> : null}{entry.content}</p>}
+      {failed.length > 0 && (
+        <ul className="mt-2 space-y-0.5 font-mono text-xs text-danger">
+          {failed.map((t, i) => <li key={i}>✗ {t.input} → expected {t.expected}, got {t.actual}</li>)}
+        </ul>
+      )}
     </div>
   );
 }

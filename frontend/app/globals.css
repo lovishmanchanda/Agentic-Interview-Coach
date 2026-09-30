@@ -197,3 +197,45 @@ body {
     scroll-behavior: auto !important;
   }
 }
+
+/*
+ * Print / Save as PDF (a report). Paper is light: the tokens flip to ink on white, and anything still waiting
+ * to animate in (motion leaves opacity 0 / a transform inline until it scrolls into view) is forced visible.
+ */
+@media print {
+  :root {
+    --background: #ffffff;
+    --surface: #ffffff;
+    --raised: #f3f3f4;
+    --surface-muted: #f3f3f4;
+    --border: #dcdce0;
+    --border-strong: #c4c4ca;
+    --subtle: #707078;
+    --muted: #55555c;
+    --foreground: #111113;
+    --primary-soft: #fff1e8;
+    --steel-soft: #eef2f8;
+    --success-soft: #eaf7f0;
+    --warning-soft: #fdf6e1;
+  }
+  body {
+    background: #fff !important;
+    color: var(--foreground);
+  }
+  [style*="opacity"] {
+    opacity: 1 !important;
+  }
+  [style*="transform"] {
+    transform: none !important;
+  }
+  .grain::before,
+  .grain::after {
+    display: none !important;
+  }
+  li {
+    break-inside: avoid;
+  }
+  @page {
+    margin: 16mm;
+  }
+}

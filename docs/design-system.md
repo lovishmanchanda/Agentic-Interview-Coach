@@ -271,3 +271,27 @@ Top to bottom:
 - **Console** (`OutputPanel`): the verdict pill, a pass/fail strip (one segment per test), and each test sliding in; "Running every test…" while it waits.
 
 **Fixed along the way:** the global `:focus-visible` outline was unlayered CSS, so it beat every component's own `focus-visible:outline-none` + ring (double rings site-wide). It now lives in `@layer base`.
+
+## Report and ARIA (7.9)
+
+**The report as a story** (`app/(app)/interview/report/[reportId]/page.js`, `components/report/`):
+1. **Hero** (`ReportHero`): the page's one hero number as a large ring that draws and counts up (tier colour: green strong, steel adequate, amber weak), a headline in words for the tier ("A *strong* showing." / "Solid, with *gaps.*" / "Room to *grow.*"), the kind of interview, sub-score pills, VERA's summary, and the actions (Practise weak areas, Interview again, Print or save as PDF). Lit from the top left by VERA's steel light.
+2. **Chapters** (`Chapter`): a mono number, a rising heading and content that lifts in on scroll. They are numbered in order and a chapter with nothing to show is skipped.
+   - How you *scored* (stat tiles + score bars)
+   - What went *well* (ticked cards)
+   - What to *fix* (weak areas by severity, then recommendations)
+   - Your next *steps* (a numbered timeline + the drill card)
+   - The *evidence*: the same folding rounds as the interview room (`PastRound`), coding runs included
+3. **The handoff** (`Handoff`): VERA's avatar → a wire with a steel spark travelling into ARIA's lamp. "VERA has passed your report to *ARIA*", with "Talk it through with ARIA" and question chips built from this report, each opening `/mentor?q=…`.
+
+**Print / PDF:** `@media print` flips the tokens to ink on white and forces anything still waiting to animate in to show. The app shell, the 3D scene and the toasts are `print:hidden`, and so are the buttons and the handoff. The evidence prints as plain, fully open text (`PrintTranscript`).
+
+**ARIA's chat** (`components/mentor/`):
+- **Bubbles** spring in. A new reply writes itself out a few words at a time (`useTypewriter`, about 1.8 s whatever the length; the server still returns the whole reply at once) with a blinking orange caret, and its buttons pop in after the text. History that was already in the conversation simply appears.
+- **Typing:** ARIA's lamp breathing, three warm bouncing dots and "ARIA is reviewing your 5 reports…".
+- **Company plans:** a step timeline (ticked / glowing / waiting, a rail that fills).
+- **Citations:** a chip (number in a small circle + date) that opens the cited report. On hover or focus a card says where it came from (report summary / one of your answers / recommendations / prep plan, date, topics). The link's `aria-label` carries the same for screen readers, and the card is only rendered while shown, so it never widens the page.
+- **Screen readers** hear each new reply once, in full, from a polite live region (the progressively revealed text itself isn't live).
+- **Page:** the header has ARIA's lamp glow. The sidebar's active conversation has a pill that glides between items, and updated conversations move with a layout animation. The welcome greeting springs in and its starters follow one by one. The input is one rounded field with the send button inside.
+
+**Fixed along the way:** `SplitHeading` headings revealed on scroll never appeared. Each word watched the viewport itself while clipped inside its mask, so it never counted as visible. The heading now watches the viewport and passes the cue to its words (landing sections included).

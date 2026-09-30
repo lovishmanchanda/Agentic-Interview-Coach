@@ -36,3 +36,4 @@ export const BulbIcon = (p) => <Icon {...p}><path d="M9 17h6M10 20.5h4" /><path 
 export const SlidersIcon = (p) => <Icon {...p}><path d="M5 7h9M18 7h1M5 17h1M10 17h9" /><circle cx="16" cy="7" r="2" /><circle cx="8" cy="17" r="2" /></Icon>;
 export const PlayIcon = (p) => <Icon {...p}><path d="M8 5.5v13l10.5-6.5z" /></Icon>;
 export const ChevronDownIcon = (p) => <Icon {...p}><path d="m6 9 6 6 6-6" /></Icon>;
+export const PrinterIcon = (p) => <Icon {...p}><path d="M7 9V4h10v5" /><rect x="4" y="9" width="16" height="7" rx="1.5" /><path d="M7 14h10v6H7z" /></Icon>;

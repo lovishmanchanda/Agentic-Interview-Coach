@@ -26,9 +26,9 @@ export default function RootLayout({ children }) {
       <body className="min-h-screen antialiased">
         <MotionProvider>
           {/* The one 3D canvas, behind every page that asks for it; survives navigation (store/sceneStore.js) */}
-          <SceneHost />
+          <div className="contents print:hidden"><SceneHost /></div>
           {children}
-          <Toaster />
+          <div className="contents print:hidden"><Toaster /></div>
         </MotionProvider>
       </body>
     </html>

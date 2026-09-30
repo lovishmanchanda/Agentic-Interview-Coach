@@ -36,16 +36,19 @@ export default function AppShell({ children }) {
 
   return (
     <div className="flex min-h-svh">
-      <Sidebar />
+      {/* Printing (a report as PDF) keeps only the page: no navigation, status line or palette. */}
+      <div className="contents print:hidden"><Sidebar /></div>
       <div className="flex min-w-0 flex-1 flex-col">
-        <Topbar />
+        <div className="contents print:hidden"><Topbar /></div>
         <main className={`mx-auto w-full max-w-5xl flex-1 px-4 pt-8 md:px-8 md:pb-10 ${focus ? "pb-8" : "pb-28"}`}>
           <PageTransition>{children}</PageTransition>
         </main>
-        {!focus && <StatusBar />}
+        {!focus && <div className="contents print:hidden"><StatusBar /></div>}
       </div>
-      {!focus && <MobileTabBar />}
-      <CommandPalette />
+      <div className="contents print:hidden">
+        {!focus && <MobileTabBar />}
+        <CommandPalette />
+      </div>
     </div>
   );
 }

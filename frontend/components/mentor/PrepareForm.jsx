@@ -24,7 +24,7 @@ export default function PrepareForm({ onSubmit, onCancel, busy }) {
   }
 
   return (
-    <form onSubmit={submit} className="space-y-4 rounded-xl border border-border bg-surface p-5">
+    <form onSubmit={submit} className="space-y-4 rounded-2xl border border-primary/30 bg-[linear-gradient(to_bottom,var(--primary-soft),var(--surface)_60%)] p-5 sm:p-6">
       <div>
         <h2 className="text-base font-semibold">Prepare for a company</h2>
         <p className="mt-1 text-sm text-muted">
@@ -35,18 +35,18 @@ export default function PrepareForm({ onSubmit, onCancel, busy }) {
         <Input label="Company" value={company} maxLength={60} required autoFocus
           onChange={(e) => setCompany(e.target.value)} placeholder="e.g. Google, Flipkart, Stripe" />
         <div>
-          <label htmlFor="prep-weeks" className="mb-1.5 block text-sm font-medium">Interview in</label>
+          <label htmlFor="prep-weeks" className="mb-2 block text-sm font-medium">Interview in</label>
           <select id="prep-weeks" value={weeks} onChange={(e) => setWeeks(e.target.value)}
-            className="h-10 w-full rounded-lg border border-border bg-surface px-3 text-sm focus:border-primary focus:outline-none">
+            className="h-12 w-full rounded-xl border border-border-strong bg-background/60 px-4 text-[15px] focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/15">
             {WEEK_OPTIONS.map(([value, text]) => <option key={value} value={value}>{text}</option>)}
           </select>
         </div>
       </div>
       <div>
-        <label htmlFor="prep-jd" className="mb-1.5 block text-sm font-medium">Job description <span className="font-normal text-muted">(optional)</span></label>
+        <label htmlFor="prep-jd" className="mb-2 block text-sm font-medium">Job description <span className="font-normal text-muted">(optional)</span></label>
         <textarea id="prep-jd" value={jdText} maxLength={MAX_JD} rows={5} onChange={(e) => setJdText(e.target.value)}
           placeholder="Paste the job description to tailor the plan to the role."
-          className="w-full rounded-xl border border-border bg-surface p-3 text-sm focus:border-primary focus:outline-none" />
+          className="w-full rounded-xl border border-border-strong bg-background/60 p-3 text-sm placeholder:text-subtle focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/15" />
         {jdText.length > MAX_JD - 2000 && <p className="mt-1 text-xs text-muted tabular-nums">{jdText.length}/{MAX_JD}</p>}
       </div>
       <div className="flex justify-end gap-2">
