@@ -37,7 +37,7 @@ export default function AskAria({ prompts, plan }) {
       <div className="flex flex-wrap gap-2">
         {prompts.map((p) => (
           <button key={p} type="button" onClick={() => ask(p)}
-            className="rounded-full border border-border px-3 py-1.5 text-left text-xs text-muted transition-colors hover:border-primary/50 hover:text-foreground">
+            className="rounded-full border border-border px-3 py-1.5 text-left pointer-coarse:min-h-11 text-xs text-muted transition-colors hover:border-primary/50 hover:text-foreground">
             {p}
           </button>
         ))}

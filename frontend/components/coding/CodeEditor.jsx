@@ -15,13 +15,13 @@ function defineTheme(monaco) {
     base: "vs-dark",
     inherit: true,
     rules: [
-      { token: "comment", foreground: "6b6b72", fontStyle: "italic" },
+      { token: "comment", foreground: "84848c", fontStyle: "italic" },
       { token: "keyword", foreground: "ff9a5c" },
       { token: "string", foreground: "b7c7de" },
       { token: "number", foreground: "f5d06a" },
       { token: "type", foreground: "7c93b5" },
       { token: "type.identifier", foreground: "9fb3cf" },
-      { token: "delimiter", foreground: "8b8b92" },
+      { token: "delimiter", foreground: "9d9da5" },
     ],
     colors: {
       "editor.background": EDITOR_BACKGROUND,

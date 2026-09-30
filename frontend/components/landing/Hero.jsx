@@ -12,9 +12,9 @@ import { landingFraming } from "@/components/three/framings";
 import { useScene, useSceneStore } from "@/store/sceneStore";
 
 const EASE = [0.16, 1, 0.3, 1];
-// The words arrive once the spotlight has flickered on; if the room is already lit (you came back here from
-// signing in or out), almost at once.
-const FIRST_VISIT_DELAY = 1.15;
+// The words arrive as the spotlight flickers on; if the room is already lit (you came back here from signing in
+// or out), almost at once. Kept short: the paragraph is the page's largest text, so it sets LCP (7.10: ~1.3 s).
+const FIRST_VISIT_DELAY = 0.8;
 const RETURN_DELAY = 0.15;
 
 const fadeUp = (delay) => ({
@@ -89,12 +89,12 @@ export default function Hero() {
           <SplitHeading as="h1" id="hero-title" text="Take the *seat.*" animateOnMount delay={afterLight + 0.1} stagger={0.1}
             className="max-w-3xl text-[clamp(3.4rem,13vw,9.5rem)] font-semibold leading-[0.88] tracking-[-0.055em]" />
 
-          <motion.p {...fadeUp(afterLight + 0.5)} className="mt-6 max-w-md text-base leading-relaxed text-muted sm:text-lg md:text-xl">
+          <motion.p {...fadeUp(afterLight + 0.3)} className="mt-6 max-w-md text-base leading-relaxed text-muted sm:text-lg md:text-xl">
             Practise real interviews with <span className="text-steel">VERA</span>. Improve with{" "}
             <span className="text-primary">ARIA</span>, a mentor that remembers every session you&apos;ve had.
           </motion.p>
 
-          <motion.div {...fadeUp(afterLight + 0.7)} className="mt-9 flex flex-wrap items-center gap-3">
+          <motion.div {...fadeUp(afterLight + 0.5)} className="mt-9 flex flex-wrap items-center gap-3">
             {signedIn ? (
               <Magnetic><Button href="/dashboard" size="lg" {...warmOn}>Back to your desk</Button></Magnetic>
             ) : (

@@ -119,7 +119,7 @@ class MentorAgent:
                 return await self.prepare(candidate_id=candidate_id, company=request.company, weeks=request.weeks,
                                           conversation_id=conversation_id, user_message=message)
         if self.rag is None:
-            raise ServiceUnavailableError("The mentor is not available: HF_TOKEN is not configured.",
+            raise ServiceUnavailableError("ARIA is offline: HF_TOKEN is not configured on the server.",
                                           code="mentor_disabled")
         conversation_id, recent = await self._history(conversation_id, candidate_id)
         history = [{"role": m["role"], "content": _strip_citations(m["content"])} for m in recent]

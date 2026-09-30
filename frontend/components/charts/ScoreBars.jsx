@@ -66,23 +66,21 @@ export default function ScoreBars({ title, description, rows, labelWidth = "7.5r
               style={{ gridTemplateColumns: `${labelWidth} 1fr` }}>
               <span className="truncate text-xs text-muted" title={r.label}>{r.label}</span>
               {/* Right padding keeps room for the value label past a 10/10 bar. */}
-              <div className="relative h-5 pr-9">
-                <div className="relative h-full">
+              <div className="relative h-6 pr-9">
+                {/* The whole row is the hover / focus target, so even a 1/10 bar is easy to reach. */}
+                <div
+                  tabIndex={0}
+                  aria-label={`${r.label}: ${r.value} out of 10, ${tierFor(r.value)}${r.detail ? `, ${r.detail}` : ""}`}
+                  onPointerEnter={() => setActive(r.key)}
+                  onPointerLeave={() => setActive(null)}
+                  onFocus={() => setActive(r.key)}
+                  onBlur={() => setActive(null)}
+                  className="group relative h-full outline-none">
                   {TICKS.map((t) => (
                     <span key={t} aria-hidden className={`absolute inset-y-0 w-px ${THRESHOLDS.has(t) ? "bg-muted/40" : "bg-border"}`}
                       style={{ left: pct(t) }} />
                   ))}
-                  <div
-                    tabIndex={0}
-                    aria-label={`${r.label}: ${r.value} out of 10, ${tierFor(r.value)}${r.detail ? `, ${r.detail}` : ""}`}
-                    onPointerEnter={() => setActive(r.key)}
-                    onPointerLeave={() => setActive(null)}
-                    onFocus={() => setActive(r.key)}
-                    onBlur={() => setActive(null)}
-                    className="group absolute inset-y-0 left-0 flex items-center outline-none"
-                    style={{ width: pct(r.value), minWidth: "4px" }}
-                  >
-                    {/* Hit target: the full row height, bigger than the 14px mark. */}
+                  <div className="absolute inset-y-0 left-0 flex items-center" style={{ width: pct(r.value), minWidth: "4px" }}>
                     <span className="h-3.5 w-full rounded-r-[4px] bg-chart-mark transition-colors group-hover:bg-chart-mark-hover group-focus-visible:bg-chart-mark-hover group-focus-visible:outline group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-primary" />
                     <span className="absolute left-full pl-1.5 text-xs font-medium tabular-nums text-foreground">{r.value}</span>
                     {active === r.key && (

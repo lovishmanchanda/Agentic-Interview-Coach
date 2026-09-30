@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useRef, useState } from "react";
 
 const LEVELS = [0, 1, 2, 3]; // 0 none · 1 one · 2 two · 3 three or more
 // A single-hue ordinal ramp: the brand orange at rising strength over the dark surface (lighter = more).
@@ -13,10 +13,26 @@ const DAY_LABELS = ["Mon", "", "Wed", "", "Fri", "", ""];
 /**
  * Practice activity: the last 12 weeks, one square per day, brighter for more interviews started. Hover or
  * focus a day to read it; screen readers get a one-line summary and each day's label.
+ * The calendar is one Tab stop (today); the arrow keys move a day (up/down) or a week (left/right).
  */
 export default function ActivityHeatmap({ data }) {
+  const hintId = useId();
+  const box = useRef(null);
   const [focus, setFocus] = useState(null);
+  const past = data.columns.flat().filter((d) => !d.future);
+  const [cursor, setCursor] = useState(null); // the day that holds the Tab stop; today until you move
+  const current = cursor ?? past.at(-1)?.key;
   const describe = (d) => `${fmt(d.date)}: ${d.count ? `${d.count} interview${d.count > 1 ? "s" : ""}` : "no interviews"}`;
+
+  function onKeyDown(event) {
+    const step = { ArrowUp: -1, ArrowDown: 1, ArrowLeft: -7, ArrowRight: 7, Home: -Infinity, End: Infinity }[event.key];
+    if (step === undefined) return;
+    event.preventDefault();
+    const index = past.findIndex((d) => d.key === current);
+    const next = past[Math.max(0, Math.min(past.length - 1, index + step))];
+    setCursor(next.key);
+    box.current?.querySelector(`[data-day="${next.key}"]`)?.focus();
+  }
 
   return (
     <div>
@@ -25,13 +41,16 @@ export default function ActivityHeatmap({ data }) {
         <div aria-hidden="true" className="grid grid-rows-7 gap-[3px] pt-[1px] text-[10px] leading-[14px] text-subtle">
           {DAY_LABELS.map((l, i) => <span key={i} className="h-[14px]">{l}</span>)}
         </div>
-        <div className="flex gap-[3px] overflow-x-auto" role="group" aria-label="Interviews per day, last 12 weeks">
+        <p id={hintId} className="sr-only">Use the arrow keys to move between days.</p>
+        <div ref={box} onKeyDown={onKeyDown} className="flex gap-[3px] overflow-x-auto" role="group"
+          aria-label="Interviews per day, last 12 weeks" aria-describedby={hintId}>
           {data.columns.map((week) => (
             <div key={week[0].key} className="grid grid-rows-7 gap-[3px]">
               {week.map((d) => (
-                <span key={d.key} role={d.future ? undefined : "img"} tabIndex={d.future ? -1 : 0} aria-label={d.future ? undefined : describe(d)}
+                <span key={d.key} data-day={d.key} role={d.future ? undefined : "img"} tabIndex={!d.future && d.key === current ? 0 : -1}
+                  aria-label={d.future ? undefined : describe(d)}
                   onPointerEnter={() => !d.future && setFocus(d)} onPointerLeave={() => setFocus(null)}
-                  onFocus={() => setFocus(d)} onBlur={() => setFocus(null)}
+                  onFocus={() => { setFocus(d); setCursor(d.key); }} onBlur={() => setFocus(null)}
                   className={`size-[14px] rounded-[3px] outline-offset-1 focus-visible:outline-2 focus-visible:outline-primary ${d.future ? "opacity-0" : ""}`}
                   style={{ background: FILL[level(d.count)] }} />
               ))}

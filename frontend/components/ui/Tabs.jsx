@@ -29,7 +29,7 @@ export default function Tabs({ tabs, value, onChange, label, className = "" }) {
         return (
           <button key={tab.value} ref={(node) => { refs.current[tab.value] = node; }} type="button" role="tab"
             aria-selected={selected} tabIndex={selected ? 0 : -1} onClick={() => onChange(tab.value)}
-            className={`relative h-9 rounded-lg px-3.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${selected ? "text-foreground" : "text-muted hover:text-foreground"}`}>
+            className={`relative h-9 rounded-lg px-3.5 pointer-coarse:h-11 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${selected ? "text-foreground" : "text-muted hover:text-foreground"}`}>
             {selected && <motion.span layoutId={`tab-${id}`} className="absolute inset-0 rounded-lg bg-raised shadow-[inset_0_1px_0_rgb(255_255_255/0.05)]" transition={{ type: "spring", duration: 0.4, bounce: 0.15 }} />}
             <span className="relative">{tab.label}</span>
           </button>

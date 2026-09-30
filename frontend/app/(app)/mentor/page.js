@@ -17,7 +17,7 @@ import { useAuthStore } from "@/store/authStore";
 import { useMentorStore } from "@/store/mentorStore";
 
 function errorText(error) {
-  if (error.code === "mentor_disabled") return "The Mentor isn't configured on the server (HF_TOKEN missing).";
+  if (error.code === "mentor_disabled") return "ARIA is offline: the server has no HF_TOKEN set, so she can't read your reports.";
   return error.message;
 }
 
@@ -102,7 +102,7 @@ function MentorView() {
               {errorText(error)} <Button href="/mentor" variant="ghost" size="sm">Start a new one</Button>
             </Alert>
           )}
-          {isNew && !welcome && !welcomeError && <Spinner label="Loading…" />}
+          {isNew && !welcome && !welcomeError && <AgentStatus agent="mentor" text="Reading your reports…" />}
           {isNew && welcome && !unavailable && !showPrepare && (
             <MentorWelcome welcome={welcome} name={firstName} onPick={submit} onPrepare={() => setShowPrepare(true)} />
           )}

@@ -88,7 +88,7 @@ export default function MentorWelcome({ welcome, name, onPick, onPrepare }) {
         {startersFor(welcome).map((s) => (
           <motion.li key={s} variants={{ hidden: { opacity: 0, y: 8 }, shown: { opacity: 1, y: 0 } }}>
             <button type="button" onClick={() => onPick(s)}
-              className="rounded-full border border-border-strong bg-surface px-4 py-2 text-left text-sm text-muted transition-colors hover:border-primary/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+              className="rounded-full border border-border-strong bg-surface px-4 py-2 text-left pointer-coarse:min-h-11 text-sm text-muted transition-colors hover:border-primary/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
               {s}
             </button>
           </motion.li>

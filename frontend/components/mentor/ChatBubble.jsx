@@ -23,12 +23,12 @@ function Actions({ actions }) {
     <motion.div className="mt-4 flex flex-wrap gap-2" initial="hidden" animate="shown" transition={{ staggerChildren: 0.07 }}>
       {drills.map((a) => (
         <motion.div key={a.href} variants={POP}>
-          <Button href={a.href} size="sm" className="h-auto! min-h-9 py-1.5 text-left"><TargetIcon className="size-4" /> Start a weak-area drill · {a.topics.map(topicLabel).join(", ")}</Button>
+          <Button href={a.href} size="sm" className="h-auto! min-h-9 py-1.5 text-left pointer-coarse:min-h-11"><TargetIcon className="size-4" /> Start a weak-area drill · {a.topics.map(topicLabel).join(", ")}</Button>
         </motion.div>
       ))}
       {practice.map((a) => (
         <motion.div key={a.href} variants={POP}>
-          <Button href={a.href} variant="secondary" size="sm" className="h-auto! min-h-9 py-1.5 text-left">{a.label}</Button>
+          <Button href={a.href} variant="secondary" size="sm" className="h-auto! min-h-9 py-1.5 text-left pointer-coarse:min-h-11">{a.label}</Button>
         </motion.div>
       ))}
     </motion.div>

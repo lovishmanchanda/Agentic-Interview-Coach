@@ -21,8 +21,8 @@
   --surface-muted: #1a1a1d; /* same as --raised; the name older components use */
   --border: #26262a;
   --border-strong: #34343a;
-  --subtle: #6b6b72; /* decorative / disabled only: 3.5:1, not for body text */
-  --muted: #8b8b92;
+  --subtle: #84848c; /* 4.7–5.3:1 on background, surface and raised: small text passes AA */
+  --muted: #9d9da5; /* a step above --subtle, so the two greys stay distinct */
   --foreground: #ededed;
 
   /* Brand: orange */

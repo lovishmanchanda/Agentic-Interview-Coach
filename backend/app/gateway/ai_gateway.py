@@ -64,7 +64,7 @@ class AIGateway:
             vector = await anyio.to_thread.run_sync(self.embedder.embed, text)
         except Exception as exc:  # noqa: BLE001 -- provider SDKs raise many types; callers see one
             log.warning("embed_failed", extra={"fields": {"model": self.embedder.model, "error": type(exc).__name__}})
-            raise ServiceUnavailableError("The Mentor's search service did not respond. Please try again.",
+            raise ServiceUnavailableError("ARIA's search service did not respond. Please try again.",
                                           code="embed_unavailable") from exc
         # The HF API doesn't report tokens; a word count is close enough for usage dashboards.
         self._log_usage(model=self.embedder.model, call_type="embed", tokens_used=len(text.split()),

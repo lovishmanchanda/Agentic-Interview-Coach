@@ -51,7 +51,7 @@ export default function UserMenu() {
   return (
     <div ref={root} className="relative">
       <button type="button" onClick={() => setOpen((o) => !o)} aria-haspopup="menu" aria-expanded={open} aria-label="Account menu"
-        className="flex items-center gap-2.5 rounded-full border border-border bg-raised/60 py-1 pl-1 pr-3 transition-colors hover:border-border-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+        className="flex items-center gap-2.5 rounded-full border border-border bg-raised/60 py-1 pl-1 pr-3 pointer-coarse:min-h-11 transition-colors hover:border-border-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
         <span className="flex size-8 items-center justify-center rounded-full bg-gradient-to-br from-border-strong to-surface font-mono text-xs font-semibold">
           {initials(user?.name)}
         </span>

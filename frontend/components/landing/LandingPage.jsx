@@ -18,7 +18,7 @@ export default function LandingPage() {
     <SmoothScroll>
       <div className="grain relative">
         <SiteHeader />
-        <main>
+        <main id="main" tabIndex={-1} className="focus:outline-none">
           <Hero />
           <TopicBand />
           <LoopStory />

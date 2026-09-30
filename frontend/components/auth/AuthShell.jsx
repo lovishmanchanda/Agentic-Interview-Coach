@@ -80,7 +80,7 @@ export default function AuthShell({ children }) {
         <Link href="/" aria-label="InterviewOS home"><Logo /></Link>
       </header>
 
-      <main className="relative z-10 mx-auto flex min-h-[calc(100svh-4rem)] max-w-7xl items-end justify-center px-4 pb-6 sm:px-8 sm:pb-12 lg:items-center lg:justify-end lg:pb-16">
+      <main id="main" tabIndex={-1} className="relative z-10 mx-auto focus:outline-none flex min-h-[calc(100svh-4rem)] max-w-7xl items-end justify-center px-4 pb-6 sm:px-8 sm:pb-12 lg:items-center lg:justify-end lg:pb-16">
         <AnimatePresence>
           {!leaving && (
             <motion.div key="card" initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}

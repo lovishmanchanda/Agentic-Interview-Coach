@@ -27,7 +27,9 @@ export default function SceneHost() {
   const staticOpacity = isMotionValue(pageOpacity) ? undefined : pageOpacity;
 
   return (
-    <motion.div aria-hidden={!active || undefined} className="pointer-events-none fixed inset-0 -z-10"
+    // Always hidden from assistive tech: a backdrop behind every page, outside its landmarks. Each page says in
+    // text what the room shows (the desk's sheets also have a screen-reader list).
+    <motion.div aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10"
       initial={{ opacity: 0 }} animate={{ opacity: active ? 1 : 0 }} transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}>
       <motion.div className="absolute inset-0" style={{ opacity: staticOpacity ?? opacity }}>
         <RoomScene className="absolute inset-0" {...sceneProps} fullscreen paused={!active || (isMotionValue(pageOpacity) && faded)} />

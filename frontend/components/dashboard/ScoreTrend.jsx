@@ -65,7 +65,7 @@ export default function ScoreTrend({ points }) {
       <div className="mb-3 flex items-center justify-between gap-3">
         <p className="text-xs text-muted">Guide lines: {ADEQUATE} = adequate · {STRONG} = strong</p>
         <button type="button" onClick={() => setShowTable((s) => !s)} aria-controls={`${id}-table`} aria-expanded={showTable}
-          className="text-xs text-muted underline-offset-4 hover:text-foreground hover:underline">
+          className="-my-1 py-1 text-xs text-muted underline-offset-4 hover:text-foreground hover:underline">
           {showTable ? "Show chart" : "Show table"}
         </button>
       </div>

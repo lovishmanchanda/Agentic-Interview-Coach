@@ -16,7 +16,7 @@ const VARIANTS = {
 };
 
 const SIZES = {
-  sm: "h-9 rounded-lg px-3.5 text-sm",
+  sm: "h-9 rounded-lg px-3.5 text-sm pointer-coarse:h-11", // 44 px on touch screens
   md: "h-11 rounded-xl px-5 text-sm",
   lg: "h-13 rounded-xl px-6 text-base",
 };

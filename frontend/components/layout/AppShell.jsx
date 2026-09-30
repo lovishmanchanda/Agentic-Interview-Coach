@@ -31,7 +31,7 @@ export default function AppShell({ children }) {
 
   // First-time profile setup is a focused flow: no navigation until the profile exists.
   if (pathname === "/profile/setup") {
-    return <main className="mx-auto max-w-2xl px-4 py-10 md:py-16">{children}</main>;
+    return <main id="main" tabIndex={-1} className="mx-auto max-w-2xl focus:outline-none px-4 py-10 md:py-16">{children}</main>;
   }
 
   return (
@@ -40,7 +40,7 @@ export default function AppShell({ children }) {
       <div className="contents print:hidden"><Sidebar /></div>
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="contents print:hidden"><Topbar /></div>
-        <main className={`mx-auto w-full max-w-5xl flex-1 px-4 pt-8 md:px-8 md:pb-10 ${focus ? "pb-8" : "pb-28"}`}>
+        <main id="main" tabIndex={-1} className={`mx-auto w-full max-w-5xl focus:outline-none flex-1 px-4 pt-8 md:px-8 md:pb-10 ${focus ? "pb-8" : "pb-28"}`}>
           <PageTransition>{children}</PageTransition>
         </main>
         {!focus && <div className="contents print:hidden"><StatusBar /></div>}

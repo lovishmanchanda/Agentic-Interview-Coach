@@ -57,7 +57,7 @@ export default function Handoff({ questions, indexed }) {
           <ul className="mt-5 flex flex-wrap gap-2" aria-label="Or ask ARIA">
             {more.map((q) => (
               <li key={q}>
-                <Link href={ask(q)} className="inline-flex rounded-full border border-border-strong bg-background/40 px-3.5 py-1.5 text-sm text-muted transition-colors hover:border-primary/60 hover:text-foreground">
+                <Link href={ask(q)} className="inline-flex items-center rounded-full border border-border-strong bg-background/40 px-3.5 py-1.5 pointer-coarse:min-h-11 text-sm text-muted transition-colors hover:border-primary/60 hover:text-foreground">
                   {q}
                 </Link>
               </li>

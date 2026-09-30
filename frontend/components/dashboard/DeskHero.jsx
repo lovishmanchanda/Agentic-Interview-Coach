@@ -67,8 +67,11 @@ export default function DeskHero({ firstName, role, company, data }) {
           {sheets[0] && <Button href={`/interview/report/${sheets[0].id}`} variant="secondary">Latest report</Button>}
         </div>
         {sheets.length > 0 && (
-          <nav aria-label="Reports on your desk" className="sr-only">
-            <ul>{sheets.map((s) => <li key={s.id}><Link href={`/interview/report/${s.id}`}>{s.label}, {s.date}: {s.score}/10</Link></li>)}</ul>
+          // Hidden until a keyboard user tabs into it: then it shows, so focus is never invisible.
+          <nav aria-label="Reports on your desk" className="sr-only focus-within:not-sr-only focus-within:mt-4 focus-within:rounded-2xl focus-within:border focus-within:border-border focus-within:bg-surface focus-within:p-3">
+            <ul className="space-y-1">{sheets.map((s) => (
+              <li key={s.id}><Link href={`/interview/report/${s.id}`} className="block rounded-lg px-2 py-1.5 text-sm hover:bg-raised">{s.label}, {s.date}: {s.score}/10</Link></li>
+            ))}</ul>
           </nav>
         )}
       </motion.div>

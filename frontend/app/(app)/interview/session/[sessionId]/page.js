@@ -1,10 +1,10 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import AgentStatus from "@/components/brand/AgentStatus";
-import CodingRoom from "@/components/coding/CodingRoom";
 import EvaluationCard from "@/components/interview/EvaluationCard";
 import QuestionTimer from "@/components/interview/QuestionTimer";
 import AnswerComposer from "@/components/interview/room/AnswerComposer";
@@ -12,9 +12,22 @@ import InterviewDone from "@/components/interview/room/InterviewDone";
 import RoomHeader from "@/components/interview/room/RoomHeader";
 import { EmptyStage, PastRound, StageRound, groupRounds } from "@/components/interview/room/Round";
 import Alert from "@/components/ui/Alert";
+import Skeleton from "@/components/ui/Skeleton";
 import { INTERVIEW_MODES, INTERVIEW_TYPES, topicLabel } from "@/lib/interviewOptions";
 import { connectInterview } from "@/lib/interviewSocket";
 import { TARGET_ROLES, labelFor } from "@/lib/profileOptions";
+
+// The coding room (editor, markdown statement, console) loads only when a coding problem is on screen, so a
+// technical or behavioural interview never downloads it. Monaco itself loads from its CDN on first use.
+const CodingRoom = dynamic(() => import("@/components/coding/CodingRoom"), {
+  ssr: false,
+  loading: () => (
+    <div role="status" aria-label="Loading the coding room" className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+      <Skeleton className="h-96 rounded-2xl" />
+      <Skeleton className="h-96 rounded-2xl" />
+    </div>
+  ),
+});
 
 const MAX_ANSWER = 5000;
 // While the server is between steps (see backend state_machine.py), say what it's doing.

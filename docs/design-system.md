@@ -295,3 +295,33 @@ Top to bottom:
 - **Page:** the header has ARIA's lamp glow. The sidebar's active conversation has a pill that glides between items, and updated conversations move with a layout animation. The welcome greeting springs in and its starters follow one by one. The input is one rounded field with the send button inside.
 
 **Fixed along the way:** `SplitHeading` headings revealed on scroll never appeared. Each word watched the viewport itself while clipped inside its mask, so it never counted as visible. The heading now watches the viewport and passes the cue to its words (landing sections included).
+
+## Quality pass (7.10)
+
+**Accessibility**
+- **axe-core (WCAG 2.2 A/AA + best practice)** was run in the browser on every page: landing, sign in, dashboard, start, a live and a finished interview, the coding room, a report, ARIA, profile, admin and 404. All pass after the fixes below.
+- **Contrast:** `--subtle` was 3.5–3.7:1 but used for small text across the app. It is now `#84848c` (4.7–5.3:1 on background, surface and raised). `--muted` moves to `#9d9da5` so the two greys stay distinct.
+- **Page titles:** every route has its own tab title ("Your desk · InterviewOS", "Report · InterviewOS"…), set by small metadata `layout.js` files beside the client pages.
+- **Keyboard:**
+  - A "Skip to content" link (first Tab stop on every page) jumps to `<main id="main">`.
+  - The activity calendar is one Tab stop with arrow-key movement (it was 84 stops).
+  - The desk's screen-reader list of reports shows itself when a keyboard user tabs into it, so focus is never invisible.
+  - Whole score-bar rows are the hover/focus target.
+- **The 3D backdrop** is `aria-hidden`: it's decoration behind every page, and each page says the same in text.
+- **Touch:** targets are ≥ 24 px everywhere (WCAG 2.5.8). Small buttons, tabs, chips and icon buttons grow to 44 px on touch screens (`pointer-coarse:`), and desktop stays compact.
+- **Reduced motion** (checked by reading the code, not live):
+  - The 3D renders one still frame; Lenis is off.
+  - Counters show their final value; typewriter and word reveals show the text at once.
+  - The spotlight and the handoff wire stop; a CSS rule stills everything else.
+- **No WebGL:** the room falls back to `RoomPoster`.
+
+**Performance** (the production build, measured in the preview pane):
+- **Landing:** LCP 2.2 s (was 2.8 s; the hero words now start 0.8 s into the spotlight intro instead of 1.15 s), CLS 0.
+- **Sign in:** LCP 0.09 s, CLS 0.
+- **Loaded on demand:** three.js only when a page shows the room; the coding room (editor, markdown statement, console) only when a coding problem is on screen; Monaco from its CDN on first use.
+
+**Browsers:** the CSS relies on Tailwind 4's minimums (Chrome 111+, Safari 16.4+, Firefox 128+: cascade layers, `color-mix`, `:has()`, `svh/dvh`). The cross-tab token refresh uses Web Locks when present and falls back when not. Only Chromium was exercised here.
+
+**Copy:** the remaining "Mentor" error messages (one on the page, two from the API) now speak as ARIA, and ARIA's loading state says "Reading your reports…".
+
+**Usability test:** `docs/usability-test.md`, a 30-minute moderated script with 11 tasks, wrap-up questions and a note sheet.

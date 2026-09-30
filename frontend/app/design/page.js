@@ -25,8 +25,8 @@ const COLOURS = [
     ["raised", "#1a1a1d", "Raised cards, inputs on cards"],
     ["border", "#26262a", "Hairlines"],
     ["border-strong", "#34343a", "Key-caps, focus-adjacent edges"],
-    ["subtle", "#6b6b72", "Decorative / disabled only (3.5:1)"],
-    ["muted", "#8b8b92", "Secondary text (5.1:1 on raised)"],
+    ["subtle", "#84848c", "Tertiary text: hints, timestamps (4.7:1 on raised)"],
+    ["muted", "#9d9da5", "Secondary text (6.4:1 on raised)"],
     ["foreground", "#ededed", "Body text (14.8:1)"],
   ] },
   { group: "Accents (sparingly)", items: [

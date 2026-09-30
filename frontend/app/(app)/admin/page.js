@@ -4,9 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 
 import PromptSettings from "@/components/admin/PromptSettings";
 import Alert from "@/components/ui/Alert";
+import Badge from "@/components/ui/Badge";
 import Card from "@/components/ui/Card";
 import ChoiceGroup from "@/components/ui/ChoiceGroup";
-import Spinner from "@/components/ui/Spinner";
+import Skeleton from "@/components/ui/Skeleton";
 import { api } from "@/lib/api";
 
 const REFRESH_MS = 15000;
@@ -16,13 +17,24 @@ const ms = (v) => (v == null ? "–" : v >= 1000 ? `${(v / 1000).toFixed(1)} s` 
 const pct = (v) => `${(v * 100).toFixed(1)}%`;
 const usd = (v) => `$${(v ?? 0).toFixed(v >= 1 ? 2 : 4)}`;
 
+/** A live number. Past its threshold it turns red and says so in words (not colour alone). */
 function Tile({ label, value, hint, warn }) {
   return (
-    <div className="rounded-xl border border-border bg-surface p-4">
+    <div className={`elevated rounded-2xl p-4 ${warn ? "border-danger/40" : ""}`}>
       <p className="text-xs text-muted">{label}</p>
-      <p className={`mt-1 text-2xl font-semibold tabular-nums ${warn ? "text-danger" : ""}`}>{value}</p>
-      {hint && <p className="mt-0.5 text-xs text-muted">{hint}</p>}
+      <p className={`mt-1.5 font-mono text-2xl font-medium tabular-nums ${warn ? "text-danger" : ""}`}>{value}</p>
+      {(hint || warn) && <p className="mt-0.5 text-xs text-muted">{warn ? "Above threshold" : null}{warn && hint ? " · " : null}{hint}</p>}
     </div>
+  );
+}
+
+function Header({ children }) {
+  return (
+    <header>
+      <p className="eyebrow">Operations</p>
+      <h1 className="mt-2 text-3xl font-semibold tracking-tight">Admin</h1>
+      {children}
+    </header>
   );
 }
 
@@ -90,11 +102,25 @@ export default function AdminPage() {
   }, [days]);
 
   if (loadError) {
-    return loadError.code === "admin_only"
-      ? <Alert tone="error" title="Admins only">This page needs an admin account (ADMIN_EMAILS on the server).</Alert>
-      : <Alert tone="error">{loadError.message}</Alert>;
+    return (
+      <div className="space-y-6">
+        <Header />
+        {loadError.code === "admin_only"
+          ? <Alert tone="error" title="Admins only">This page needs an admin account (ADMIN_EMAILS on the server).</Alert>
+          : <Alert tone="error">{loadError.message}</Alert>}
+      </div>
+    );
   }
-  if (!metrics || !usage || !prompts) return <Spinner label="Loading the dashboard…" />;
+  if (!metrics || !usage || !prompts) {
+    return (
+      <div className="space-y-6">
+        <Header />
+        <div role="status" aria-label="Loading the dashboard" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-24 rounded-2xl" />)}
+        </div>
+      </div>
+    );
+  }
 
   const totals = usage.by_day.reduce((t, r) => ({ calls: t.calls + r.calls, tokens: t.tokens + r.tokens,
     cost: t.cost + r.cost_usd, errors: t.errors + r.errors }), { calls: 0, tokens: 0, cost: 0, errors: 0 });
@@ -102,16 +128,15 @@ export default function AdminPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Admin</h1>
-        <p className="mt-1 text-sm text-muted">Live numbers cover the last {metrics.window_minutes} minutes on this server and refresh every 15 s.</p>
-      </div>
+      <Header>
+        <p className="mt-2 text-sm text-muted">Live numbers cover the last {metrics.window_minutes} minutes on this server and refresh every 15 s.</p>
+      </Header>
 
       {metrics.alerts.length > 0 ? (
         <Alert tone="error" title="Alerts firing">
           <ul className="list-disc pl-5">{metrics.alerts.map((a) => <li key={a.name}>{a.description}</li>)}</ul>
         </Alert>
-      ) : <p className="text-sm text-success">No alerts firing.</p>}
+      ) : <Badge tone="success">No alerts firing</Badge>}
 
       <section aria-labelledby="live" className="space-y-3">
         <h2 id="live" className="text-base font-semibold">Live</h2>
