@@ -14,13 +14,17 @@ export default function StatTile({ label, value, decimals = 0, suffix, delta, de
       <p className="mt-2 flex items-baseline gap-1.5">
         <span className="text-3xl font-semibold tracking-tight">{numeric ? <NumberTicker value={value} decimals={decimals} /> : value}</span>
         {suffix && <span className="text-sm text-muted">{suffix}</span>}
-        {typeof delta === "number" && delta !== 0 && (
-          <span className={`ml-1 text-xs font-medium ${delta > 0 ? "text-success" : "text-warning"}`}>
-            {delta > 0 ? "▲ +" : "▼ "}{delta.toFixed(deltaDecimals)}
-          </span>
-        )}
       </p>
-      {note && <p className="mt-1 text-xs text-muted">{note}</p>}
+      {(note || (typeof delta === "number" && delta !== 0)) && (
+        <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-muted">
+          {typeof delta === "number" && delta !== 0 && (
+            <span className={`font-medium ${delta > 0 ? "text-success" : "text-warning"}`}>
+              {delta > 0 ? "▲ +" : "▼ "}{delta.toFixed(deltaDecimals)}
+            </span>
+          )}
+          {note}
+        </p>
+      )}
     </div>
   );
 }

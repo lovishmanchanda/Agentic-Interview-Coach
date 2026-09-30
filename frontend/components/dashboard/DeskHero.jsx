@@ -3,59 +3,36 @@
 import { motion, useScroll, useTransform } from "motion/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { deskFraming } from "@/components/three/framings";
 import Button from "@/components/ui/Button";
-import { api } from "@/lib/api";
+import { nextStep } from "@/lib/dashboard";
 import { sheetsFromReports } from "@/lib/desk";
-import { topicLabel } from "@/lib/interviewOptions";
 import useMediaQuery from "@/lib/useMediaQuery";
 import { useScene, useSceneStore } from "@/store/sceneStore";
 
 const EASE = [0.16, 1, 0.3, 1];
 const HIT_AREA = "[data-desk-hit]";
 
-/** The one thing to do next, in order: finish what you started, drill your weakest topic, or begin. */
-function nextStepFrom(sessions, welcome, reportCount) {
-  const open = sessions.find((s) => !s.report_id && s.state !== "REPORT_READY");
-  if (open) return { title: "Resume your interview", detail: `${open.config.interview_type} · in progress`, href: `/interview/session/${open.session_id}` };
-  const weakest = welcome?.latest?.weakest_topic;
-  if (weakest) return { title: `Drill ${topicLabel(weakest)}`, detail: "Your weakest topic last time", href: `/interview/configure?focus=${encodeURIComponent(weakest)}` };
-  if (reportCount) return { title: "Take another interview", detail: "Keep the streak going", href: "/interview/configure" };
-  return { title: "Take your first interview", detail: "About fifteen minutes with VERA", href: "/interview/configure" };
-}
-
 /**
  * The top of the dashboard is a window onto your desk: the same room the sign-in camera flew to (the shared
  * SceneHost), so arriving here continues that shot instead of starting a new one. Your report sheets lie on the
  * desk (click one to open it) and the lamp lights the next thing to do. Scrolling fades the room away.
  * Keyboard and screen-reader users get the same actions as plain links below the greeting.
+ * `data` comes from useDashboardData (fetched once for the whole page).
  */
-export default function DeskHero({ firstName, role, company }) {
+export default function DeskHero({ firstName, role, company, data }) {
   const router = useRouter();
   const wide = useMediaQuery("(min-width: 768px)");
-  // Start from whatever is already on the desk (the sign-in move put the sheets there), so nothing blinks.
-  const [sheets, setSheets] = useState(() => useSceneStore.getState().props.desk?.reports ?? []);
-  const [next, setNext] = useState(null);
+  // Until the page's data arrives, keep whatever is already on the desk (the sign-in move put the sheets
+  // there), so nothing blinks.
+  const [initialSheets] = useState(() => useSceneStore.getState().props.desk?.reports ?? []);
+  const ready = data.status === "ready";
+  const sheets = ready ? sheetsFromReports(data.reports) : initialSheets;
+  const next = ready ? nextStep(data.sessions, data.welcome, data.reports.length) : null;
   const { scrollY } = useScroll();
   const opacity = useTransform(scrollY, [0, 520], [1, 0]);
-
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([
-      api.reports.list().catch(() => []),
-      api.interviews.list().catch(() => []),
-      api.mentor.welcome().catch(() => null),
-    ]).then(([reports, sessions, welcome]) => {
-      if (cancelled) return;
-      setSheets(sheetsFromReports(reports));
-      setNext(nextStepFrom(sessions, welcome, reports.length));
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useScene({
     preset: "desk",
@@ -85,12 +62,8 @@ export default function DeskHero({ firstName, role, company }) {
           Preparing for <span className="text-foreground">{role}</span>{company ? ` at ${company}` : ""}.
           {sheets.length > 0 ? ` ${sheets.length} report${sheets.length > 1 ? "s" : ""} on your desk.` : ""}
         </p>
-        <div className="mt-6 flex flex-wrap items-center gap-3">
-          {next ? (
-            <Button href={next.href} className="shadow-[0_0_40px_-10px_var(--primary)]">{next.title} <span aria-hidden="true">→</span></Button>
-          ) : (
-            <span className="h-11" />
-          )}
+        <div className="mt-6 flex min-h-11 flex-wrap items-center gap-3">
+          {next && <Button href={next.href} className="shadow-[0_0_40px_-10px_var(--primary)]">{next.title} <span aria-hidden="true">→</span></Button>}
           {sheets[0] && <Button href={`/interview/report/${sheets[0].id}`} variant="secondary">Latest report</Button>}
         </div>
         {sheets.length > 0 && (

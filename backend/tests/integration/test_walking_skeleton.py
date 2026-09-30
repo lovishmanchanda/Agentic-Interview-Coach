@@ -85,6 +85,12 @@ def test_full_skeleton_flow(app_client, gateway, rag):
     assert report["transcript"][2]["evaluation"]["model_answer_outline"]
 
     assert app_client.get("/api/v1/interviews", headers=headers).json()["data"][0]["report_id"] == report_id
+    # The reports list carries what the dashboard charts need, without fetching each report.
+    listed = app_client.get("/api/v1/reports", headers=headers).json()["data"][0]
+    assert listed["report_id"] == report_id and listed["overall"] == 6.5
+    assert listed["interview_type"] == "technical"
+    assert listed["per_topic_scores"] == report["per_topic_scores"] and listed["topics"] == list(report["per_topic_scores"])
+    assert isinstance(listed["duration_seconds"], int)
 
     # Mentor: vague question -> recency retrieval -> cites this session.
     gateway.script("generate", "You have solid hashing basics [1]; next, practise load factor and resizing [2].")

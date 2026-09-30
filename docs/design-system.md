@@ -194,3 +194,53 @@ The live demo is on `/design`: switch presets, drag the scroll dolly, hover for 
     - `isSigningOut()` stops AuthGuard from treating the cleared session as expired and bouncing to /login.
     - The landing page is prefetched.
     - Its words skip the spotlight-flicker delay when the room is already lit.
+
+## App shell (7.6)
+
+`components/layout/`, with destinations defined once in `lib/navigation.js`:
+- **Sidebar** (desktop):
+  - collapses to a 76 px icon rail, remembered per browser (`store/uiStore.js`)
+  - the active item carries an orange pill that slides between items (`layoutId`), with tooltips on the rail
+  - a Quick actions button at the bottom
+- **Top bar:** glass. It holds the page title (the logo on phones), "Jump to… ⌘K", and the account menu (initials; Profile, Admin for admins, Sign out → landing page).
+- **Command palette:** ⌘K / Ctrl+K from anywhere, on a native `<dialog>` with the combobox/listbox ARIA pattern (↑↓ Enter Esc).
+  - Suggestions come from your own data: resume an interview, drill your weakest topic, open your latest report.
+  - It also lists every destination, starting a practice or coding round, and sign out.
+  - Any other text becomes "Ask ARIA: …", which opens `/mentor?q=…` with the message pre-filled.
+- **Status line** (desktop): VERA's state (ready / interview in progress), ARIA's (knows N reports / reading new ones), your streak, and the ⌘K hint. The data comes from `store/shellStore.js`, loaded once per signed-in visit and cleared on sign-out.
+- **Phone tab bar:** Desk · Interview · ARIA · Profile, with a sliding pill and safe-area padding. Admin lives in the account menu.
+- **Focus pages:** the interview room hides the tab bar and the status line.
+- **Sticky offsets:** ARIA's input sits above the tab bar (`bottom-16`) and the status line (`md:bottom-9`). Side panels stick below the top bar (`top-20`).
+- **States:**
+  - error pages: "The lights *flickered.*"
+  - 404: a serif "404" under a spotlight, "This room is empty."
+  - app loading: page-shaped skeletons
+  - account loading: the breathing mark, "Opening your desk…"
+
+## Dashboard (7.7)
+
+`app/(app)/dashboard/page.js`. The data comes from `useDashboardData` (reports, interviews, ARIA's welcome and prep plans, fetched once in parallel) and is shaped by the pure functions in `lib/dashboard.js`. Nothing on the page is invented.
+
+Top to bottom:
+1. **Desk hero** (`DeskHero`, the shared 3D room). Report sheets lie on the desk and open their report on click. The lamp lights the next step: resume, drill your weakest topic, or start. Below the greeting are "Latest report" and a screen-reader list of the sheets.
+2. **KPI tiles** (`StatTile` + count-up):
+   - interviews completed
+   - latest score, with the change since the previous one (an arrow and sign, not colour alone)
+   - practice streak
+   - time in the seat
+3. **Score over time** (`ScoreTrend`, SVG): the dataviz single-series spec.
+   - One orange series: a 2 px line that draws in, 9 px markers with a surface ring, and a soft area fill.
+   - Gridlines at 0/2.5/5/7.5/10, with 5 and 7.5 dashed and named in the caption.
+   - Direct labels on the first and last point only.
+   - A crosshair + tooltip on pointer and ←/→ keys.
+   - A table view. The axis shows times when every point falls on the same day.
+4. **Where each topic stands** (`ScoreBars`): the latest score per topic, weakest first, with the change since last time in the tooltip/table.
+5. **Practice activity** (`ActivityHeatmap`): 12 weeks × 7 days.
+   - A single-hue ordinal orange ramp at 42 / 70 / 100 %: 2.2 / 4.1 / 7.2 : 1 against the card, so the faintest step clears the 2:1 floor.
+   - Hover or focus a day to read it; screen readers get a summary and per-day labels.
+6. **Ask ARIA** (`AskAria`): a question box and prompts built from your results, opening `/mentor?q=`. It also shows your latest company prep plan.
+7. **Your interviews** (`RecentInterviews`): filter by type (Tabs), score badges by tier, "In progress" rows resume, show all.
+
+**A new desk** (`EmptyDesk`) explains the loop in three steps instead of drawing empty charts.
+
+**Backend:** `GET /api/v1/reports` now includes `interview_type`, `per_topic_scores` and `duration_seconds`. This is read-only, and the walking-skeleton test asserts it.

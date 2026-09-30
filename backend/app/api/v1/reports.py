@@ -20,8 +20,13 @@ def _public(report: dict) -> dict:
 
 @router.get("")
 async def list_reports(user: CurrentUser, repo: RepoDep):
+    """Newest first. Carries what the dashboard charts need (score trend, topic mastery, practice time), so it
+    never has to fetch each report."""
     return ok([{"report_id": r["report_id"], "session_id": r["session_id"], "overall": r["scores"]["overall"],
-                "topics": list(r.get("per_topic_scores", {})), "generated_at": as_utc(r["generated_at"]).isoformat()}
+                "interview_type": r.get("interview_type", "technical"),
+                "topics": list(r.get("per_topic_scores", {})), "per_topic_scores": r.get("per_topic_scores", {}),
+                "duration_seconds": (r.get("stats") or {}).get("duration_seconds"),
+                "generated_at": as_utc(r["generated_at"]).isoformat()}
                for r in await repo.list_reports(user["_id"])])
 
 

@@ -67,7 +67,7 @@ export default function CodingRoom({ sessionId, question, draftCode, waiting, su
 
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-      <div className="lg:sticky lg:top-4 lg:self-start">
+      <div className="lg:sticky lg:top-20 lg:self-start">
         <ProblemPanel question={question} />
       </div>
 

@@ -22,13 +22,21 @@ function errorText(error) {
 
 function MentorView() {
   const router = useRouter();
-  const conversationParam = useSearchParams().get("c");
+  const params = useSearchParams();
+  const conversationParam = params.get("c");
+  const askParam = params.get("q"); // "Ask ARIA: …" from the quick-actions palette pre-fills the message
   const firstName = useAuthStore((s) => s.user?.name?.split(" ")[0]);
   const {
     welcome, welcomeError, conversations, activeId, messages, conversationStatus, sending, pendingKind, error,
     failedMessage, failedPrepare, loadWelcome, loadConversations, openConversation, newConversation, send, prepare,
   } = useMentorStore();
-  const [draft, setDraft] = useState("");
+  const [draft, setDraft] = useState(() => askParam ?? "");
+  const [prefilled, setPrefilled] = useState(askParam);
+  if (askParam && askParam !== prefilled) {
+    // Asked again from the palette while already here: show the new question (render-time sync, no effect).
+    setPrefilled(askParam);
+    setDraft(askParam);
+  }
   const [showPrepare, setShowPrepare] = useState(false);
 
   useEffect(() => {
@@ -117,7 +125,7 @@ function MentorView() {
         )}
 
         {conversationStatus !== "error" && !unavailable && (
-          <div className="sticky bottom-0 -mx-1 bg-background px-1 pt-2">
+          <div className="sticky bottom-16 -mx-1 bg-background px-1 pb-2 pt-2 md:bottom-9">{/* above the phone tab bar (4rem) and the desktop status line (2.25rem) */}
             {!showPrepare && !isNew && (
               <button type="button" onClick={() => setShowPrepare(true)} disabled={sending}
                 className="mb-1 text-xs font-medium text-primary hover:underline disabled:opacity-50">

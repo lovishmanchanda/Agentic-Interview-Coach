@@ -157,6 +157,9 @@ export const api = {
     resetPrompt: (name) => request(`/api/v1/admin/prompts/${name}`, { method: "DELETE" }),
     llmCalls: (params = {}) => request(`/api/v1/admin/llm-calls?${new URLSearchParams(params)}`),
   },
+  prep: {
+    plans: () => request("/api/v1/prep/plans"), // newest first: { plan_id, company_name, estimated_weeks, created_at }
+  },
   reports: {
     list: () => request("/api/v1/reports"), // newest first: { report_id, session_id, overall, topics, generated_at }
     get: (reportId) => request(`/api/v1/reports/${encodeURIComponent(reportId)}`),

@@ -42,7 +42,7 @@ export default function MentorSidebar({ conversations, activeId }) {
   const [open, setOpen] = useState(false);
   const count = conversations?.length ?? 0;
   return (
-    <aside aria-label="Conversations with ARIA" className="md:sticky md:top-4 md:self-start">
+    <aside aria-label="Conversations with ARIA" className="md:sticky md:top-20 md:self-start">
       <div className="flex items-center gap-2">
         <Button href="/mentor" variant="secondary" size="sm" className="flex-1 md:w-full">New conversation</Button>
         <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} aria-controls="mentor-history"

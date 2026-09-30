@@ -3,9 +3,9 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 
+import { LogoMark } from "@/components/brand/Logo";
 import Alert from "@/components/ui/Alert";
 import Button from "@/components/ui/Button";
-import Spinner from "@/components/ui/Spinner";
 import { clearUserData, isSigningOut } from "@/lib/session";
 import { useAuthStore } from "@/store/authStore";
 import { useProfileStore } from "@/store/profileStore";
@@ -60,10 +60,12 @@ export default function AuthGuard({ children }) {
   return children;
 }
 
+/** While your account loads: the mark, breathing, over whatever room is behind. Rarely seen for long. */
 function FullPageSpinner() {
   return (
-    <div className="flex min-h-screen items-center justify-center">
-      <Spinner label="Loading…" />
+    <div role="status" className="flex min-h-svh flex-col items-center justify-center gap-4">
+      <span className="animate-breathe"><LogoMark className="size-12" /></span>
+      <span className="font-mono text-[11px] uppercase tracking-[0.22em] text-muted">Opening your desk…</span>
     </div>
   );
 }

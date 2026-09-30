@@ -1510,7 +1510,7 @@ Known and accepted for now: tokens in `localStorage` (§12.1 trade-off; moving t
 | `GET` | `/api/v1/interviews/{session_id}/state` | ✅ | State machine view: `state`, `allowed_next`, progress, `state_history` |
 | `GET` | `/api/v1/questions` | ✅ | List questions (filtered) |
 | `GET` | `/api/v1/reports/{report_id}` | ✅ | Get interview report |
-| `GET` | `/api/v1/reports` | ✅ | List all reports |
+| `GET` | `/api/v1/reports` | ✅ | List your reports, newest first: `report_id`, `session_id`, `overall`, `interview_type`, `topics`, `per_topic_scores`, `duration_seconds`, `generated_at` (enough for the dashboard's trend, topic mastery and practice time without fetching each report) |
 | `POST` | `/api/v1/interviews/{id}/code/run` | ✅ | Run: `{ code, language }` → `ExecutionResult` on the current coding problem's visible tests (ungraded languages: run as written). Not recorded or scored. `CODE_RUNS_PER_MINUTE` per candidate (429 `rate_limited`); 409 `no_coding_question` when no coding problem is waiting |
 
 ### WebSocket Events

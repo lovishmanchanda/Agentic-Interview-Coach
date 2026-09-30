@@ -21,14 +21,14 @@ export function tierFor(score) {
 
 const pct = (v) => `${Math.max(0, Math.min(10, v)) * 10}%`;
 
-export default function ScoreBars({ title, description, rows, labelWidth = "7.5rem" }) {
+export default function ScoreBars({ title, description, rows, labelWidth = "7.5rem", className = "" }) {
   const id = useId();
   const [showTable, setShowTable] = useState(false);
   const [active, setActive] = useState(null);
 
   if (!rows?.length) return null;
   return (
-    <section className="rounded-xl border border-border bg-surface p-5" aria-labelledby={`${id}-title`}>
+    <section className={`rounded-2xl border border-border bg-surface p-5 sm:p-6 ${className}`} aria-labelledby={`${id}-title`}>
       <header className="mb-4 flex items-start justify-between gap-3">
         <div>
           <h2 id={`${id}-title`} className="text-base font-semibold">{title}</h2>
