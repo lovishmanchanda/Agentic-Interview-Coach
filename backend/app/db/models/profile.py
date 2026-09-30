@@ -14,13 +14,13 @@ PREPARATION_TOPICS = ("dsa", "system_design", "python", "machine_learning", "dbm
 
 
 class Personal(BaseModel):
-    name: str = Field(min_length=1, max_length=100)
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
     education: str = Field(default="", max_length=200)
     experience_level: ExperienceLevel = "fresher"
 
 
 class Target(BaseModel):
-    role: str = Field(min_length=1, max_length=100)
+    role: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
     company: str | None = Field(default=None, max_length=100)
     job_description: str | None = Field(default=None, max_length=50_000)
 

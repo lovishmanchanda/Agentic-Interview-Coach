@@ -6,6 +6,7 @@ import { useEffect } from "react";
 import Alert from "@/components/ui/Alert";
 import Button from "@/components/ui/Button";
 import Spinner from "@/components/ui/Spinner";
+import { clearUserData } from "@/lib/session";
 import { useAuthStore } from "@/store/authStore";
 import { useProfileStore } from "@/store/profileStore";
 
@@ -26,6 +27,8 @@ export default function AuthGuard({ children }) {
   useEffect(() => {
     if (!hasHydrated) return;
     if (!accessToken) {
+      // Also reached when the session ends without Sign out: it expired, or another tab signed out.
+      clearUserData();
       router.replace(`/login?next=${encodeURIComponent(pathname)}`);
       return;
     }

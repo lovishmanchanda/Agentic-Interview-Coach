@@ -1,7 +1,7 @@
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import AliasChoices, BaseModel, EmailStr, Field, field_validator
+from pydantic import AliasChoices, BaseModel, EmailStr, Field, StringConstraints, field_validator
 
 from app.utils.security import BCRYPT_MAX_BYTES
 
@@ -23,7 +23,7 @@ class UserOut(BaseModel):
 class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8)
-    name: str = Field(min_length=1, max_length=100)
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]  # "   " is not a name
 
     @field_validator("password")
     @classmethod

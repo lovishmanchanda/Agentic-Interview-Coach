@@ -13,6 +13,11 @@ export async function signOut() {
     // Best effort: the local session is cleared regardless.
   }
   clear();
+  clearUserData();
+}
+
+/** Drops the signed-in user's cached data, so the next account to sign in on this tab never sees it. */
+export function clearUserData() {
   useProfileStore.getState().reset();
   useMentorStore.getState().reset();
 }

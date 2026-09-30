@@ -2,7 +2,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
 
 from app.agents.prep.orchestrator import PrepOrchestrator
 from app.core.mentor.mentor_agent import MentorAgent, public_conversation
@@ -34,7 +34,7 @@ MentorDep = Annotated[MentorAgent, Depends(get_mentor)]
 
 
 class MentorMessageRequest(BaseModel):
-    message: str = Field(min_length=1, max_length=2_000)
+    message: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2_000)]  # blank: no AI call
     # Omitted: a new conversation. The server keeps the history; the client sends only the new message.
     conversation_id: str | None = Field(default=None, max_length=64)
 
@@ -43,12 +43,12 @@ class MentorMessageRequest(BaseModel):
 async def mentor_message(body: MentorMessageRequest, user: DailyLimitedUser, mentor: MentorDep, request: Request):
     enforce(request.app.state.limiters["mentor"], user["_id"],
             "You're sending messages quickly. Wait a moment and try again.")
-    return ok(await mentor.chat(candidate_id=user["_id"], message=body.message.strip() or body.message,
+    return ok(await mentor.chat(candidate_id=user["_id"], message=body.message,
                                 conversation_id=body.conversation_id))
 
 
 class PrepareRequest(BaseModel):
-    company: str = Field(min_length=1, max_length=60)
+    company: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=60)]
     jd_text: str | None = Field(default=None, max_length=50_000)
     weeks: int | None = Field(default=None, ge=1, le=12)
     conversation_id: str | None = Field(default=None, max_length=64)

@@ -61,8 +61,8 @@ export function connectInterview(sessionId, { onEvent, onStatus }) {
     try {
       await api.interviews.get(sessionId); // refreshes the access token if needed
     } catch (error) {
-      if (error.status === 0) {
-        scheduleReconnect(); // network error: keep trying
+      if (error.status === 0 || error.status >= 500) {
+        scheduleReconnect(); // network error, or the server is restarting: keep trying
       } else {
         onStatus?.("failed", error.message);
       }

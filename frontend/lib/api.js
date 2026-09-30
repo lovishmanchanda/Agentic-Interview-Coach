@@ -61,7 +61,34 @@ async function rawRequest(path, { method = "GET", body, token, cookie = false } 
   return payload?.data;
 }
 
-async function refreshTokens() {
+/** The access token another tab saved, if it is still good for at least 30 s. */
+function tokenFromOtherTab(staleToken) {
+  try {
+    const token = JSON.parse(window.localStorage.getItem("aic-auth"))?.state?.accessToken;
+    if (!token || token === staleToken) return null;
+    const { exp } = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+    return exp * 1000 > Date.now() + 30_000 ? token : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Tabs share one refresh cookie, and each refresh token works once: if two tabs refreshed together, the
+ * server would see a reused token, treat it as stolen and end every session. So refreshes run one tab at a
+ * time (Web Locks), and a tab that waited uses the token the other tab just got instead of refreshing again.
+ */
+function refreshTokens(staleToken) {
+  const run = async () => {
+    const shared = tokenFromOtherTab(staleToken);
+    if (!shared) return refreshWithCookie();
+    useAuthStore.getState().setTokens({ access_token: shared });
+    return shared;
+  };
+  return typeof navigator !== "undefined" && navigator.locks ? navigator.locks.request("aic-token-refresh", run) : run();
+}
+
+async function refreshWithCookie() {
   const { setTokens, clear } = useAuthStore.getState();
   try {
     // No token in the body: the browser sends the httpOnly refresh cookie.
@@ -69,6 +96,8 @@ async function refreshTokens() {
     setTokens(tokens);
     return tokens.access_token;
   } catch (error) {
+    // Offline, or the server is down or restarting: the session may still be good, so keep it.
+    if (error.status === 0 || error.status >= 500) throw error;
     clear();
     throw new ApiError({ status: 401, code: "session_expired", message: "Your session has ended. Please sign in again." });
   }
@@ -82,7 +111,7 @@ export async function request(path, { method, body, auth = true, cookie = false 
     if (!auth || !(error instanceof ApiError) || error.status !== 401 || !REFRESHABLE_CODES.has(error.code)) {
       throw error;
     }
-    refreshInFlight ??= refreshTokens().finally(() => {
+    refreshInFlight ??= refreshTokens(token).finally(() => {
       refreshInFlight = null;
     });
     const newToken = await refreshInFlight;

@@ -32,3 +32,10 @@ export const useAuthStore = create(
     },
   ),
 );
+
+// Keep tabs in step: signing in or out, or a refreshed token, in one tab reaches the others at once.
+if (typeof window !== "undefined") {
+  window.addEventListener("storage", (event) => {
+    if (event.key === "aic-auth" || event.key === null) useAuthStore.persist.rehydrate();
+  });
+}
