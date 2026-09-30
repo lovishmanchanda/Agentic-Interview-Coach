@@ -1,7 +1,7 @@
 import Badge from "@/components/ui/Badge";
 import { dimensionLabel } from "@/lib/interviewOptions";
 
-const TIER_TONE = { strong: "success", adequate: "primary", weak: "warning" };
+const TIER_TONE = { strong: "success", adequate: "neutral", weak: "warning" }; // orange stays for actions
 
 function List({ title, items, tone }) {
   if (!items?.length) return null;

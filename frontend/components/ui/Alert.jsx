@@ -1,7 +1,7 @@
 const TONES = {
   error: "border-danger/30 bg-danger-soft text-danger",
   success: "border-success/30 bg-success-soft text-success",
-  info: "border-primary/30 bg-primary-soft text-foreground",
+  info: "border-steel/30 bg-steel-soft text-foreground", // steel, not orange: orange is kept for actions
   warning: "border-warning/30 bg-warning-soft text-warning",
 };
 

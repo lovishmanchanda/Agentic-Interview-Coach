@@ -10,7 +10,7 @@ export default function GlobalError({ retry }) {
   return (
     <html lang="en">
       <body className="flex min-h-screen items-center justify-center bg-background px-4 text-foreground antialiased">
-        <title>Something went wrong · AI Interview Coach</title>
+        <title>Something went wrong · InterviewOS</title>
         <div role="alert" className="max-w-md text-center">
           <h1 className="text-2xl font-semibold">Something went wrong</h1>
           <p className="mt-3 text-muted">The app couldn&apos;t load. Your data is safe.</p>

@@ -6,7 +6,7 @@ import Button from "@/components/ui/Button";
 import { Input } from "@/components/ui/Field";
 
 const MAX_JD = 50000;
-const WEEK_OPTIONS = [["", "Let the Mentor decide"], ...[1, 2, 3, 4, 6, 8, 12].map((w) => [String(w), `${w} week${w > 1 ? "s" : ""}`])];
+const WEEK_OPTIONS = [["", "Let ARIA decide"], ...[1, 2, 3, 4, 6, 8, 12].map((w) => [String(w), `${w} week${w > 1 ? "s" : ""}`])];
 
 /**
  * Company preparation (Phase 3): a company, an optional timeline and an optional job description. The plan comes
@@ -28,7 +28,7 @@ export default function PrepareForm({ onSubmit, onCancel, busy }) {
       <div>
         <h2 className="text-base font-semibold">Prepare for a company</h2>
         <p className="mt-1 text-sm text-muted">
-          The Mentor looks up how the company interviews, compares it with your scores so far, and writes a week-by-week plan.
+          ARIA looks up how the company interviews, compares it with your scores so far, and writes a week-by-week plan.
         </p>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">

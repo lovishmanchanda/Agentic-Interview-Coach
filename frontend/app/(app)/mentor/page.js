@@ -3,6 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
+import { MentorAvatar } from "@/components/brand/AgentAvatar";
 import MentorChat from "@/components/mentor/MentorChat";
 import MentorInput from "@/components/mentor/MentorInput";
 import MentorSidebar from "@/components/mentor/MentorSidebar";
@@ -66,15 +67,20 @@ function MentorView() {
 
       <div className="flex min-h-[calc(100dvh-10rem)] min-w-0 flex-col gap-6">
         <header>
-          <h1 className="text-2xl font-semibold">Mentor</h1>
-          <p className="mt-1 text-sm text-muted">Answers come only from your own interview reports, with the sessions cited.</p>
+          <div className="flex items-center gap-3">
+            <MentorAvatar size="size-10" />
+            <div>
+              <h1 className="text-2xl font-semibold">ARIA</h1>
+              <p className="text-sm text-muted">Your mentor. Answers come only from your own interview reports, with the sessions cited.</p>
+            </div>
+          </div>
         </header>
 
         {unavailable && <Alert tone="error">{errorText({ code: "mentor_disabled" })}</Alert>}
         {welcome?.pending_reports > 0 && (
           <p className="text-xs text-muted">
             {welcome.pending_reports === 1 ? "One report is" : `${welcome.pending_reports} reports are`} still being
-            prepared for the Mentor, so answers may not include {welcome.pending_reports === 1 ? "it" : "them"} yet.
+            prepared for ARIA, so answers may not include {welcome.pending_reports === 1 ? "it" : "them"} yet.
           </p>
         )}
 

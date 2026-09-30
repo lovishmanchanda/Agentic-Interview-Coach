@@ -1083,6 +1083,9 @@ NEXT_PROBLEM or WRAP_UP
 
 **Duration Estimate**: 2–3 weeks
 
+> [!NOTE]
+> **Revised split (2026-09-30).** Phase 7 was re-planned around the InterviewOS brand (VERA the interviewer, ARIA the mentor) and a dark-only "interview room" design: a three.js chair under a spotlight on the landing page, the same room behind auth, and a desk with report sheets and a lamp on the dashboard. The work now runs as **7.1 Design foundation → 7.2 Motion + 3D foundations → 7.3 Component library → 7.4 Landing page → 7.5 Auth morph + onboarding → 7.6 App shell + navigation → 7.7 Signed-in dashboard → 7.8 Interview experience → 7.9 Report + Mentor chat → 7.10 Quality pass** (accessibility, responsive, performance, copy, usability test). The task lists below still apply; they are grouped into those steps. Design decisions: [design-system.md](design-system.md).
+
 **Why last:** by now every flow exists (interview, report, Mentor, drills, coding, voice), so screens are designed once, around the real content and states, instead of being redesigned after each phase.
 
 #### Tasks

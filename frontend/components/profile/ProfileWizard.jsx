@@ -14,7 +14,7 @@ import { useProfileStore } from "@/store/profileStore";
 import SkillsInput from "./SkillsInput";
 
 const STEPS = [
-  { key: "personal", title: "About you", description: "Helps the interviewer pitch questions at the right level." },
+  { key: "personal", title: "About you", description: "Helps VERA, your interviewer, pitch questions at the right level." },
   { key: "target", title: "Target role", description: "Questions and feedback focus on this role." },
   { key: "skills", title: "Skills", description: "What you know or want to be tested on." },
   { key: "preferences", title: "Preferences", description: "How you want to practise. You can change this any time." },

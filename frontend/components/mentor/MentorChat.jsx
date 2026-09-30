@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 
-import Spinner from "@/components/ui/Spinner";
+import AgentStatus from "@/components/brand/AgentStatus";
 
 import ChatBubble from "./ChatBubble";
 import PrepProgress from "./PrepProgress";
@@ -24,7 +24,7 @@ export default function MentorChat({ messages, sending, pendingKind }) {
             <div className="inline-flex rounded-2xl rounded-tl-sm border border-border bg-surface px-4 py-3">
               {pendingKind === "prep"
                 ? <PrepProgress withJd={Boolean(messages.at(-1)?.content?.includes("job description"))} />
-                : <Spinner label="Mentor is thinking…" />}
+                : <AgentStatus agent="mentor" text="Thinking…" />}
             </div>
           </li>
         )}

@@ -1,3 +1,4 @@
+import Logo from "@/components/brand/Logo";
 import Button from "@/components/ui/Button";
 
 const LOOP = [
@@ -11,10 +12,7 @@ export default function LandingPage() {
   return (
     <div className="min-h-screen">
       <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
-        <div className="flex items-center gap-2">
-          <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">AI</span>
-          <span className="font-semibold">Interview Coach</span>
-        </div>
+        <Logo />
         <nav className="flex items-center gap-2">
           <Button href="/login" variant="ghost">
             Sign in

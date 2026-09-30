@@ -1,80 +1,146 @@
 @import "tailwindcss";
 
-/* Design tokens. Components use these via Tailwind utilities (bg-surface, text-muted, …). */
+/*
+ * InterviewOS design tokens (Phase 7.1). Dark only: black and greys, accents used sparingly.
+ *   orange  the brand (and ARIA, the mentor's desk lamp): primary actions, the active item, focus, chart marks
+ *   steel   VERA, the interviewer's spotlight, and "the AI is working" states. Rare.
+ * Components use these through Tailwind utilities (bg-surface, text-muted, …).
+ *
+ * Checked with the dataviz validator against --surface (#121214), all pairs of brand + status:
+ * CVD separation ≥ 8.3 ΔE, normal-vision ≥ 16.3 ΔE, every mark ≥ 3:1. Text contrast (WCAG) on --raised:
+ * foreground 14.8, muted 5.1, primary 6.7, steel 5.5, success 7.8, warning 11.7, danger 4.7.
+ * Text on an orange fill is --primary-foreground (dark, 7.6:1); white on orange fails (2.6:1).
+ */
 :root {
-  --background: #f7f7fb;
-  --surface: #ffffff;
-  --surface-muted: #f1f2f7;
-  --border: #e3e5ee;
-  --foreground: #15172a;
-  --muted: #5d6278;
-  --primary: #5b5bd6;
-  --primary-hover: #4a4ac2;
-  --primary-soft: #ececfd;
-  --primary-foreground: #ffffff;
-  --success: #15803d;
-  --success-soft: #e8f6ee;
-  --danger: #c62f3b;
-  --danger-soft: #fdecee;
-  --warning: #a15c07;
-  --warning-soft: #fdf4e3;
-  /* Chart marks: validated (dataviz validate_palette.js) against --surface in each mode. */
-  --chart-mark: #5b5bd6;
-  --chart-mark-hover: #4a4ac2;
-}
+  color-scheme: dark;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0f1020;
-    --surface: #17182b;
-    --surface-muted: #1f2036;
-    --border: #2c2e48;
-    --foreground: #eceefa;
-    --muted: #a0a4c0;
-    --primary: #8b8bf5;
-    --primary-hover: #a3a3f8;
-    --primary-soft: #26274a;
-    --primary-foreground: #0f1020;
-    --success: #4ade80;
-    --success-soft: #16301f;
-    --danger: #f87171;
-    --danger-soft: #3a1a1f;
-    --warning: #fbbf24;
-    --warning-soft: #372a12;
-    --chart-mark: #7a7aee; /* --primary (#8b8bf5) is too light for marks on the dark surface */
-    --chart-mark-hover: #9595f3;
-  }
+  /* Greys, darkest to lightest */
+  --background: #0a0a0b;
+  --surface: #121214;
+  --raised: #1a1a1d;
+  --surface-muted: #1a1a1d; /* same as --raised; the name older components use */
+  --border: #26262a;
+  --border-strong: #34343a;
+  --subtle: #6b6b72; /* decorative / disabled only: 3.5:1, not for body text */
+  --muted: #8b8b92;
+  --foreground: #ededed;
+
+  /* Brand: orange */
+  --primary: #ff7a2e;
+  --primary-hover: #ff8f4f;
+  --primary-soft: #2a160d;
+  --primary-foreground: #0a0a0b;
+
+  /* VERA / AI at work: steel */
+  --steel: #7c93b5;
+  --steel-soft: #161b24;
+
+  /* Status (reserved; always shipped with an icon or a label, never colour alone) */
+  --success: #4cc38a;
+  --success-soft: #0f2419;
+  --warning: #f5d06a;
+  --warning-soft: #2a2410;
+  --danger: #e54d84;
+  --danger-soft: #2a0f19;
+
+  /* Chart marks: single series in the brand orange */
+  --chart-mark: #ff7a2e;
+  --chart-mark-hover: #ff9a5c;
+
+  /* Motion */
+  --duration-fast: 150ms;
+  --duration-base: 250ms;
+  --duration-slow: 400ms;
+  --duration-scene: 700ms;
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-surface: var(--surface);
+  --color-raised: var(--raised);
   --color-surface-muted: var(--surface-muted);
   --color-border: var(--border);
-  --color-foreground: var(--foreground);
+  --color-border-strong: var(--border-strong);
+  --color-subtle: var(--subtle);
   --color-muted: var(--muted);
+  --color-foreground: var(--foreground);
   --color-primary: var(--primary);
   --color-primary-hover: var(--primary-hover);
   --color-primary-soft: var(--primary-soft);
   --color-primary-foreground: var(--primary-foreground);
+  --color-steel: var(--steel);
+  --color-steel-soft: var(--steel-soft);
   --color-success: var(--success);
   --color-success-soft: var(--success-soft);
-  --color-danger: var(--danger);
-  --color-danger-soft: var(--danger-soft);
   --color-warning: var(--warning);
   --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
   --color-chart-mark: var(--chart-mark);
   --color-chart-mark-hover: var(--chart-mark-hover);
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  /* Fonts come from next/font in app/layout.js (self-hosted, no request to Google at runtime). */
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  /* Type scale: display for hero moments; the rest is Tailwind's default scale */
+  --text-display: 4.5rem;
+  --text-display--line-height: 1;
+  --text-display--letter-spacing: -0.04em;
+  --text-headline: 2.5rem;
+  --text-headline--line-height: 1.1;
+  --text-headline--letter-spacing: -0.03em;
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* The agents' "thinking" states: ARIA's lamp breathes, VERA's spotlight brightens */
+  --animate-breathe: breathe 2.4s ease-in-out infinite;
+  --animate-spotlight: spotlight 1.6s ease-in-out infinite;
+
+  @keyframes breathe {
+    0%, 100% { opacity: 0.7; transform: scale(0.9); }
+    50% { opacity: 1; transform: scale(1.08); }
+  }
+  @keyframes spotlight {
+    0%, 100% { opacity: 0.65; }
+    50% { opacity: 1; }
+  }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
+  font-feature-settings: "ss01", "cv11";
+}
+
+::selection {
+  background: var(--primary);
+  color: var(--primary-foreground);
 }
 
 :focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
+}
+
+/* Elevation is a border plus a faint top highlight, not a drop shadow (shadows vanish on black). */
+.elevated {
+  background: var(--raised);
+  border: 1px solid var(--border);
+  box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.04);
+}
+
+/* Reduced motion: every transition and animation becomes instant. Motion components also check this. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

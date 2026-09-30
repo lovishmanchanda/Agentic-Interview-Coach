@@ -1,8 +1,10 @@
-# AI Interview Coach
+# InterviewOS
 
-An AI interview coaching platform: adaptive live interviews (technical, behavioral, coding) over WebSockets, multi-dimensional evaluation, reports, and a RAG-powered Mentor that coaches from your own interview history.
+An AI interview coaching platform, with **VERA** (the interviewer agent) and **ARIA** (the mentor agent): adaptive live interviews (technical, behavioral, coding) over WebSockets, multi-dimensional evaluation, reports, and a RAG-powered Mentor that coaches from your own interview history.
 
 **Core loop:** Interview → Evaluate → Report → Talk to Mentor → Weak-Area Drill → Interview Again
+
+**Design:** dark-only, black and greys with sparing orange and steel accents. See [docs/design-system.md](docs/design-system.md); run the frontend in dev and open `/design` for the living style guide.
 
 **Stack:** Next.js 16 + Tailwind 4 · FastAPI (REST + WebSockets) · Cosmos DB (MongoDB API) · AI Gateway (Groq `gpt-oss-120b` / `gpt-oss-20b` for every LLM call) · `rag_tool` (Chroma + HF embeddings) · Piston on an Azure VM · Azure AI Speech
 

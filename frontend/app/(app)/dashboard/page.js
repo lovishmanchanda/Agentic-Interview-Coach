@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { InterviewerAvatar, MentorAvatar } from "@/components/brand/AgentAvatar";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -81,11 +82,13 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <Card title="Start an interview" description="A technical question with instant, structured feedback and a report.">
+        <Card title="Take the seat with VERA" description="Your interviewer: adaptive questions, instant structured feedback, and a report."
+          action={<InterviewerAvatar size="size-10" />}>
           <Button href="/interview/configure">Start interview</Button>
         </Card>
-        <Card title="Talk to your mentor" description="Ask about your strengths, gaps and what to practise next, grounded in your reports.">
-          <Button href="/mentor" variant="secondary">Open mentor</Button>
+        <Card title="Talk to ARIA, your mentor" description="Ask about your strengths, gaps and what to practise next, grounded in your reports."
+          action={<MentorAvatar size="size-10" />}>
+          <Button href="/mentor" variant="secondary">Open ARIA</Button>
         </Card>
       </div>
 
@@ -106,7 +109,7 @@ export default function DashboardPage() {
           <div>
             <dt className="text-muted">Skills</dt>
             <dd className="mt-1 flex flex-wrap gap-1.5">
-              {profile.skills.length ? profile.skills.map((s) => <Badge key={s} tone="primary">{s}</Badge>) : <span className="text-muted">None added</span>}
+              {profile.skills.length ? profile.skills.map((s) => <Badge key={s}>{s}</Badge>) : <span className="text-muted">None added</span>}
             </dd>
           </div>
         </dl>

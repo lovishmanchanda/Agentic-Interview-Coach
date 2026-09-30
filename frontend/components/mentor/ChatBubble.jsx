@@ -1,3 +1,4 @@
+import { AgentLabel } from "@/components/brand/AgentStatus";
 import Button from "@/components/ui/Button";
 import { topicLabel } from "@/lib/interviewOptions";
 
@@ -28,7 +29,7 @@ export default function ChatBubble({ message }) {
   if (message.role === "user") {
     return (
       <li className={`ml-auto max-w-[85%] ${message.pending ? "opacity-70" : ""}`}>
-        <div className="rounded-2xl rounded-tr-sm bg-primary px-4 py-3 text-sm text-primary-foreground">
+        <div className="rounded-2xl rounded-tr-sm border border-border-strong bg-raised px-4 py-3 text-sm">
           <p className="whitespace-pre-wrap break-words">{message.content}</p>
         </div>
       </li>
@@ -37,6 +38,7 @@ export default function ChatBubble({ message }) {
   return (
     <li className="max-w-[92%] sm:max-w-[85%]">
       <div className="rounded-2xl rounded-tl-sm border border-border bg-surface px-4 py-3 text-sm">
+        <AgentLabel agent="mentor" />
         <MentorAnswer text={message.content} sources={message.sources || []} />
         {(message.actions || []).filter((a) => a.type === "drill").map((a) => <DrillAction key={a.href} action={a} />)}
         <PracticeActions actions={(message.actions || []).filter((a) => a.type === "practice")} />

@@ -40,9 +40,9 @@ export default function MentorWelcome({ welcome, name, onPick, onPrepare }) {
   if (!welcome.report_count) {
     return (
       <section className="rounded-xl border border-border bg-surface p-6">
-        <h2 className="text-lg font-semibold">Your Mentor learns from your interviews</h2>
+        <h2 className="text-lg font-semibold">ARIA learns from your interviews</h2>
         <p className="mt-1 text-sm text-muted">
-          Once you finish an interview, its report comes here. Then the Mentor can:
+          Once you finish an interview, its report comes here. Then ARIA can:
         </p>
         <ul className="mt-3 list-disc space-y-1 pl-5 text-sm">
           {CAN_DO.map((item) => <li key={item}>{item}</li>)}

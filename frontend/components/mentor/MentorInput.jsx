@@ -30,7 +30,7 @@ export default function MentorInput({ value, onChange, onSend, sending, autoFocu
   return (
     <form onSubmit={submit} className="flex items-end gap-3">
       <div className="flex-1">
-        <label htmlFor="mentor-input" className="sr-only">Message the Mentor</label>
+        <label htmlFor="mentor-input" className="sr-only">Message ARIA</label>
         <textarea id="mentor-input" ref={ref} rows={1} value={value} maxLength={MAX_CHARS}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={(e) => {

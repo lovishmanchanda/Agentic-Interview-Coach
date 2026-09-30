@@ -1,3 +1,4 @@
+import { AgentLabel } from "@/components/brand/AgentStatus";
 import { EXECUTION_STATUS } from "@/lib/interviewOptions";
 
 import EvaluationCard from "./EvaluationCard";
@@ -8,8 +9,8 @@ function CodeSubmission({ entry }) {
   const status = run && (EXECUTION_STATUS[run.status]?.label || run.status);
   const failedVisible = (run?.test_results || []).filter((t) => !t.passed && t.input != null).slice(0, 3);
   return (
-    <div className="ml-auto max-w-[92%] space-y-2 rounded-2xl rounded-tr-sm border border-primary/30 bg-surface px-4 py-3 text-sm">
-      <p className="text-xs font-medium text-primary">
+    <div className="ml-auto max-w-[92%] space-y-2 rounded-2xl rounded-tr-sm border border-border-strong bg-raised px-4 py-3 text-sm">
+      <p className="text-xs font-medium text-muted">
         You · {entry.language} solution
         {run && <span className="text-muted"> · {status}{run.graded ? ` · ${run.passed_tests}/${run.total_tests} tests` : " · not graded"}</span>}
         {!run && <span className="text-muted"> · running…</span>}
@@ -33,8 +34,8 @@ export default function Transcript({ entries }) {
         <li key={`${entry.role}-${entry.question_id}-${index}`}>
           {entry.role === "interviewer" && (
             <div className={`max-w-[85%] rounded-2xl rounded-tl-sm border bg-surface px-4 py-3 text-sm ${
-              entry.is_follow_up ? "ml-4 border-primary/40" : "border-border"}`}>
-              <p className="mb-1 text-xs font-medium text-primary">Interviewer{entry.is_follow_up ? " · follow-up" : ""}</p>
+              entry.is_follow_up ? "ml-4 border-steel/40" : "border-border"}`}>
+              <AgentLabel agent="interviewer" detail={entry.is_follow_up ? "follow-up" : undefined} />
               <p className="whitespace-pre-wrap">{entry.content}</p>
             </div>
           )}
@@ -45,8 +46,8 @@ export default function Transcript({ entries }) {
             </div>
           )}
           {entry.role === "candidate" && !entry.code && (
-            <div className="ml-auto max-w-[85%] rounded-2xl rounded-tr-sm bg-primary px-4 py-3 text-sm text-primary-foreground">
-              <p className="mb-1 text-xs font-medium opacity-80">You</p>
+            <div className="ml-auto max-w-[85%] rounded-2xl rounded-tr-sm border border-border-strong bg-raised px-4 py-3 text-sm">
+              <p className="mb-1 text-xs font-medium text-muted">You</p>
               <p className="whitespace-pre-wrap">{entry.content}</p>
             </div>
           )}

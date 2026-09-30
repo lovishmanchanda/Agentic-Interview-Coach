@@ -6,7 +6,7 @@ const VARIANTS = {
   primary: "bg-primary text-primary-foreground hover:bg-primary-hover",
   secondary: "border border-border bg-surface text-foreground hover:bg-surface-muted",
   ghost: "text-muted hover:bg-surface-muted hover:text-foreground",
-  danger: "bg-danger text-white hover:opacity-90",
+  danger: "bg-danger text-primary-foreground hover:opacity-90",
 };
 
 const SIZES = { sm: "h-8 px-3 text-sm", md: "h-10 px-4 text-sm", lg: "h-12 px-6 text-base" };

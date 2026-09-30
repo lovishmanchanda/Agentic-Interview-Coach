@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 
+import Logo from "@/components/brand/Logo";
 import Badge from "@/components/ui/Badge";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
@@ -11,7 +12,7 @@ import { useAuthStore } from "@/store/authStore";
 export const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: "M3 12l9-8 9 8M5 10v10h14V10" },
   { href: "/interview/configure", match: "/interview", label: "Interview", icon: "M4 5h16v10H8l-4 4V5z" },
-  { href: "/mentor", label: "Mentor", icon: "M12 3l2.5 5 5.5.8-4 3.9.9 5.5L12 15.6 7.1 18.2 8 12.7 4 8.8l5.5-.8L12 3z" },
+  { href: "/mentor", label: "ARIA · Mentor", icon: "M12 3l2.5 5 5.5.8-4 3.9.9 5.5L12 15.6 7.1 18.2 8 12.7 4 8.8l5.5-.8L12 3z" },
   { href: "/profile", label: "Profile", icon: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm-7 9a7 7 0 0 1 14 0" },
 ];
 
@@ -32,8 +33,7 @@ export default function Sidebar({ open, onNavigate }) {
       }`}
     >
       <div className="flex h-16 items-center gap-2 border-b border-border px-5">
-        <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">AI</span>
-        <span className="font-semibold">Interview Coach</span>
+        <Logo />
       </div>
       <nav aria-label="Main" className="space-y-1 p-3">
         {items.map((item) => {

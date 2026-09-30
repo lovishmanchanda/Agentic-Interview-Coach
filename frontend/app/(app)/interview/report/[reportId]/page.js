@@ -15,7 +15,7 @@ import { formatDuration } from "@/lib/format";
 import { INTERVIEW_MODES, INTERVIEW_TYPES, topicLabel, dimensionLabel } from "@/lib/interviewOptions";
 import { labelFor } from "@/lib/profileOptions";
 
-const SEVERITY_TONE = { high: "warning", medium: "primary", low: "neutral" };
+const SEVERITY_TONE = { high: "warning", medium: "neutral", low: "neutral" };
 
 /** A headline number: sentence-case label, the value, and an optional note. */
 function StatTile({ label, value, note }) {
@@ -85,7 +85,7 @@ export default function ReportPage() {
           <p className="mt-1 flex items-baseline gap-2">
             <span className="text-5xl font-semibold">{overall}</span>
             <span className="text-lg text-muted">/ 10</span>
-            <Badge tone={{ strong: "success", adequate: "primary", weak: "warning" }[tierFor(overall)]}>{tierFor(overall)}</Badge>
+            <Badge tone={{ strong: "success", adequate: "neutral", weak: "warning" }[tierFor(overall)]}>{tierFor(overall)}</Badge>
           </p>
           {subScores.length > 0 && (
             <p className="mt-1 text-sm text-muted">

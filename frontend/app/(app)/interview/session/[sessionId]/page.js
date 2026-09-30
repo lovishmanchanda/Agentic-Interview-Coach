@@ -9,6 +9,7 @@ import QuestionTimer, { ElapsedClock } from "@/components/interview/QuestionTime
 import Transcript from "@/components/interview/Transcript";
 import Alert from "@/components/ui/Alert";
 import Button from "@/components/ui/Button";
+import AgentStatus from "@/components/brand/AgentStatus";
 import Spinner from "@/components/ui/Spinner";
 import { INTERVIEW_MODES, INTERVIEW_TYPES, topicLabel } from "@/lib/interviewOptions";
 import { connectInterview } from "@/lib/interviewSocket";
@@ -225,7 +226,7 @@ export default function InterviewSessionPage() {
         }}
         maxLength={MAX_ANSWER}
         disabled={!waiting}
-        placeholder={waiting ? "Type your answer…" : "Waiting for the interviewer…"}
+        placeholder={waiting ? "Type your answer…" : "Waiting for VERA…"}
         className="min-h-40 w-full rounded-xl border border-border bg-surface p-4 text-sm focus:border-primary focus:outline-none disabled:opacity-60"
       />
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -272,7 +273,7 @@ export default function InterviewSessionPage() {
         <CodingRoom key={coding.question_id} sessionId={sessionId} question={coding} draftCode={draftCode}
           waiting={waiting} submitting={processing} socketRef={socketRef}
           submittedResult={codeResult?.question_id === coding.question_id ? codeResult : null} onSubmit={submitCode} />
-        {busyText && !error && <Spinner label={busyText} />}
+        {busyText && !error && <AgentStatus agent="interviewer" text={busyText} />}
         {!serious && evaluation && <EvaluationCard evaluation={evaluation.evaluation} />}
         {serious && <p className="text-xs text-muted">Serious mode: scores and feedback appear in your report at the end. Hidden tests show pass/fail only.</p>}
         {transcript.length > 1 && (
@@ -319,7 +320,7 @@ export default function InterviewSessionPage() {
         <section aria-live="polite" aria-label="Interviewer" className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
           {stage?.is_follow_up && <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">Follow-up</p>}
           {stage ? <p className="whitespace-pre-wrap text-lg leading-relaxed">{stage.content}</p> : null}
-          {busyText && !reportId && !error && <div className="mt-4"><Spinner label={busyText} /></div>}
+          {busyText && !reportId && !error && <div className="mt-4"><AgentStatus agent="interviewer" text={busyText} /></div>}
         </section>
 
         {timer && <div className="rounded-xl border border-border bg-surface px-4 py-3">{timer}</div>}
@@ -349,7 +350,7 @@ export default function InterviewSessionPage() {
       {statusBar}
 
       <Transcript entries={transcript} />
-      {busyText && !reportId && !error && <Spinner label={busyText} />}
+      {busyText && !reportId && !error && <AgentStatus agent="interviewer" text={busyText} />}
 
       {finished ? finishedCard : (
         <div className="space-y-3">
