@@ -100,7 +100,7 @@ export default function AuthShell({ children }) {
         )}
       </main>
 
-      <motion.p animate={{ opacity: leaving ? 0 : 1 }}
+      <motion.p aria-hidden="true" animate={{ opacity: leaving ? 0 : 1 }}
         className="pointer-events-none fixed bottom-8 left-8 z-10 hidden font-mono text-[11px] uppercase tracking-[0.22em] text-muted lg:block">
         Sc. 02 — Before the interview
       </motion.p>

@@ -1,0 +1,76 @@
+# InterviewOS on one Linux server: Caddy (automatic HTTPS) → frontend + backend, with MongoDB and Piston on a
+# private Docker network. Only Caddy is reachable from the internet (ports 80/443).
+# Guide: docs/deployment.md, "Path 1". From the repository root:
+#   docker compose -f deploy/vps/docker-compose.yml --env-file .env up -d --build
+# Needs in .env: APP_DOMAIN, API_DOMAIN, JWT_SECRET, GROQ_API_KEY, HF_TOKEN (+ ADMIN_EMAILS, optional).
+
+name: interviewos
+
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?set APP_DOMAIN in .env, e.g. app.example.com}
+      API_DOMAIN: ${API_DOMAIN:?set API_DOMAIN in .env, e.g. api.example.com}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data        # TLS certificates
+      - caddy-config:/config
+    depends_on: [frontend, backend]
+
+  frontend:
+    build:
+      context: ../../frontend
+      args:
+        NEXT_PUBLIC_API_URL: https://${API_DOMAIN}   # baked into the browser bundle at build time
+    restart: unless-stopped
+    expose: ["3000"]
+
+  backend:
+    build:
+      context: ../..
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    env_file: [../../.env]        # secrets: JWT_SECRET, GROQ_API_KEY, HF_TOKEN, ADMIN_EMAILS…
+    environment:                  # these override .env: they describe this stack
+      APP_ENV: prod
+      COSMOS_CONNECTION_STRING: mongodb://mongo:27017
+      USE_INMEMORY_DB: "false"
+      CHROMA_PATH: /srv/data/chroma
+      SEED_DIR: /srv/data/seed
+      PISTON_URL: http://piston:2000/api/v2
+      CORS_ORIGINS: '["https://${APP_DOMAIN}"]'
+      REFRESH_COOKIE_SAMESITE: lax  # app. and api. share a site
+      FORWARDED_ALLOW_IPS: "*"      # only Caddy can reach this container, so trust its X-Forwarded-For
+    volumes:
+      - chroma:/srv/data/chroma     # ARIA's index survives restarts and rebuilds
+    expose: ["8000"]
+    depends_on:
+      mongo: { condition: service_healthy }
+      piston: { condition: service_started }
+
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes: [mongo-data:/data/db]
+    # No published port: only the backend on this private network can reach it.
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      retries: 10
+
+  piston:
+    image: ghcr.io/engineer-man/piston
+    restart: unless-stopped
+    privileged: true              # Piston's sandbox (isolate) needs it; no published port
+    volumes: [piston-data:/piston]
+    expose: ["2000"]
+
+volumes:
+  caddy-data:
+  caddy-config:
+  chroma:
+  mongo-data:
+  piston-data:

@@ -498,7 +498,7 @@ flowchart TD
     CODE --> SUBMIT[Candidate clicks Submit\nWS CODE_SUBMIT code + language]
 
     SUBMIT --> HARNESS[Server: test_harness wraps code\nwith ALL test cases incl. hidden]
-    HARNESS --> PISTON[Gateway.execute_code → Piston on Azure VM\npython · c · c++ · java · javascript]
+    HARNESS --> PISTON[Gateway.execute_code → Piston (self-hosted)\npython · c · c++ · java · javascript]
 
     PISTON --> RESULT["ExecutionResult\nstatus · stdout · stderr · runtime\nper-test pass/fail"]
 
@@ -543,7 +543,7 @@ flowchart LR
     WRAP --> GW[AIGateway.execute_code]
     RAW --> GW
     GW --> CLIENT[sandbox_client\nPOST PISTON_URL/execute\nX-API-Key · language · version · files · stdin]
-    CLIENT --> PISTON[Piston on Azure VM]
+    CLIENT --> PISTON[Piston (self-hosted)]
     PISTON --> PARSE[test_harness.grade\nmarker lines → compare with expected]
 
     PARSE --> UNIFIED["ExecutionResult\n{ status, stdout, stderr, runtime_ms,\npassed_tests, total_tests, test_results[] }"]
@@ -825,7 +825,7 @@ flowchart TD
     GW_METHODS --> CHROMA[Chroma\nMentor index]
     GW_METHODS --> AZURE_SPEECH[Azure AI Speech\nSTT and TTS]
     GW_METHODS --> AZURE_SEARCH[Azure AI Search\ncompany + JD, Phase 3]
-    GW_METHODS --> PISTON[Piston on Azure VM]
+    GW_METHODS --> PISTON[Piston (self-hosted)]
 
     GW -.->|"Applied to every call"| LOG2[Token usage logging\n+ per-session budget]
     GW -.-> RETRY[Retry with exponential backoff]

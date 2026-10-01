@@ -1,0 +1,12 @@
+# Caddy gets and renews HTTPS certificates for both names automatically (their DNS A records must point at this
+# server first). WebSockets (/ws/interview/…) are proxied as-is.
+
+{$APP_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy frontend:3000
+}
+
+{$API_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy backend:8000
+}

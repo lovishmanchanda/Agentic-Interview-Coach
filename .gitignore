@@ -52,3 +52,12 @@ docs/archive/
 
 # Evaluator eval runs (evaluation/interview_eval/run_evaluator_eval.py)
 evaluation/results/
+
+# Working docs: planning, design notes and our own guides. Kept on this PC, never pushed.
+docs/implementation_plan.md
+docs/plan-review.md
+docs/interview-agent-implementation-plan.md
+docs/modules/coding-sandbox.md
+docs/modules/rag-tool/TEAM_HANDOFF.md
+docs/usability-test.md
+docs/design-system.md

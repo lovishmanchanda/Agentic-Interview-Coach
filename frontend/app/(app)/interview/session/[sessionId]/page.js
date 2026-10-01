@@ -16,6 +16,7 @@ import Skeleton from "@/components/ui/Skeleton";
 import { INTERVIEW_MODES, INTERVIEW_TYPES, topicLabel } from "@/lib/interviewOptions";
 import { connectInterview } from "@/lib/interviewSocket";
 import { TARGET_ROLES, labelFor } from "@/lib/profileOptions";
+import { useShellStore } from "@/store/shellStore";
 
 // The coding room (editor, markdown statement, console) loads only when a coding problem is on screen, so a
 // technical or behavioural interview never downloads it. Monaco itself loads from its CDN on first use.
@@ -147,6 +148,8 @@ export default function InterviewSessionPage() {
             }
             setReportId(payload.report_id);
             setAnnouncement("Interview complete. Your report is ready.");
+            // The status line and ⌘K suggestions (latest report, streak, what ARIA knows) are now out of date.
+            useShellStore.getState().load({ force: true });
             break;
           case "ERROR":
             setProcessing(false);

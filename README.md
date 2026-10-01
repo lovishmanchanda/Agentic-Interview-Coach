@@ -1,16 +1,59 @@
 # InterviewOS
 
-An AI interview coaching platform, with **VERA** (the interviewer agent) and **ARIA** (the mentor agent): adaptive live interviews (technical, behavioral, coding) over WebSockets, multi-dimensional evaluation, reports, and a RAG-powered Mentor that coaches from your own interview history.
+> **Take the seat.** Practise real interviews with **VERA**. Improve with **ARIA**, a mentor that remembers every session you've had.
 
-**Core loop:** Interview → Evaluate → Report → Talk to Mentor → Weak-Area Drill → Interview Again
+InterviewOS is an AI interview coach built as one continuous place: *the interview room*. You arrive at an empty chair under a spotlight, sit down for a live interview with VERA, get an honest report, and talk it through with ARIA at your desk. Every interview makes the next one better, because nothing you do is forgotten.
 
-**Design:** dark-only, black and greys with sparing orange and steel accents. See [docs/design-system.md](docs/design-system.md); run the frontend in dev and open `/design` for the living style guide.
+**The loop:** Interview → Evaluate → Report → Reflect with ARIA → Drill your weakest topic → Interview again
 
-**Stack:** Next.js 16 + Tailwind 4 · FastAPI (REST + WebSockets) · Cosmos DB (MongoDB API) · AI Gateway (Groq `gpt-oss-120b` / `gpt-oss-20b` for every LLM call) · `rag_tool` (Chroma + HF embeddings) · Piston on an Azure VM · Azure AI Speech
+## Meet the two agents
 
-## Run it locally (no cloud keys, no Docker)
+| | Who | What they do |
+|---|---|---|
+| **VERA** | *Virtual Evaluator & Responsive Assessor*, the interviewer; the room's cool spotlight | Runs technical, behavioural (STAR) and live-coding interviews. Adapts difficulty to your answers, follows up when an answer is thin, gives one hint on request, and scores every answer on several dimensions. |
+| **ARIA** | *Adaptive Reflection & Intelligent Assistance*, the mentor; the desk's warm lamp | Answers questions about your own interviews, citing the exact report. Explains where you lost marks, tracks progress, writes study plans, prepares you for a specific company, and sends you into drills. |
 
-Two terminals:
+## What's on the site
+
+| Page | What you get |
+|---|---|
+| **Landing** (`/`) | A 3D interview room (an empty chair under a spotlight) with a scroll-driven story of the loop, the two agents, interview types, a sample report and an FAQ. |
+| **Sign in / Create account** | One card that morphs between sign-in and sign-up in the same room, no page reload. Signing in or out is a smooth camera move. |
+| **Onboarding** | Four short steps: about you, target role and company (optional JD), skills, preferences. |
+| **Your desk** (`/dashboard`) | Your reports lie on a 3D desk as printed sheets; the lamp lights your next step. Below: KPIs, score over time, where each topic stands, a 12-week practice calendar, Ask ARIA and every interview. |
+| **Start an interview** | One-click presets (Quick practice, Behavioural round, Coding round, Full mock, *Drill your weakest topic*) or Customise everything. VERA sums up what's coming in her own words. |
+| **The interview room** | One question at a time on a lit stage, arriving word by word; earlier rounds fold away. An answer box docked at the bottom (⌘/Ctrl + Enter), a timer ring, hints, and a score ring with feedback after each answer (practice mode). Serious mode is quieter: scores only at the end. |
+| **The coding room** | Problem statement, a Monaco editor in the InterviewOS theme, Run examples / Submit (hidden tests too), your approach, and a console with pass/fail per test. Python is graded; JS, Java, C++ and C run as written. |
+| **The report** | A story: the score and VERA's summary, how you scored (per question, topic and dimension), what went well, what to fix, your next steps, the full evidence, and finally the handoff: *VERA has passed your report to ARIA*. Printable / save as PDF. |
+| **ARIA** (`/mentor`) | Chat grounded in your reports with citation chips (hover to see the source). Replies write themselves out, and drill and practice buttons appear under them. "Prepare me for Google" builds a week-by-week company plan. |
+| **Everywhere** | ⌘K quick actions, a status line ("VERA ready · ARIA knows 3 reports · 4-day streak"), a phone tab bar, and skip links and full keyboard support. |
+| **Admin** (`/admin`) | For `ADMIN_EMAILS` only: live errors and latency, tokens and cost per prompt version, and prompt A/B switching without a deploy. |
+
+**Design:** dark only, black and greys with sparing orange (the brand, ARIA's lamp) and steel (VERA's light). The 3D room is built entirely in code (no model files) with three.js. It meets WCAG 2.2 AA (checked with axe on every page), respects reduced motion, and falls back to a still image without WebGL.
+
+## Tech stack
+
+| Layer | Built with |
+|---|---|
+| Frontend | Next.js 16 (App Router), React 19, Tailwind CSS 4, Zustand, Motion, Lenis |
+| 3D | three.js + React Three Fiber + postprocessing (bloom, filmic tone mapping) |
+| Backend | FastAPI (REST + WebSockets), Pydantic, PyMongo async |
+| Database | MongoDB (Azure Cosmos DB for MongoDB or Atlas in production; an in-memory double locally) |
+| AI | Groq `openai/gpt-oss-120b` (VERA, reports, ARIA) and `gpt-oss-20b` (evaluation), all through one AI Gateway with token budgets and cost tracking |
+| ARIA's memory | `rag_tool`: Chroma + Hugging Face `all-MiniLM-L6-v2` embeddings, intent-routed retrieval with citations |
+| Code runner | [Piston](https://github.com/engineer-man/piston), self-hosted and optional (sandboxed, separate from the app) |
+| Quality | 564 backend tests, AI eval suites (evaluator, interviewer, questions, ARIA), CI on every push |
+
+```
+ Browser (Next.js) ──REST──▶ FastAPI ──▶ MongoDB
+        │                      │  ├──▶ AI Gateway ──▶ Groq (LLMs) · Hugging Face (embeddings)
+        └──WebSocket (live ────┘  ├──▶ ARIA (rag_tool + Chroma on disk)
+           interview)             └──▶ Piston (your own code runner, optional)
+```
+
+## Run it locally
+
+No Docker or cloud account needed. You need Python 3.12 and Node 22. Two terminals:
 
 ```bash
 cd backend
@@ -25,86 +68,113 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:3000 and register, or sign in as the auto-seeded dev user **dev@example.com / dev-password-123**. API docs are at http://localhost:8000/docs.
+Open http://localhost:3000 and create an account, or sign in as the auto-seeded local dev user **dev@example.com / dev-password-123** (this user only exists when `APP_ENV=local`). API docs: http://localhost:8000/docs (local only).
 
-`USE_INMEMORY_DB=true` runs on an in-memory MongoDB double that is re-seeded on every restart (data doesn't persist). With `APP_ENV=local` a dev-only JWT secret is used, and the AI Gateway is real Groq when `GROQ_API_KEY` is set in `.env` (the scripted `FakeAIGateway` otherwise).
+That's enough to click through every screen: without keys the backend uses a scripted fake AI. `USE_INMEMORY_DB=true` needs no database, but all data resets when the backend restarts.
 
-**With real MongoDB instead:** `docker compose up --build`, then `docker compose exec backend python -m scripts.seed --dev-user`. Or point `COSMOS_CONNECTION_STRING` at any MongoDB/Cosmos instance and run `python -m scripts.seed --dev-user` from `backend/`.
+### Settings and keys (`.env`)
 
-Copy `.env.example` → `.env` (repo root) and `frontend/.env.example` → `frontend/.env.local` to change settings. Never commit `.env`.
-
-## Tests
+Copy the example and fill in what you need. [`.env.example`](.env.example) explains every setting.
 
 ```bash
-cd backend && pytest -q                  # unit + integration, in-memory DB + fake gateway, no keys
-cd backend && python -m scripts.seed --check   # validate question-bank seed JSON
-cd backend && .venv/bin/python ../evaluation/interview_eval/run_evaluator_eval.py   # evaluator accuracy vs hand scores (live Groq, ~10 min)
-cd frontend && npm run lint && npm run build
+cp .env.example .env
 ```
 
-CI runs all of these on every push/PR (`.github/workflows/ci.yml`).
-
-## Start here
-
-| Doc | What it's for |
-|---|---|
-| [docs/implementation_plan.md](docs/implementation_plan.md) | Master plan: stack, repo layout, phases 0–7 (7 = UI/UX design, last), execution order & MVP cut, verification |
-| [docs/architecture.md](docs/architecture.md) | Components, Cosmos schema, AI Gateway, WebSocket/REST contract (§13 is the event source of truth) |
-| [docs/flow.md](docs/flow.md) | User journeys, state machine, coding, Mentor and report flows |
-| [docs/interview-agent-implementation-plan.md](docs/interview-agent-implementation-plan.md) | The Interview Agent ReAct loop and its tools |
-| [docs/plan-review.md](docs/plan-review.md) | What changed from the previous plan, why, and the new features |
-
-## Status
-
-| Area | Where | Status |
+| For | Set | Where to get it |
 |---|---|---|
-| **Phase 0 — Foundations** | | ✅ Done |
-| Config, JSON logging (request/user/session IDs), error envelope | `backend/app/config.py`, `app/utils/` | ✅ |
-| Cosmos DB layer: collections, indexes, repositories | `backend/app/db/` | ✅ |
-| Auth: register / login / refresh (rotation + reuse detection) / logout, roles | `backend/app/core/auth/`, `app/api/v1/auth.py` | ✅ |
-| Candidate profile API | `backend/app/api/v1/profiles.py` | ✅ |
-| AI Gateway interface + `FakeAIGateway` + token budget | `backend/app/gateway/` | ✅ (real providers from Phase 1) |
-| Question bank seed (20 questions incl. 3 coding problems with hidden tests) | `data/seed/question_bank/`, `backend/scripts/seed.py` | ✅ |
-| Frontend: landing, login, register, profile wizard, dashboard shell | `frontend/app/`, `components/`, `store/`, `lib/api.js` | ✅ |
-| Local dev without Azure, Docker Compose, CI | `docker-compose.yml`, `.github/workflows/ci.yml` | ✅ |
-| Mentor RAG (`rag_tool`) | `backend/app/core/mentor/rag_tool/` | ✅ Built. Starts when `HF_TOKEN` is set. [Guide](docs/modules/rag-tool/INTEGRATION.md) |
-| Coding sandbox | `backend/app/core/coding/` | ✅ Rebuilt in Phase 4 with the `plan-review.md` §C fixes. The original `sandbox_tool/` stays local (gitignored) and is superseded. [Guide](docs/modules/coding-sandbox.md) |
-| **Phase 1 — Interview engine** | | ✅ Done |
-| 1.0 Walking skeleton: one question → Groq evaluation → report → RAG index → Mentor cites it | `backend/app/core/interview/engine.py`, `app/api/ws.py`, `frontend/app/(app)/interview/` | ✅ Verified live on Groq + HF |
-| Groq AI Gateway (`gpt-oss-120b` / `gpt-oss-20b`, JSON validation, tool calls, token budget) | `backend/app/gateway/groq_gateway.py` | ✅ (`python -m scripts.check_groq` for a live check) |
-| 1.1 Question bank + question engine: 1–5 questions per interview, picked for role and level; Groq writes one when the bank runs dry | `backend/app/core/interview/question_engine.py`, `prompts/interviewer/` | ✅ |
-| 1.10 Report generator: Groq writes the summary, weak areas, recommendations and study plan; the numbers are always computed | `backend/app/core/interview/report_generator.py`, `prompts/report/` | ✅ |
-| 1.11 Interview UI: serious-mode room, question timer, report score cards and charts | `frontend/app/(app)/interview/`, `frontend/components/charts/ScoreBars.jsx` | ✅ |
-| 1.9 WebSocket flow: validated protocol + contract test, draft autosave, practice hints, heartbeat and resilient reconnects | `backend/app/api/ws_protocol.py`, `frontend/lib/interviewSocket.js` | ✅ |
-| 1.6 Interviewer agent: opening, follow-ups written from your answer, transitions and closing on Groq `gpt-oss-120b`; every move validated by the engine | `backend/app/agents/interview_agent.py` | ✅ |
-| 1.8 Adaptation engine: difficulty follows performance, one follow-up on partial answers, per-topic scores, drills revisit the weakest topic | `backend/app/core/interview/adaptation_engine.py` | ✅ |
-| 1.7 Evaluators: technical + behavioral (STAR), behavioral interviews, 48-answer evaluator test set (`evaluation/`) | `backend/app/core/evaluation/`, `evaluation/interview_eval/run_evaluator_eval.py` | ✅ |
-| 1.3 Interview state machine: validated transitions, state history, crash/reconnect recovery, `GET /interviews/{id}/state` | `backend/app/core/interview/state_machine.py` | ✅ |
-| 1.2 Interview configuration: type, practice/serious mode, role, level, difficulty, company, question count, focus topics (Weak-Area Drill) | `backend/app/db/models/interview.py`, `frontend/app/(app)/interview/configure/` | ✅ |
-| Mentor: generic "where am I weakest?" questions answered from recent sessions; markdown replies | `core/mentor/rag_tool/service.py`, `frontend/components/mentor/` | ✅ |
-| **Phase 6 — Observability, AI evals, cost** | | ✅ Done |
-| Every AI call recorded (`llm_calls`: prompt version, tokens, cost, latency, errors), admin dashboard (`/admin`), alerts, daily token cap per user | `backend/app/gateway/usage.py`, `app/utils/metrics.py`, `app/api/v1/admin.py`, `frontend/app/(app)/admin/` | ✅ |
-| Prompt registry: switch versions, A/B split and roll back without a deploy | `backend/app/core/prompts.py`, admin page | ✅ |
-| AI quality evals with trend history: interviewer agent (12 scenarios), question quality (LLM judge), evaluator and Mentor sets | `evaluation/agent_eval/`, `evaluation/question_eval/`, `evaluation/trends.py` | ✅ |
-| Refresh token in an httpOnly cookie (web app) | `backend/app/api/v1/auth.py`, `frontend/lib/api.js` | ✅ |
-| **Phase 3 — Company preparation** | | ✅ Done |
-| "Prepare me for Google": company research (10 curated + AI-researched, cached), JD analysis, gap analysis from your scores, week-by-week plan with practice buttons, inside the Mentor | `backend/app/agents/prep/`, `prompts/prep/`, `data/seed/companies/`, `frontend/components/mentor/PrepareForm.jsx` | ✅ |
-| **Phase 4 — Coding interviews** | | ✅ Done (verified on the Piston VM) |
-| Live coding: Monaco editor, Run / Submit, 18 problems, Python graded against every test incl. hidden, code evaluator, coding in reports | `backend/app/core/coding/`, `app/core/evaluation/code_evaluator.py`, `frontend/components/coding/` | ✅ (needs `PISTON_URL`) |
-| Time-limit wrap-up (`MAX_INTERVIEW_MINUTES`) | `backend/app/core/interview/adaptation_engine.py` | ✅ |
-| **Phase 2 — Mentor** | | ✅ Done |
-| Background report indexing with retries and a catch-up sweep; embeddings through the AI Gateway | `backend/app/core/mentor/indexer.py`, `app/gateway/embeddings.py` | ✅ |
-| Mentor agent: versioned prompt, saved conversations, Weak-Area Drill button, welcome from your latest report | `backend/app/core/mentor/mentor_agent.py`, `app/api/v1/mentor.py`, `prompts/mentor/` | ✅ |
-| Mentor UI: conversation sidebar, welcome and starters, citation chips, drill button | `frontend/app/(app)/mentor/`, `frontend/components/mentor/`, `store/mentorStore.js` | ✅ |
-| Mentor eval: 21 cases (grounding, declines, injection, citations) | `evaluation/mentor_eval/run_mentor_eval.py` | ✅ |
+| Real interviews, reports and ARIA's replies | `GROQ_API_KEY` | Free tier: https://console.groq.com/keys |
+| ARIA's search over your reports | `HF_TOKEN` (a "Read" token) | Free: https://huggingface.co/settings/tokens |
+| Coding interviews | `PISTON_URL` | Your own Piston (below). Leave it empty and coding is hidden. |
+| A real database | `COSMOS_CONNECTION_STRING` (and `USE_INMEMORY_DB=false`) | Any MongoDB, e.g. `docker compose up --build` |
 
-## Layout
+`.env` is gitignored, so your keys stay on your PC. Never commit it. The frontend has one public setting, `NEXT_PUBLIC_API_URL`, in `frontend/.env.example`; `NEXT_PUBLIC_*` values end up in the browser, so they must never be secrets.
+
+### Coding interviews: run your own code runner (optional)
+
+Candidates' code runs on [Piston](https://github.com/engineer-man/piston), a sandboxed runner you host yourself. The project doesn't ship or share one. With Docker (Linux, or Docker Desktop on macOS/Windows):
+
+```bash
+docker run --privileged -d -p 2000:2000 -v piston-data:/piston --name piston ghcr.io/engineer-man/piston
+```
+```bash
+curl -X POST http://localhost:2000/api/v2/packages -H "Content-Type: application/json" -d '{"language":"python","version":"3.12.0"}'
+```
+
+Then set `PISTON_URL=http://localhost:2000/api/v2` in `.env` and restart the backend. Python is graded against every test. Optionally install `node`, `java` and `gcc` the same way (`curl http://localhost:2000/api/v2/packages` lists what's available); those languages run as written but aren't graded. Don't expose Piston to the internet without a firewall or an API-key proxy.
+
+**With a real MongoDB:** `docker compose up --build`, then `docker compose exec backend python -m scripts.seed --dev-user`.
+
+## Tests and checks
+
+```bash
+cd backend && pytest -q                            # 564 unit + integration tests; no keys needed
+cd backend && python -m scripts.seed --check       # validate the question bank and company seed data
+cd frontend && npm run lint && npm run build       # lint + production build
+cd backend && .venv/bin/python ../evaluation/interview_eval/run_evaluator_eval.py   # evaluator accuracy (live Groq)
+```
+
+CI runs the first three on every push and pull request ([.github/workflows/ci.yml](.github/workflows/ci.yml)).
+
+## Deploy
+
+**[docs/deployment.md](docs/deployment.md)** has step-by-step guides. Pick one:
+
+| Path | What it is | Good for |
+|---|---|---|
+| **One VPS with Docker** | Everything, including Piston, on a single Linux server behind Caddy (automatic HTTPS). Any provider: Hetzner, DigitalOcean, Lightsail, Oracle Cloud free tier… | Cheapest full setup, coding included |
+| **Vercel + Render + MongoDB Atlas** | Managed hosting with free/cheap tiers; Piston on a small VM of your own | Quickest public demo |
+| **Azure** | App Service + Cosmos DB + Key Vault | Teams already on Azure |
+
+All paths need the same things: one backend instance with a persistent disk (for ARIA's index) and WebSockets enabled, MongoDB, HTTPS on both sides, secrets in the host's environment, and `APP_ENV=prod`.
+
+## Project structure
 
 ```
-backend/    FastAPI app (app/api, core, agents, gateway, voice, db, utils), tests, scripts
-frontend/   Next.js app (app/, components/, store/, lib/)
-prompts/    Versioned prompts (interviewer, evaluator, mentor, report)
-data/seed/  question_bank seed JSON
-evaluation/ AI quality eval sets
-docs/       Plans, architecture, module guides
+backend/     FastAPI: api/ (REST + WebSocket), core/ (interviews, evaluation, coding, ARIA, auth),
+             agents/ (VERA, company prep), gateway/ (all AI calls), db/, utils/; tests/, scripts/
+frontend/    Next.js: app/ (pages), components/ (three/, landing/, interview/, coding/, report/, mentor/, ui/ …),
+             lib/ (API client, socket), store/ (state)
+prompts/     Versioned prompts for VERA, the evaluators, reports, ARIA and company prep
+data/seed/   Question bank (incl. 18 coding problems with hidden tests) and 10 curated companies
+evaluation/  AI quality evals and their datasets
+docs/        Architecture, flows, deployment, project structure, module guides
+deploy/vps/  One-server production setup (Docker Compose + Caddy for HTTPS)
 ```
+
+What every file does: **[docs/project-structure.md](docs/project-structure.md)**.
+
+## Security and privacy
+
+- **Auth:** bcrypt passwords, 30-minute JWT access tokens, and rotating refresh tokens in an httpOnly, Secure cookie, with reuse detection. (The access token is kept in `localStorage` so a reload keeps you signed in; moving it to memory plus a strict CSP is on the roadmap.)
+- **Limits:** rate limits on login, sign-up, ARIA, interviews, code runs and company prep, plus a daily AI token cap per user.
+- **Every AI call goes through one gateway** that records tokens, cost and errors. Prompts and answers are not stored unless `LLM_TRACE_CONTENT=true`.
+- **ARIA's isolation:** she only ever reads the signed-in user's own reports.
+- **Code:** it runs in your own Piston sandbox, never on the app server.
+- **Production mode:** API docs are off, errors never include stack traces, the frontend sends security headers, and Docker images run as non-root and exclude `.env`.
+
+## Documentation
+
+| Doc | What it covers |
+|---|---|
+| [docs/architecture.md](docs/architecture.md) | Components, database schema, AI Gateway, the REST/WebSocket contract |
+| [docs/flow.md](docs/flow.md) | User journeys and the interview state machine |
+| [docs/deployment.md](docs/deployment.md) | Deploying: VPS with Docker, Vercel + Render + Atlas, or Azure |
+| [docs/project-structure.md](docs/project-structure.md) | What every folder and file does |
+| [docs/modules/rag-tool/INTEGRATION.md](docs/modules/rag-tool/INTEGRATION.md) | The RAG module behind ARIA's memory |
+
+## Status and roadmap
+
+**Built:**
+- Phase 0: foundations
+- Phase 1: the interview engine with VERA
+- Phase 2: ARIA
+- Phase 3: company preparation
+- Phase 4: coding interviews
+- Phase 6: observability, AI evals and cost
+- Phase 7: the InterviewOS design, 3D room and accessibility pass
+
+**Next:**
+- Voice interviews (Phase 5)
+- Email verification and password reset
+- A full Content-Security-Policy
+- Running more than one backend instance: shared rate limits and a hosted vector store

@@ -34,7 +34,7 @@ The AI Interview Coach is a full-stack AI platform composed of four distinct lay
 |---|---|---|
 | **Presentation** | User interface, real-time communication | Next.js + JavaScript + Tailwind CSS |
 | **Application** | Business logic, state management, API | Python + FastAPI + Pydantic |
-| **Intelligence** | LLM, agents, evaluation, voice, code execution | Groq (every LLM call: interviewer, evaluators, reports, Mentor) + Hugging Face (embeddings) + Azure AI Speech + Piston (self-hosted on Azure VM) |
+| **Intelligence** | LLM, agents, evaluation, voice, code execution | Groq (every LLM call: interviewer, evaluators, reports, Mentor) + Hugging Face (embeddings) + Azure AI Speech + Piston (self-hosted: each deployment runs its own) |
 | **Data** | Persistence, search, file storage | Azure Cosmos DB + Chroma (Mentor RAG, via `rag_tool`; Azure AI Search later) + Azure AI Search (company/JD, Phase 3) + Azure Blob Storage |
 
 ### Core Architectural Principles (Non-Negotiable)
@@ -87,7 +87,7 @@ flowchart TD
     end
 
     subgraph EXTERNAL["Self-hosted"]
-        PISTON["Piston on Azure VM\npython · c · c++ · java · javascript\nX-API-Key, TLS / IP-restricted"]
+        PISTON["Piston (self-hosted)\npython · c · c++ · java · javascript\nX-API-Key, TLS / IP-restricted"]
     end
 
     FE <-->|"HTTPS REST"| API
@@ -832,7 +832,7 @@ flowchart TD
 
     subgraph AI["Azure AI Services"]
         AOAI2["Groq API\ngpt-oss-120b (interviewer, reports, Mentor)\ngpt-oss-20b (evaluation)\nTool calling + JSON output"]
-        PISTON_VM["Azure VM: Piston\nCode execution\npython · c · c++ · java · javascript"]
+        PISTON_VM["Piston (self-hosted VM)\nCode execution\npython · c · c++ · java · javascript"]
         SPEECH["Azure AI Speech\nSTT: Batch transcription\nTTS: Neural voice synthesis\nSDK: azure-cognitiveservices-speech"]
         SEARCH["Azure AI Search\ncompany-knowledge index\njob-descriptions index\n(Mentor index moves here later)"]
     end
@@ -867,7 +867,7 @@ flowchart TD
 | **Groq (gpt-oss-120b / gpt-oss-20b)** | Every LLM call: generate questions, evaluate answers, produce reports, run the Interview Agent's tool loop, Mentor answers, research companies, analyze JDs | Own interview state, make routing decisions, embeddings |
 | **Hugging Face Inference** | Mentor embeddings (`all-MiniLM-L6-v2`, 384-dim) | Chat |
 | **Chroma** | Mentor RAG index (rebuildable, §5.4) | Store canonical data |
-| **Piston (Azure VM)** | Execute candidate code in python, c, c++, java, javascript with resource limits | Grade (the harness does that), store state |
+| **Piston (self-hosted)** | Execute candidate code in python, c, c++, java, javascript with resource limits | Grade (the harness does that), store state |
 | **Azure AI Speech (STT)** | Convert candidate voice audio to text transcript | Process meaning, evaluate content |
 | **Azure AI Speech (TTS)** | Synthesize interviewer text responses into audio | Generate the text itself |
 | **Azure AI Search** | Company knowledge and JD indexes (Phase 3); Mentor index later | Store structured application data |
@@ -1274,7 +1274,7 @@ flowchart LR
     TOOL --> HARNESS["runner appended\nall test cases incl. hidden"]
     HARNESS --> GW["AIGateway.execute_code()"]
     GW --> CLIENT["sandbox_client.py\n(only Piston caller)"]
-    CLIENT --> PISTON["Piston on Azure VM"]
+    CLIENT --> PISTON["Piston (self-hosted)"]
     TOOL -- "ExecutionResult" --> ENGINE
     ENGINE -- "WS CODE_RESULT\n(hidden tests: count only in serious)" --> FE
     ENGINE --> CODE_EVAL["CodeEvaluator"]
@@ -1471,9 +1471,9 @@ What was checked, and what changed:
 
 Known and accepted for now: tokens in `localStorage` (§12.1 trade-off; moving the refresh token to an httpOnly cookie is Phase 6), registration says when an email is already registered, refresh-token rows aren't expired from the database (Cosmos TTL works only on `_ts`), limits are per process.
 
-### 12.4 Piston VM
+### 12.4 Piston (your own code runner)
 
-- Plain HTTP + `X-API-Key` today. Put TLS in front of it, **or** restrict the VM's network security group to the App Service outbound IPs.
+- Plain HTTP + `X-API-Key` today. Put TLS in front of it, **or** firewall it so only the backend's outbound IPs can reach it (see docs/deployment.md).
 - `PISTON_API_KEY` lives in Key Vault / `.env` only; never in frontend code, logs or error messages.
 - Resource limits are enforced by Piston's per-runtime config (CPU time, memory, output size).
 
