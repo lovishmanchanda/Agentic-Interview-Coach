@@ -1,6 +1,8 @@
 """Usage and cost from llm_calls (implementation_plan.md 6.5): daily caps and the admin reports."""
 from datetime import datetime, timedelta, timezone
 
+from app.db.client import aggregate_list
+
 
 def _day_start(days_ago: int = 0) -> datetime:
     now = datetime.now(timezone.utc)
@@ -13,10 +15,10 @@ class UsageRepository:
         self.sessions = db["interview_sessions"]
 
     async def tokens_today(self, candidate_id: str) -> int:
-        rows = await self.calls.aggregate([
+        rows = await aggregate_list(self.calls, [
             {"$match": {"candidate_id": candidate_id, "at": {"$gte": _day_start()}}},
             {"$group": {"_id": None, "tokens": {"$sum": "$tokens"}}},
-        ]).to_list(length=1)
+        ], length=1)
         return int(rows[0]["tokens"]) if rows else 0
 
     async def report(self, days: int = 7) -> dict:
@@ -24,10 +26,10 @@ class UsageRepository:
         match = {"$match": {"at": {"$gte": since}}}
 
         async def group(key, extra=None):
-            return await self.calls.aggregate([match, {"$group": {
+            return await aggregate_list(self.calls, [match, {"$group": {
                 "_id": key, "calls": {"$sum": 1}, "tokens": {"$sum": "$tokens"}, "cost_usd": {"$sum": "$cost_usd"},
                 "errors": {"$sum": {"$cond": [{"$eq": ["$status", "ok"]}, 0, 1]}},
-                "latency_ms": {"$avg": "$latency_ms"}, **(extra or {})}}]).to_list(length=1000)
+                "latency_ms": {"$avg": "$latency_ms"}, **(extra or {})}}], length=1000)
 
         def rows(items, name):
             out = [{name: r["_id"], "calls": r["calls"], "tokens": r["tokens"], "cost_usd": round(r["cost_usd"], 4),

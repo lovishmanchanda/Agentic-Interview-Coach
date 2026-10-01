@@ -6,6 +6,7 @@ from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, Field
 
 from app.core.prompts import all_prompt_names, available_versions
+from app.db.client import aggregate_list
 from app.db.repositories.interview_repo import as_utc
 from app.db.repositories.usage_repo import UsageRepository
 from app.dependencies import AdminUser
@@ -36,11 +37,11 @@ async def prompts(_: AdminUser, request: Request):
     version has done: evaluations' average score and the interviewer agent's outcomes, for A/B comparisons."""
     db = request.app.state.db
     settings = {d["name"]: d for d in await db["prompt_settings"].find({}, {"_id": 0}).to_list(length=500)}
-    evals = {r["_id"]: r for r in await db["evaluations"].aggregate([
-        {"$group": {"_id": "$prompt_version_used", "n": {"$sum": 1}, "avg_score": {"$avg": "$overall_score"}}}]).to_list(200)}
+    evals = {r["_id"]: r for r in await aggregate_list(db["evaluations"], [
+        {"$group": {"_id": "$prompt_version_used", "n": {"$sum": 1}, "avg_score": {"$avg": "$overall_score"}}}], 200)}
     agent = {}
-    for r in await db["agent_runs"].aggregate([
-            {"$group": {"_id": {"v": "$prompt_version", "o": "$outcome"}, "n": {"$sum": 1}}}]).to_list(500):
+    for r in await aggregate_list(db["agent_runs"], [
+            {"$group": {"_id": {"v": "$prompt_version", "o": "$outcome"}, "n": {"$sum": 1}}}], 500):
         agent.setdefault(r["_id"]["v"], {})[r["_id"]["o"]] = r["n"]
     out = []
     for name in all_prompt_names():

@@ -3,6 +3,7 @@
 Uses PyMongo's native async client (Motor is deprecated). Locally this points at plain MongoDB;
 tests inject an in-memory database with the same async API.
 """
+import inspect
 import logging
 
 from pymongo import ASCENDING, DESCENDING, AsyncMongoClient
@@ -10,6 +11,16 @@ from pymongo import ASCENDING, DESCENDING, AsyncMongoClient
 from app.config import Settings
 
 log = logging.getLogger(__name__)
+
+async def aggregate_list(collection, pipeline: list[dict], length: int | None = None) -> list[dict]:
+    """Runs an aggregation and returns its documents. PyMongo's async client returns the cursor from an *awaited*
+    aggregate(); the in-memory test database (Motor-style) returns it directly. Use this, never .aggregate() raw:
+    the difference only shows against a real MongoDB, which is how it once broke production."""
+    cursor = collection.aggregate(pipeline)
+    if inspect.isawaitable(cursor):
+        cursor = await cursor
+    return await cursor.to_list(length=length)
+
 
 # Collections from architecture.md §5 (plus refresh_tokens for auth rotation).
 COLLECTIONS = [

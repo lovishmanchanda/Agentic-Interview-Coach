@@ -93,6 +93,16 @@ def create_app(settings: Settings | None = None, *, db=None, gateway=None, rag=N
         "prep": SlidingWindowLimiter(settings.prep_plans_per_hour, 3600),
     }
 
+    @app.middleware("http")
+    async def unhandled_errors(request: Request, call_next):
+        """Registered before CORS, so it runs inside it: an unexpected error becomes the standard 500 envelope *with*
+        CORS headers. Without this the browser can't read the 500 and reports "can't reach the server" instead."""
+        try:
+            return await call_next(request)
+        except Exception:  # noqa: BLE001 -- logged with its traceback; the client gets no internals
+            log.exception("unhandled_error")
+            return JSONResponse(fail("internal_error", "An unexpected error occurred"), status_code=500)
+
     app.add_middleware(
         CORSMiddleware, allow_origins=settings.cors_origins, allow_credentials=True,
         allow_methods=["*"], allow_headers=["*"], expose_headers=["X-Request-ID"],
