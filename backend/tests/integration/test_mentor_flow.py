@@ -5,7 +5,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.core.mentor.rag_tool import RagService
-from app.core.mentor.rag_tool.service import NO_DATA_MESSAGE
 from app.db.seed import load_seed_questions, seed_question_bank
 from app.main import create_app
 from tests.fakes import GOOD_EVALUATION, HashEmbeddings, drain_indexing
@@ -56,7 +55,7 @@ def test_a_conversation_is_saved_and_its_history_feeds_the_next_turn(app_client,
     prompt = call["prompt"]
     assert "user: How am I doing?" in prompt
     assert "assistant: Solid hashing basics. Next, load factor." in prompt  # stale [n] removed
-    assert call["context"].prompt_version == "mentor/mentor_v1" and call["context"].candidate_id
+    assert call["context"].prompt_version == "mentor/mentor_v2" and call["context"].candidate_id
 
     listed = app_client.get("/api/v1/mentor/conversations", headers=headers).json()["data"]
     assert [c["conversation_id"] for c in listed] == [conversation_id]
@@ -88,12 +87,16 @@ def test_conversations_are_private(app_client, gateway):
     assert app_client.get("/api/v1/mentor/conversations", headers=bob_headers).json()["data"] == []
     hijack = _ask(app_client, bob_headers, "What did she say?", conversation_id)
     assert hijack.status_code == 404 and hijack.json()["error"]["code"] == "conversation_not_found"
-    # Bob's own Mentor has no reports to draw on, whatever he asks about.
-    calls_before = len(gateway.calls_of("generate"))
+    # Bob's own ARIA has no reports to draw on, whatever he asks about: she answers from the general prompt,
+    # which carries no excerpts (Ada's or anyone's), and any stray citation is stripped.
+    gateway.script("generate", "None of your reports cover that yet [1].", "In general, buckets hold colliding keys.")
     for message in ("How am I doing?", "Explain hash map buckets and chaining"):
         reply = _ask(app_client, bob_headers, message).json()["data"]
-        assert reply["answer"] == NO_DATA_MESSAGE and reply["sources"] == []
-    assert len(gateway.calls_of("generate")) == calls_before  # no LLM call without data
+        assert reply["sources"] == [] and "[1]" not in reply["answer"]
+        call = gateway.calls_of("generate")[-1]
+        assert call["context"].prompt_version == "mentor/mentor_general_v1"
+        assert "Ada's answer" not in call["prompt"] and "Report excerpts" not in call["prompt"]
+        assert "haven't finished an interview yet" in call["prompt"]
 
 
 def test_drill_request_gets_a_prefilled_weak_area_drill_link(app_client, gateway):
@@ -120,8 +123,9 @@ def test_no_reports_means_no_drill_and_the_welcome_state(app_client, gateway):
     _, headers = _signup(app_client)
     welcome = app_client.get("/api/v1/mentor/welcome", headers=headers).json()["data"]
     assert welcome == {"mentor_available": True, "report_count": 0, "pending_reports": 0, "latest": None}
+    gateway.script("generate", "None of your reports cover that yet. Take a practice interview first.")
     reply = _ask(app_client, headers, "Drill me on my weak spots").json()["data"]
-    assert reply["answer"] == NO_DATA_MESSAGE and reply["actions"] == []
+    assert reply["answer"].startswith("None of your reports") and reply["actions"] == [] and reply["sources"] == []
     # Even a no-data reply is part of the conversation.
     assert app_client.get("/api/v1/mentor/conversations", headers=headers).json()["data"][0]["message_count"] == 2
 

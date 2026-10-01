@@ -11,7 +11,7 @@ import { useAuthStore } from "@/store/authStore";
 
 /** The last word, under a spotlight of its own, and the footer. */
 export default function FinalCta() {
-  const signedIn = useAuthStore((s) => s.hasHydrated && Boolean(s.accessToken));
+  const signedIn = useAuthStore((s) => s.hasHydrated && Boolean(s.user)); // remembered user (the token is in memory)
   return (
     <>
       <section className="relative overflow-hidden px-5 py-28 sm:px-6 md:py-44" aria-labelledby="cta-title">

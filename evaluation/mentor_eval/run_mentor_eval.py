@@ -1,18 +1,19 @@
 """Mentor eval (implementation_plan.md Phase 2): the rag_tool eval set, run through this app's stack.
 
 Each case indexes its reports into a throwaway Chroma collection (embeddings via the AI Gateway), asks
-the Mentor the case's question with the versioned prompt (mentor/mentor_v1 by default), and prints the
+ARIA the case's question exactly as the app does (`mentor_answer`: the grounded prompt, mentor/mentor_v2 by
+default, and the general prompt when nothing in the reports matches), and prints the
 answer next to the case's pass_criteria. Most criteria are judgment calls ("did it decline?"), so read
 the answers; the structural checks are automatic and marked [auto]:
 
     citations   every [n] in the answer has a matching source
     dedupe      no session contributes more than DEFAULT_DEDUPE_PER_SESSION excerpts
-    no-data     a case with no reports gets the fixed no-data reply and no LLM call
+    no-data     a case with no reports gets no sources and no citations (nothing invented from other data)
 
     cd backend
     .venv/bin/python ../evaluation/mentor_eval/run_mentor_eval.py
     .venv/bin/python ../evaluation/mentor_eval/run_mentor_eval.py --case prompt_injection --case zero_reports
-    .venv/bin/python ../evaluation/mentor_eval/run_mentor_eval.py --prompt mentor/mentor_v2
+    .venv/bin/python ../evaluation/mentor_eval/run_mentor_eval.py --prompt mentor/mentor_v1
 
 Exit code 1 if an [auto] check fails. Results are saved to evaluation/results/ (gitignored).
 """
@@ -32,16 +33,16 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "backend"))
 sys.path.insert(0, str(ROOT / "evaluation"))
 
-from app.core.mentor.mentor_agent import MentorAgent  # noqa: E402
+from app.core.mentor.mentor_agent import GENERAL_PROMPT_VERSION, MentorAgent, general_prompt_note, mentor_answer  # noqa: E402
 from app.core.mentor.rag_tool import InterviewReport, MentorChatRequest, RagService  # noqa: E402
-from app.core.mentor.rag_tool.service import DEFAULT_DEDUPE_PER_SESSION, NO_DATA_MESSAGE, classify_intent  # noqa: E402
+from app.core.mentor.rag_tool.service import DEFAULT_DEDUPE_PER_SESSION, classify_intent  # noqa: E402
 from app.core.mentor.setup import GatewayEmbeddings  # noqa: E402
 from app.core.prompts import render_prompt  # noqa: E402
 from app.gateway.types import CallContext  # noqa: E402
 
 DATASET = ROOT / "evaluation" / "datasets" / "mentor_eval.jsonl"
 RESULTS_DIR = ROOT / "evaluation" / "results"
-DEFAULT_PROMPT = "mentor/mentor_v1"
+DEFAULT_PROMPT = "mentor/mentor_v2"
 _CITATION = re.compile(r"\[(\d+)\]")
 
 
@@ -64,7 +65,7 @@ def auto_checks(case: dict, answer: str, sources: list[dict]) -> dict[str, bool]
     checks = {"citations": all(1 <= n <= len(sources) for n in cited),
               "dedupe": all(n <= DEFAULT_DEDUPE_PER_SESSION for n in per_session.values())}
     if not case["setup"]:
-        checks["no-data"] = answer == NO_DATA_MESSAGE and not sources
+        checks["no-data"] = not sources and not _CITATION.search(answer)
     return checks
 
 
@@ -75,18 +76,19 @@ async def run_case(gateway, case: dict, prompt_id: str, workdir: str) -> dict:
 
     request = MentorChatRequest.model_validate(case["request"])
     system_prompt = render_prompt(prompt_id, practice_note=MentorAgent._practice_note(None))
+    general_prompt = render_prompt(GENERAL_PROMPT_VERSION, report_note=general_prompt_note(len(reports)))
     context = CallContext(candidate_id=request.user_id, prompt_version=prompt_id)
-    llm_calls = 0
+    general_context = CallContext(candidate_id=request.user_id, prompt_version=GENERAL_PROMPT_VERSION)
 
     def invoke_llm(prompt: str) -> str:
-        nonlocal llm_calls
-        llm_calls += 1
         return anyio.from_thread.run(lambda: gateway.generate(prompt, context=context, temperature=0))
 
-    response = await anyio.to_thread.run_sync(rag.answer, request, invoke_llm, system_prompt)
+    def invoke_general(prompt: str) -> str:
+        return anyio.from_thread.run(lambda: gateway.generate(prompt, context=general_context, temperature=0))
+
+    response = await anyio.to_thread.run_sync(mentor_answer, rag, request, invoke_llm, system_prompt, general_prompt,
+                                              invoke_general)
     checks = auto_checks(case, response.answer, response.sources)
-    if not case["setup"]:
-        checks["no-data"] = checks["no-data"] and llm_calls == 0
     return {"id": case["id"], "message": request.message, "intent": classify_intent(request.message, bool(request.history)),
             "answer": response.answer, "sources": response.sources, "checks": checks,
             "pass_criteria": case["pass_criteria"]}

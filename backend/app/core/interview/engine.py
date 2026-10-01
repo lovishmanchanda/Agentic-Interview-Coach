@@ -20,6 +20,7 @@ with a deterministic fallback. Events follow architecture.md §13 and go
 through an `emit` callback, so the WebSocket handler and the tests drive the engine the same way.
 """
 import logging
+import re
 import uuid
 from collections.abc import Awaitable, Callable
 from datetime import timedelta
@@ -49,6 +50,16 @@ from app.utils.exceptions import AppError, NotFoundError, ConflictError, Unproce
 from app.utils.logging import bind_context, log_event
 
 log = logging.getLogger(__name__)
+
+# The report exists the moment the interview ends, so a closing line must never promise it later.
+_LATER = re.compile(r"get back to you|be in touch|follow up (with you|later|soon)|"
+                    r"\b(compile|prepare|send|email)\w* (you )?(your|the) report|shortly", re.IGNORECASE)
+CLOSING_FALLBACK = "Thanks, that's the end of our interview. Your report is ready now."
+
+
+def closing_line(lead_in: str) -> str:
+    """VERA's closing words, unless they promise the report later (it's already written): then a plain, true one."""
+    return CLOSING_FALLBACK if _LATER.search(lead_in) else lead_in
 
 Emit = Callable[[dict], Awaitable[None]]
 
@@ -553,7 +564,7 @@ class InterviewEngine:
         decision = decide_next_action(evaluation, question, session, budget_remaining=budget,
                                       token_reserve=self.question_token_reserve, follow_ups_enabled=self.follow_ups,
                                       time_limit_reached=time_up)
-        decided_by, lead_in, agent_outcome, follow_up_points = "adaptation", "", None, []
+        decided_by, lead_in, agent_outcome, follow_up_points, agent_prompt = "adaptation", "", None, [], None
         if self.agent is not None:
             allowed = allowed_actions(question, session, budget_remaining=budget,
                                       token_reserve=self.question_token_reserve, follow_ups_enabled=self.follow_ups,
@@ -562,7 +573,7 @@ class InterviewEngine:
             answer_text = _code_answer_text(answer) if answer.get("answer_type") == "code" else answer["answer_text"]
             run = await self.agent.decide(session=session, question=question, answer_text=answer_text,
                                           evaluation=evaluation, allowed=allowed, recommended=decision.action)
-            agent_outcome = run.outcome
+            agent_outcome, agent_prompt = run.outcome, run.prompt_version
             if run.decision is not None:
                 decided_by, lead_in = "agent", run.decision.lead_in
                 follow_up_points = run.decision.follow_up_expected_points
@@ -572,7 +583,8 @@ class InterviewEngine:
         target = next_state_for_action(DECIDING, decision.agent_action)  # the engine's own check, whoever chose
         extra = {"target_difficulty": decision.target_difficulty,
                  "last_decision": {**decision.as_record(), "lead_in": lead_in, "decided_by": decided_by,
-                                   "agent_outcome": agent_outcome, "question_id": question["question_id"], "at": utcnow()}}
+                                   "agent_outcome": agent_outcome, "prompt_version": agent_prompt,
+                                   "question_id": question["question_id"], "at": utcnow()}}
         log_event(log, "adaptation_decision", session_id=session_id, action=decision.action, reason=decision.reason,
                   target_difficulty=decision.target_difficulty, decided_by=decided_by)
         if target == QUESTION:
@@ -580,7 +592,7 @@ class InterviewEngine:
                                              expected_points=follow_up_points)
         if target == COMPLETE:
             extra["completed_at"] = utcnow()
-            extra["closing_message"] = lead_in or None
+            extra["closing_message"] = closing_line(lead_in) if lead_in else None
         return await self.sm.transition(session_id, DECIDING, target, extra=extra)
 
     async def _ask_follow_up(self, session: dict, parent: dict, text: str, extra: dict, *, lead_in: str = "",
@@ -602,7 +614,7 @@ class InterviewEngine:
             # The agent's follow-up comes with its own lead-in; the bank's canned ones get a plain label.
             "interviewer_message": f"{lead_in} {text}".strip() if lead_in else f"Follow-up: {text}",
             "question_number": session["questions_asked"], "asked_at": utcnow(),
-            "prompt_version_used": "interviewer/interviewer_v1" if extra["last_decision"]["decided_by"] == "agent" else None,
+            "prompt_version_used": extra["last_decision"].get("prompt_version") if extra["last_decision"]["decided_by"] == "agent" else None,
         })
         claimed = await self.sm.transition(session["session_id"], DECIDING, QUESTION, extra={
             **extra, "current_question_id": follow_up["question_id"],

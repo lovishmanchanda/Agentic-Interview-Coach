@@ -6,6 +6,11 @@ excerpts the answer drew on. The candidate ID always comes from the JWT, never f
 
 rag_tool's `RagService.answer` is synchronous and calls an `invoke_llm(prompt) -> str` callback, so it
 runs in a worker thread and the callback hops back to the event loop to use the async AI Gateway.
+
+When retrieval finds nothing in the candidate's reports, rag_tool returns a fixed no-data message. ARIA answers
+instead (`mentor_answer`, prompt mentor/mentor_general): an honest "none of your reports cover that" for
+questions about their performance, brief general advice for interview-preparation questions, or a polite
+decline for anything off-topic. rag_tool itself is unchanged.
 """
 import re
 import time
@@ -18,7 +23,7 @@ import anyio.from_thread
 from app.agents.prep import intent as prep_intent
 from app.agents.prep.orchestrator import PrepOrchestrator
 from app.core.mentor.indexer import ReportIndexer, index_prep_plan
-from app.core.mentor.rag_tool import MentorChatRequest
+from app.core.mentor.rag_tool import MentorChatRequest, MentorChatResponse
 from app.core.mentor.rag_tool.service import classify_intent
 from app.core.prompts import render_for
 from app.db.repositories.interview_repo import InterviewRepository, as_utc, utcnow
@@ -28,7 +33,8 @@ from app.gateway.types import CallContext
 from app.utils.exceptions import ConflictError, NotFoundError, ServiceUnavailableError
 from app.utils.rate_limit import SlidingWindowLimiter, enforce
 
-MENTOR_PROMPT_VERSION = "mentor/mentor_v1"
+MENTOR_PROMPT_VERSION = "mentor/mentor_v2"           # answers grounded in report excerpts (v1 kept for rollback)
+GENERAL_PROMPT_VERSION = "mentor/mentor_general_v1"  # when nothing in the reports matches
 HISTORY_MESSAGES = 8          # rag_tool's MentorChatRequest cap; the prompt shows the last 6
 MAX_MESSAGES = 200            # per conversation (100 turns); then start a new one
 TITLE_CHARS = 60
@@ -41,6 +47,24 @@ _DRILL_PATTERN = re.compile(
     r"\b(drill|quiz|test me|practi[cs]e|mock|weak(?:est|ness(?:es)?| ?(?:areas?|spots?|points?))|"
     r"study|focus on|work on|improve|prepare)\b", re.IGNORECASE)
 _CITATION = re.compile(r"\s?\[\d+\]")
+
+
+def general_prompt_note(report_count: int) -> str:
+    return " (they haven't finished an interview yet, so they have no reports)" if report_count == 0 else ""
+
+
+def mentor_answer(rag, request: MentorChatRequest, invoke_llm, system_prompt: str, general_prompt: str,
+                  invoke_general=None) -> MentorChatResponse:
+    """ARIA's reply: rag_tool's grounded, cited answer when the candidate's reports cover the question; otherwise
+    one call with the general prompt (no excerpts, so no citations). Synchronous, like `RagService.answer`."""
+    response = rag.answer(request, invoke_llm, system_prompt)
+    if response.sources:
+        return response
+    history = "\n".join(f"{h.get('role', 'user')}: {h.get('content', '')}" for h in request.history[-6:]) or "(none)"
+    prompt = (f"{general_prompt}\n\nRecent conversation:\n{history}\n\n"
+              f"Candidate's message:\n<<<MESSAGE\n{request.message}\nMESSAGE>>>")
+    answer = _CITATION.sub("", (invoke_general or invoke_llm)(prompt)).strip()
+    return MentorChatResponse(answer=answer, sources=[])
 
 
 def _strip_citations(text: str) -> str:
@@ -128,23 +152,30 @@ class MentorAgent:
         drill = await self.drill_suggestion(candidate_id) if _DRILL_PATTERN.search(message) else None
         context = CallContext(candidate_id=candidate_id, extra={"conversation_id": conversation_id})
         system_prompt = render_for(context, MENTOR_PROMPT_VERSION, practice_note=self._practice_note(drill))
+        general_context = CallContext(candidate_id=candidate_id, extra={"conversation_id": conversation_id})
+        report_count = len(await self.interviews.list_reports(candidate_id, limit=1))
+        general_prompt = render_for(general_context, GENERAL_PROMPT_VERSION, report_note=general_prompt_note(report_count))
 
         def invoke_llm(prompt: str) -> str:
             return anyio.from_thread.run(lambda: self.gateway.generate(prompt, context=context, temperature=0))
+
+        def invoke_general(prompt: str) -> str:
+            return anyio.from_thread.run(lambda: self.gateway.generate(prompt, context=general_context, temperature=0))
 
         asked_at = utcnow()
         started = time.perf_counter()
         request = MentorChatRequest(user_id=candidate_id, message=message, history=history,
                                     previous_chunk_ids=previous)
-        response = await anyio.to_thread.run_sync(self.rag.answer, request, invoke_llm, system_prompt)
+        response = await anyio.to_thread.run_sync(mentor_answer, self.rag, request, invoke_llm, system_prompt,
+                                                   general_prompt, invoke_general)
         sources = await self._with_report_ids(candidate_id, response.sources)
         actions = [drill] if drill and sources else []  # no data -> nothing to drill yet
 
         turn = [
             {"message_id": uuid.uuid4().hex, "role": "user", "content": message, "timestamp": asked_at},
             {"message_id": uuid.uuid4().hex, "role": "assistant", "content": response.answer, "timestamp": utcnow(),
-             "retrieved_chunks": sources, "actions": actions, "intent": classify_intent(message, bool(history)),
-             "prompt_version": context.prompt_version, "latency_ms": int((time.perf_counter() - started) * 1000)},
+             "retrieved_chunks": sources, "actions": actions, "intent": classify_intent(message, bool(history)) if sources else "general",
+             "prompt_version": context.prompt_version if sources else general_context.prompt_version, "latency_ms": int((time.perf_counter() - started) * 1000)},
         ]
         saved = await self.conversations.append_turn(conversation_id=conversation_id, candidate_id=candidate_id,
                                                      title=_title(message), messages=turn)

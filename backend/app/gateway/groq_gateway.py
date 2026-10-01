@@ -70,7 +70,8 @@ class GroqAIGateway(AIGateway):
                  client: Any = None, timeout_s: float = 60.0, embedder=None, executor=None, pricing=None):
         super().__init__(session_token_budget=session_token_budget, embedder=embedder, executor=executor,
                          pricing=pricing)
-        self.client = client or groq.AsyncGroq(api_key=api_key, timeout=timeout_s, max_retries=2)
+        # 4 retries (the SDK backs off exponentially on 429/5xx): rides out Groq "over capacity" blips, common on the free tier.
+        self.client = client or groq.AsyncGroq(api_key=api_key, timeout=timeout_s, max_retries=4)
         self.models: dict[str, str] = {"default": default_model, "fast": fast_model}
 
     # ── core call ────────────────────────────────────────────────────────────

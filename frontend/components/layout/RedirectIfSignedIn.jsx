@@ -14,7 +14,7 @@ export default function RedirectIfSignedIn() {
   const hasHydrated = useAuthStore((s) => s.hasHydrated);
 
   useEffect(() => {
-    if (hasHydrated && useAuthStore.getState().accessToken) router.replace("/dashboard");
+    if (hasHydrated && useAuthStore.getState().user) router.replace("/dashboard"); // AuthGuard restores the session there
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally once, when hydration completes
   }, [hasHydrated]);
 

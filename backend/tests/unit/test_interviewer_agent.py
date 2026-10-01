@@ -48,7 +48,7 @@ def test_accepts_a_valid_proposal_in_one_step():
     assert run.decision.follow_up_question == FOLLOW_UP["follow_up_question"]
     call = gw.calls_of("tools")[0]
     assert call["tool_choice"] == "required" and call["tier"] == "default"
-    assert call["context"].prompt_version == "interviewer/interviewer_v1" and call["context"].session_id == "s1"
+    assert call["context"].prompt_version == "interviewer/interviewer_v3" and call["context"].session_id == "s1"
     assert {t["function"]["name"] for t in call["tools"]} == {"get_performance_summary", "get_question_details", "submit_decision"}
 
 
@@ -181,3 +181,12 @@ def test_the_action_list_offered_is_only_what_is_allowed():
     run_decide(gw, allowed={"complete"}, recommended="complete")
     [tool] = [t for t in gw.calls_of("tools")[0]["tools"] if t["function"]["name"] == "submit_decision"]
     assert tool["function"]["parameters"]["properties"]["action"]["enum"] == ["wrap_up"]
+
+
+def test_a_closing_line_that_promises_the_report_later_is_replaced():
+    from app.core.interview.engine import CLOSING_FALLBACK, closing_line
+    for promise in ("Thank you for your responses. We'll compile your report and get back to you shortly.",
+                    "Thanks! We'll be in touch.", "Great work, I'll send your report soon."):
+        assert closing_line(promise) == CLOSING_FALLBACK
+    good = "Thanks, that was a good conversation. Your report is ready now."
+    assert closing_line(good) == good

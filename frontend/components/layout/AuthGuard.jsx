@@ -1,11 +1,12 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import { LogoMark } from "@/components/brand/Logo";
 import Alert from "@/components/ui/Alert";
 import Button from "@/components/ui/Button";
+import { restoreSession } from "@/lib/api";
 import { clearUserData, isSigningOut } from "@/lib/session";
 import { useAuthStore } from "@/store/authStore";
 import { useProfileStore } from "@/store/profileStore";
@@ -15,25 +16,39 @@ const SETUP_PATH = "/profile/setup";
 /**
  * Client-side route protection for the (app) group:
  * signed out -> /login?next=…, no profile yet -> the setup wizard, profile done -> never the wizard.
+ * After a reload the access token is gone (it lives in memory only), so a remembered user is restored silently
+ * from the refresh cookie first; only if that fails is the visitor sent to sign in.
  * The backend still enforces auth on every request; this only decides what to render.
  */
 export default function AuthGuard({ children }) {
   const router = useRouter();
   const pathname = usePathname();
   const hasHydrated = useAuthStore((s) => s.hasHydrated);
+  const user = useAuthStore((s) => s.user);
   const accessToken = useAuthStore((s) => s.accessToken);
   const { status, load, error } = useProfileStore();
+  const [offline, setOffline] = useState(false); // restoring failed for lack of a connection, not a session
 
   useEffect(() => {
-    if (!hasHydrated) return;
-    if (!accessToken) {
-      // Also reached when the session ends without Sign out: it expired, or another tab signed out.
-      clearUserData();
-      if (!isSigningOut()) router.replace(`/login?next=${encodeURIComponent(pathname)}`);
-      return;
+    if (!hasHydrated || accessToken) return undefined;
+    if (user && !isSigningOut()) {
+      let current = true;
+      restoreSession()
+        .then(() => current && setOffline(false))
+        .catch((err) => current && setOffline(err?.status === 0 || err?.status >= 500));
+      return () => {
+        current = false;
+      };
     }
-    load().catch(() => {});
-  }, [hasHydrated, accessToken, pathname, router, load]);
+    // Also reached when the session ends without Sign out: it expired, or another tab signed out.
+    clearUserData();
+    if (!isSigningOut()) router.replace(`/login?next=${encodeURIComponent(pathname)}`);
+    return undefined;
+  }, [hasHydrated, accessToken, user, pathname, router]);
+
+  useEffect(() => {
+    if (accessToken) load().catch(() => {});
+  }, [accessToken, load]);
 
   useEffect(() => {
     if (status === "missing" && pathname !== SETUP_PATH) router.replace(SETUP_PATH);
@@ -42,6 +57,16 @@ export default function AuthGuard({ children }) {
 
   // Signing out: show nothing (the room behind stays) while the landing page takes over.
   if (!accessToken && isSigningOut()) return null;
+  if (!accessToken && offline) {
+    return (
+      <div className="mx-auto mt-24 max-w-md space-y-4 px-4">
+        <Alert tone="error" title="Can't reach the server">Check your connection, then try again. You&apos;re still signed in.</Alert>
+        <Button onClick={() => { setOffline(false); restoreSession().catch((err) => setOffline(err?.status === 0 || err?.status >= 500)); }}>
+          Try again
+        </Button>
+      </div>
+    );
+  }
   if (!hasHydrated || !accessToken || status === "idle" || status === "loading") {
     return <FullPageSpinner />;
   }

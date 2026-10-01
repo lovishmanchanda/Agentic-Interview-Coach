@@ -4,7 +4,6 @@ import importlib.util
 from pathlib import Path
 
 from app.core.mentor.rag_tool import MentorChatRequest
-from app.core.mentor.rag_tool.service import NO_DATA_MESSAGE
 from app.gateway import FakeAIGateway
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -35,9 +34,11 @@ def test_auto_checks_catch_orphan_citations_and_dedupe_overflow():
 def test_a_run_on_the_fake_gateway_uses_the_versioned_prompt():
     cases = {c["id"]: c for c in runner.load_cases()}
     gateway = FakeAIGateway(session_token_budget=10**9)
-    gateway.script("generate", "Joins were solid [1].")
+    gateway.script("generate", "Joins were solid [1].", "None of your reports cover that yet.")
     rows = asyncio.run(runner.run_cases(gateway, [cases["specific_single_session"], cases["zero_reports"]]))
     assert rows[0]["sources"] and all(rows[0]["checks"].values())
-    assert rows[1]["answer"] == NO_DATA_MESSAGE and rows[1]["checks"]["no-data"] is True
-    [call] = gateway.calls_of("generate")
-    assert call["context"].prompt_version == "mentor/mentor_v1" and "Practice requests:" in call["prompt"]
+    # No reports: ARIA answers from the general prompt, with no sources and no citations.
+    assert rows[1]["answer"] == "None of your reports cover that yet." and rows[1]["checks"]["no-data"] is True
+    grounded, general = gateway.calls_of("generate")
+    assert grounded["context"].prompt_version == "mentor/mentor_v2" and "Practice requests:" in grounded["prompt"]
+    assert general["context"].prompt_version == "mentor/mentor_general_v1" and "Report excerpts" not in general["prompt"]

@@ -1,10 +1,42 @@
+<div align="center">
+
+<img src="frontend/app/icon.svg" width="76" alt="InterviewOS mark: a chair under a spotlight" />
+
 # InterviewOS
 
-> **Take the seat.** Practise real interviews with **VERA**. Improve with **ARIA**, a mentor that remembers every session you've had.
+**Take the seat.** Practise real interviews with **VERA**. Improve with **ARIA**,<br/>a mentor that remembers every session you've had.
+
+<a href="https://interviewos-coach.vercel.app"><img src="https://img.shields.io/badge/Live%20demo-interviewos--coach.vercel.app-FF7A2E?style=for-the-badge&labelColor=0a0a0b" alt="Live demo: interviewos-coach.vercel.app" /></a>
+
+<img src="https://img.shields.io/badge/Next.js-16-0a0a0b?style=flat-square&logo=nextdotjs" alt="Next.js 16" />
+<img src="https://img.shields.io/badge/FastAPI-WebSockets-0a0a0b?style=flat-square&logo=fastapi" alt="FastAPI" />
+<img src="https://img.shields.io/badge/Groq-gpt--oss--120b-0a0a0b?style=flat-square" alt="Groq gpt-oss-120b" />
+<img src="https://img.shields.io/badge/MongoDB-Atlas-0a0a0b?style=flat-square&logo=mongodb" alt="MongoDB Atlas" />
+<img src="https://img.shields.io/badge/three.js-3D%20room-0a0a0b?style=flat-square&logo=threedotjs" alt="three.js" />
+<img src="https://img.shields.io/badge/tests-575%20passing-4cc38a?style=flat-square&labelColor=0a0a0b" alt="575 tests passing" />
+<img src="https://img.shields.io/badge/accessibility-WCAG%202.2%20AA-7c93b5?style=flat-square&labelColor=0a0a0b" alt="WCAG 2.2 AA" />
+
+<sub>The demo runs on free hosting: if it has been idle, the first load takes about a minute while the server wakes up.</sub>
+
+</div>
+
+<br/>
+
+<table>
+  <tr>
+    <td align="center" width="25%"><img src="docs/images/landing.jpg" alt="Landing page: an empty chair under a spotlight, 'Take the seat.'" /><br/><sub><b>The room.</b> Take the seat.</sub></td>
+    <td align="center" width="25%"><img src="docs/images/desk.jpg" alt="Your desk: report sheets on a 3D desk under a lamp, with stats" /><br/><sub><b>Your desk.</b> Reports under the lamp.</sub></td>
+    <td align="center" width="25%"><img src="docs/images/report.jpg" alt="An interview report: score ring 7.0 and VERA's summary" /><br/><sub><b>The report.</b> Honest, with evidence.</sub></td>
+    <td align="center" width="25%"><img src="docs/images/aria.jpg" alt="ARIA's study plan with citation chips to the reports" /><br/><sub><b>ARIA.</b> Answers that cite your reports.</sub></td>
+  </tr>
+</table>
 
 InterviewOS is an AI interview coach built as one continuous place: *the interview room*. You arrive at an empty chair under a spotlight, sit down for a live interview with VERA, get an honest report, and talk it through with ARIA at your desk. Every interview makes the next one better, because nothing you do is forgotten.
 
-**The loop:** Interview → Evaluate → Report → Reflect with ARIA → Drill your weakest topic → Interview again
+```mermaid
+flowchart LR
+    A["Interview<br/>with VERA"] --> B["Evaluate<br/>every answer"] --> C["Report<br/>with evidence"] --> D["Reflect<br/>with ARIA"] --> E["Drill your<br/>weakest topic"] --> A
+```
 
 ## Meet the two agents
 
@@ -25,9 +57,17 @@ InterviewOS is an AI interview coach built as one continuous place: *the intervi
 | **The interview room** | One question at a time on a lit stage, arriving word by word; earlier rounds fold away. An answer box docked at the bottom (⌘/Ctrl + Enter), a timer ring, hints, and a score ring with feedback after each answer (practice mode). Serious mode is quieter: scores only at the end. |
 | **The coding room** | Problem statement, a Monaco editor in the InterviewOS theme, Run examples / Submit (hidden tests too), your approach, and a console with pass/fail per test. Python is graded; JS, Java, C++ and C run as written. |
 | **The report** | A story: the score and VERA's summary, how you scored (per question, topic and dimension), what went well, what to fix, your next steps, the full evidence, and finally the handoff: *VERA has passed your report to ARIA*. Printable / save as PDF. |
-| **ARIA** (`/mentor`) | Chat grounded in your reports with citation chips (hover to see the source). Replies write themselves out, and drill and practice buttons appear under them. "Prepare me for Google" builds a week-by-week company plan. |
+| **ARIA** (`/mentor`) | Chat grounded in your reports with citation chips (hover to see the source). Replies write themselves out, and drill and practice buttons appear under them. She answers general interview-prep questions as clearly labelled general advice, and politely declines anything off-topic (and attempts to jailbreak her). "Prepare me for Google" builds a week-by-week company plan. |
 | **Everywhere** | ⌘K quick actions, a status line ("VERA ready · ARIA knows 3 reports · 4-day streak"), a phone tab bar, and skip links and full keyboard support. |
 | **Admin** (`/admin`) | For `ADMIN_EMAILS` only: live errors and latency, tokens and cost per prompt version, and prompt A/B switching without a deploy. |
+
+<table>
+  <tr>
+    <td align="center" width="33%"><img src="docs/images/configure.jpg" alt="Start an interview: preset cards and VERA's brief" /><br/><sub>Start an interview: presets and VERA's brief</sub></td>
+    <td align="center" width="33%"><img src="docs/images/interview.jpg" alt="The interview room: VERA's evaluation with a score ring and dimension bars" /><br/><sub>The interview room: VERA's evaluation</sub></td>
+    <td align="center" width="33%"><img src="docs/images/coding.jpg" alt="The coding room: problem panel and themed Monaco editor" /><br/><sub>The coding room: problem, editor, tests</sub></td>
+  </tr>
+</table>
 
 **Design:** dark only, black and greys with sparing orange (the brand, ARIA's lamp) and steel (VERA's light). The 3D room is built entirely in code (no model files) with three.js. It meets WCAG 2.2 AA (checked with axe on every page), respects reduced motion, and falls back to a still image without WebGL.
 
@@ -42,7 +82,7 @@ InterviewOS is an AI interview coach built as one continuous place: *the intervi
 | AI | Groq `openai/gpt-oss-120b` (VERA, reports, ARIA) and `gpt-oss-20b` (evaluation), all through one AI Gateway with token budgets and cost tracking |
 | ARIA's memory | `rag_tool`: Chroma + Hugging Face `all-MiniLM-L6-v2` embeddings, intent-routed retrieval with citations |
 | Code runner | [Piston](https://github.com/engineer-man/piston), self-hosted and optional (sandboxed, separate from the app) |
-| Quality | 564 backend tests, AI eval suites (evaluator, interviewer, questions, ARIA), CI on every push |
+| Quality | 575 backend tests, AI eval suites (evaluator, interviewer, questions, 26 ARIA cases incl. jailbreaks), CI on every push |
 
 ```
  Browser (Next.js) ──REST──▶ FastAPI ──▶ MongoDB
@@ -107,7 +147,7 @@ Then set `PISTON_URL=http://localhost:2000/api/v2` in `.env` and restart the bac
 ## Tests and checks
 
 ```bash
-cd backend && pytest -q                            # 564 unit + integration tests; no keys needed
+cd backend && pytest -q                            # 575 unit + integration tests; no keys needed
 cd backend && python -m scripts.seed --check       # validate the question bank and company seed data
 cd frontend && npm run lint && npm run build       # lint + production build
 cd backend && .venv/bin/python ../evaluation/interview_eval/run_evaluator_eval.py   # evaluator accuracy (live Groq)
@@ -117,7 +157,7 @@ CI runs the first three on every push and pull request ([.github/workflows/ci.ym
 
 ## Deploy
 
-**[docs/deployment.md](docs/deployment.md)** has step-by-step guides. Pick one:
+The live demo runs on **Vercel** (frontend) + **Render** (backend, free plan, Singapore) + **MongoDB Atlas** (free cluster). **[docs/deployment.md](docs/deployment.md)** has step-by-step guides for that and two other setups:
 
 | Path | What it is | Good for |
 |---|---|---|
@@ -145,7 +185,7 @@ What every file does: **[docs/project-structure.md](docs/project-structure.md)**
 
 ## Security and privacy
 
-- **Auth:** bcrypt passwords, 30-minute JWT access tokens, and rotating refresh tokens in an httpOnly, Secure cookie, with reuse detection. (The access token is kept in `localStorage` so a reload keeps you signed in; moving it to memory plus a strict CSP is on the roadmap.)
+- **Auth:** bcrypt passwords; 30-minute JWT access tokens kept **in memory only** (never in browser storage); rotating refresh tokens in an httpOnly, Secure cookie with reuse detection, which silently restore your session after a reload. Tabs stay in sync over a BroadcastChannel.
 - **Limits:** rate limits on login, sign-up, ARIA, interviews, code runs and company prep, plus a daily AI token cap per user.
 - **Every AI call goes through one gateway** that records tokens, cost and errors. Prompts and answers are not stored unless `LLM_TRACE_CONTENT=true`.
 - **ARIA's isolation:** she only ever reads the signed-in user's own reports.
@@ -176,5 +216,5 @@ What every file does: **[docs/project-structure.md](docs/project-structure.md)**
 **Next:**
 - Voice interviews (Phase 5)
 - Email verification and password reset
-- A full Content-Security-Policy
+- A full Content-Security-Policy and a custom domain (so Safari keeps sessions across the two hosts)
 - Running more than one backend instance: shared rate limits and a hosted vector store

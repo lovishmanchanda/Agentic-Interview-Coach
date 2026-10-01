@@ -64,7 +64,7 @@ def test_calls_are_recorded_and_a_prompt_ab_switch_takes_effect_and_rolls_back(s
 
         prompts = {p["name"]: p for p in client.get("/api/v1/admin/prompts", headers=boss).json()["data"]}
         assert prompts["report/report"]["weights"] == {"v2": 100}
-        assert [v["version"] for v in prompts["interviewer/interviewer"]["versions"]] == ["v1", "v2"]
+        assert [v["version"] for v in prompts["interviewer/interviewer"]["versions"]] == ["v1", "v2", "v3"]
         technical = next(v for v in prompts["evaluator/technical"]["versions"] if v["version"] == "v1")
         assert technical["evaluations"] == {"n": 1, "avg_score": 6.5}
 

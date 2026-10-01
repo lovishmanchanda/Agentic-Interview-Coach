@@ -74,7 +74,7 @@ def test_the_agent_runs_the_conversation(app_client, gateway, mock_db):
     assert q1["text"] == f"{OPENING['opening']} {stored[0]['question_text']}"
     # The agent's own follow-up, stored as the question the evaluator grades.
     assert follow_up["is_follow_up"] and follow_up["text"] == f"Thanks. {AGENT_FOLLOW_UP}"
-    assert stored[1]["question_text"] == AGENT_FOLLOW_UP and stored[1]["prompt_version_used"] == "interviewer/interviewer_v1"
+    assert stored[1]["question_text"] == AGENT_FOLLOW_UP and stored[1]["prompt_version_used"] == "interviewer/interviewer_v3"
     # ...and graded against the agent's points for it, not the parent question's concepts.
     fu_prompt = gateway.calls_of("structured")[2]["prompt"]
     assert AGENT_FOLLOW_UP in fu_prompt and "- resizing keeps chains short" in fu_prompt

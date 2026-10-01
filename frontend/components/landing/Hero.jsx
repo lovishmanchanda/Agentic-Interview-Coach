@@ -49,7 +49,7 @@ export default function Hero() {
   const [warm, setWarm] = useState(false);
   const [afterLight] = useState(() => (useSceneStore.getState().everActive ? RETURN_DELAY : FIRST_VISIT_DELAY));
   const wide = useMediaQuery("(min-width: 768px)");
-  const signedIn = useAuthStore((s) => s.hasHydrated && Boolean(s.accessToken));
+  const signedIn = useAuthStore((s) => s.hasHydrated && Boolean(s.user)); // remembered user (the token is in memory)
   const warmOn = { onMouseEnter: () => setWarm(true), onMouseLeave: () => setWarm(false), onFocus: () => setWarm(true),
     onBlur: () => setWarm(false) };
 

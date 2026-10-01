@@ -60,7 +60,7 @@ export default function SiteHeader() {
   const { scrollY } = useScroll();
   const [solid, setSolid] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const signedIn = useAuthStore((s) => s.hasHydrated && Boolean(s.accessToken));
+  const signedIn = useAuthStore((s) => s.hasHydrated && Boolean(s.user)); // remembered user (the token is in memory)
   useMotionValueEvent(scrollY, "change", (y) => setSolid(y > 40));
 
   return (

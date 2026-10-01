@@ -46,7 +46,7 @@ from app.utils.logging import log_event
 
 log = logging.getLogger(__name__)
 
-DECISION_PROMPT = "interviewer/interviewer_v1"
+DECISION_PROMPT = "interviewer/interviewer_v3"  # v3: the closing line says the report is ready now (v1 drifted to "we'll get back to you")
 OPENING_PROMPT = "interviewer/opening_v1"
 HINT_PROMPT = "interviewer/hint_v1"
 MAX_STEPS = 4        # model calls per decision: at most 2 info tools, 1 rejected proposal, 1 accepted
@@ -70,6 +70,7 @@ class AgentRun:
     tool_calls: list[str] = field(default_factory=list)
     rejections: list[str] = field(default_factory=list)
     error: str | None = None
+    prompt_version: str | None = None            # the version actually rendered (the registry may A/B it)
 
 
 class InterviewAgent:
@@ -157,6 +158,7 @@ class InterviewAgent:
             allowed_actions=", ".join(allowed_actions),
             recommendation=recommendation_text(recommended),
         )
+        run.prompt_version = context.prompt_version
         messages: list[dict] = [{"role": "system", "content": prompt},
                                 {"role": "user", "content": "The candidate has answered. Decide the next step."}]
         tools = {

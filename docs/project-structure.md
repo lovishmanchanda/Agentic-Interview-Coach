@@ -25,7 +25,7 @@ Agentic Interview Coach/
 | `deploy/vps/docker-compose.yml`, `deploy/vps/Caddyfile` | Production on one Linux server: automatic HTTPS, private network for the API, database and Piston (docs/deployment.md, Path 1). |
 | `.dockerignore` | Keeps secrets, caches, local data and local-only files out of Docker images. |
 | `.gitignore` | Keeps `.env`, virtualenvs, `node_modules`, caches, `data/chroma`, logs and local notes out of git. |
-| `.github/workflows/ci.yml` | CI: seed validation + 564 backend tests; frontend lint + production build. |
+| `.github/workflows/ci.yml` | CI: seed validation + 575 backend tests; frontend lint + production build. |
 
 ## backend/
 

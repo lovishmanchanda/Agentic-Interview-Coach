@@ -61,10 +61,10 @@ async function rawRequest(path, { method = "GET", body, token, cookie = false } 
   return payload?.data;
 }
 
-/** The access token another tab saved, if it is still good for at least 30 s. */
+/** A token another tab just got (it reached this tab over the auth BroadcastChannel), if good for 30 s more. */
 function tokenFromOtherTab(staleToken) {
   try {
-    const token = JSON.parse(window.localStorage.getItem("aic-auth"))?.state?.accessToken;
+    const token = useAuthStore.getState().accessToken;
     if (!token || token === staleToken) return null;
     const { exp } = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
     return exp * 1000 > Date.now() + 30_000 ? token : null;
@@ -82,10 +82,20 @@ function refreshTokens(staleToken) {
   const run = async () => {
     const shared = tokenFromOtherTab(staleToken);
     if (!shared) return refreshWithCookie();
-    useAuthStore.getState().setTokens({ access_token: shared });
     return shared;
   };
   return typeof navigator !== "undefined" && navigator.locks ? navigator.locks.request("aic-token-refresh", run) : run();
+}
+
+/**
+ * After a reload the access token is gone (it lives in memory only); get a fresh one from the refresh cookie.
+ * Resolves with the token; rejects with session_expired (signed out) or a network error (session kept).
+ */
+export function restoreSession() {
+  refreshInFlight ??= refreshTokens(null).finally(() => {
+    refreshInFlight = null;
+  });
+  return refreshInFlight;
 }
 
 async function refreshWithCookie() {
