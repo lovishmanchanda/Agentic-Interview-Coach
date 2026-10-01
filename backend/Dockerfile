@@ -9,6 +9,8 @@ RUN pip install -r requirements.txt
 
 COPY backend/ .
 COPY data/seed /srv/data/seed
+# Versioned prompts are read at runtime (app/core/prompts.py: <repo root>/prompts).
+COPY prompts /srv/prompts
 
 RUN useradd --create-home appuser && mkdir -p /srv/data/chroma && chown -R appuser /srv/data
 USER appuser
