@@ -118,12 +118,16 @@ docker compose -f deploy/vps/docker-compose.yml exec -T mongo mongodump --archiv
 1. **MongoDB Atlas.** Create an M0 cluster and a database user. For a demo, allow `0.0.0.0/0` in Network Access, or Render's static outbound IPs on paid plans. Copy the `mongodb+srv://` connection string.
 2. **Backend on Render.**
    - New **Web Service** → connect the GitHub repo.
-   - Runtime **Docker**, Dockerfile path `backend/Dockerfile`, Docker build context `.` (repo root).
-   - Instance type **Starter** or above, since persistent disks need a paid instance.
-   - **Add Disk:** mount path `/var/data`, 1 GB. Set `CHROMA_PATH=/var/data/chroma`.
-   - Environment: every variable from the table above (`APP_ENV=prod`, the secrets, `FORWARDED_ALLOW_IPS=*`, `REFRESH_COOKIE_SAMESITE=none` unless you use custom domains on one site).
-   - Health check path `/api/v1/health`. Keep **1 instance**.
-   - After the first deploy, open **Shell**: `cd /srv/backend && python -m scripts.seed`.
+   - Runtime **Docker**, Dockerfile path `backend/Dockerfile`, Docker build context `.` (repo root). Region near your users (e.g. Singapore for India).
+   - **Plan, either:**
+     - **Free:** no disk. Sleeps after 15 minutes idle (about 1 minute to wake). ARIA's index is rebuilt from MongoDB after every restart (automatic; she catches up in the background).
+     - **Starter + Disk:** mount path `/var/data`, 1 GB, and set `CHROMA_PATH=/var/data/chroma`. Always on, and the index persists.
+   - Environment: every variable from the table above, plus:
+     - `PORT=8000` (the port the container listens on)
+     - `SEED_ON_STARTUP=true` (loads the question bank; no shell needed)
+     - `FORWARDED_ALLOW_IPS=*`
+     - `REFRESH_COOKIE_SAMESITE=none` (unless you use custom domains on one site)
+   - Keep **1 instance**. Health check path: `/api/v1/health`.
 3. **Frontend on Vercel.**
    - New Project → import the repo → **Root Directory** `frontend` (framework auto-detected: Next.js).
    - Environment variable: `NEXT_PUBLIC_API_URL=https://<your-render-service>.onrender.com` for Production. Deploy.

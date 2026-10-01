@@ -95,3 +95,53 @@ def test_without_rag_nothing_is_scheduled():
         return indexer.schedule("r1"), await indexer.schedule_unindexed()
 
     assert asyncio.run(run()) == (None, 0)
+
+
+class WipedRag(FlakyRag):
+    """A Mentor index whose folder may have been wiped: `count` chunks left, records upserts (prep plans)."""
+
+    def __init__(self, count: int):
+        super().__init__()
+        self.upserts: list[str] = []
+        self.collection = self  # rag.collection.count() / .upsert() as on the real RagService
+        self._count = count
+
+    def count(self) -> int:
+        return self._count
+
+    def upsert(self, ids, documents, metadatas):
+        self.upserts.extend(ids)
+
+
+def _plan(plan_id: str) -> dict:
+    return {"plan_id": plan_id, "candidate_id": "u1", "company_name": "Stripe",
+            "created_at": datetime(2026, 9, 2, tzinfo=timezone.utc),
+            "plan": {"estimated_weeks": 2, "summary": "s", "weeks": [], "readiness_check": "", "company_tips": []},
+            "analysis": {"gaps": []}}
+
+
+def test_a_wiped_index_is_rebuilt_from_mongodb_at_startup():
+    async def run():
+        rag = WipedRag(count=0)
+        db, indexer = await _setup(rag, _report("r1", rag_indexed=True), _report("r2", rag_indexed=True))
+        await db["prep_plans"].insert_one(_plan("p1"))
+        reopened = await indexer.heal_lost_index()
+        await indexer.schedule_unindexed()
+        await indexer.drain()
+        return rag, reopened, await InterviewRepository(db).get_report("r1")
+
+    rag, reopened, saved = asyncio.run(run())
+    assert reopened == 2
+    assert sorted(rag.calls) == ["s-r1", "s-r2"]  # both reports re-embedded
+    assert rag.upserts == ["p1:prep_plan"]        # and the prep plan re-added
+    assert saved["rag_indexed"] is True
+
+
+def test_an_intact_index_is_left_alone():
+    async def run():
+        rag = WipedRag(count=5)
+        db, indexer = await _setup(rag, _report("r1", rag_indexed=True))
+        return rag, await indexer.heal_lost_index(), await InterviewRepository(db).get_report("r1")
+
+    rag, reopened, saved = asyncio.run(run())
+    assert reopened == 0 and rag.calls == [] and saved["rag_indexed"] is True

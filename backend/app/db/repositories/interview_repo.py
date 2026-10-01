@@ -152,5 +152,10 @@ class InterviewRepository:
         cursor = self.reports.find(query, {"_id": 0, "report_id": 1}).sort("generated_at", ASCENDING)
         return await cursor.to_list(length=limit)
 
+    async def mark_all_unindexed(self) -> int:
+        """Every report back to "not in the Mentor index" (the index was lost); returns how many changed."""
+        result = await self.reports.update_many({"rag_indexed": True}, {"$set": {"rag_indexed": False}})
+        return result.modified_count
+
     async def update_report(self, report_id: str, changes: dict) -> None:
         await self.reports.update_one({"report_id": report_id}, {"$set": changes})

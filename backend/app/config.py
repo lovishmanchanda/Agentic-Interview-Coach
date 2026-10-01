@@ -44,6 +44,9 @@ class Settings(BaseSettings):
     cosmos_database: str = "interview_coach"
     # Local only: run against an in-memory MongoDB double (no Docker/MongoDB needed). Data is lost on restart.
     use_inmemory_db: bool = False
+    # Load the question bank and companies into the database at startup (upserts, safe on every boot). For hosts
+    # without a shell to run `python -m scripts.seed` once (e.g. Render's free plan).
+    seed_on_startup: bool = False
 
     # ── AI Gateway (all LLM calls run on Groq; GROQ_API_KEY below is shared with the Mentor) ──
     llm_provider: Literal["groq"] = "groq"

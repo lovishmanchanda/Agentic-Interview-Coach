@@ -18,3 +18,7 @@ class PrepPlanRepository:
                                  {"_id": 0, "plan_id": 1, "company_name": 1, "created_at": 1, "estimated_weeks": 1,
                                   "sources": 1})
         return await cursor.sort("created_at", DESCENDING).to_list(length=limit)
+
+    async def all_plans(self, *, limit: int = 500) -> list[dict]:
+        """Every plan, newest first (rebuilding a lost Mentor index)."""
+        return await self.plans.find({}, {"_id": 0}).sort("created_at", DESCENDING).to_list(length=limit)

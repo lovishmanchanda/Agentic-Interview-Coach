@@ -51,6 +51,8 @@ def create_app(settings: Settings | None = None, *, db=None, gateway=None, rag=N
             log.exception("db_schema_setup_failed")
         if settings.use_inmemory_db:
             await _seed_inmemory(app.state.db, settings)
+        elif settings.seed_on_startup:
+            await _seed_catalogue(app.state.db, settings)
         app.state.gateway = gateway or build_gateway(settings)
         # Every AI call is recorded in llm_calls (6.1); writes are batched in the background.
         app.state.gateway.recorder = LLMCallRecorder(app.state.db, trace_content=settings.llm_trace_content)
@@ -156,6 +158,18 @@ def _configure_azure_monitor(settings: Settings) -> None:
         return
     configure_azure_monitor(connection_string=settings.applicationinsights_connection_string)
     log.info("azure_monitor_enabled")
+
+
+async def _seed_catalogue(db, settings: Settings) -> None:
+    """SEED_ON_STARTUP: the question bank and companies (never the dev user). A failure is logged, not fatal."""
+    from app.db.seed import load_seed_companies, load_seed_questions, seed_companies, seed_question_bank
+
+    try:
+        questions = await seed_question_bank(db, load_seed_questions(settings.seed_dir))
+        companies = await seed_companies(db, load_seed_companies(settings.seed_dir))
+        log.info("seeded_on_startup", extra={"fields": {"questions": questions, "companies": companies}})
+    except Exception:  # noqa: BLE001 -- the app still serves; /health shows whether the DB is reachable
+        log.exception("seed_on_startup_failed")
 
 
 async def _seed_inmemory(db, settings: Settings) -> None:

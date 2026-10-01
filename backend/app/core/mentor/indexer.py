@@ -5,6 +5,10 @@
 worker thread. On failure the Cosmos report is kept and `rag_indexed` stays False, so indexing can be
 retried (the upsert is idempotent).
 
+The index lives in a folder on the server's disk (Chroma) while the reports live in MongoDB. On a host without a
+persistent disk (Render's free plan) that folder is wiped by every restart, so at startup an empty index next to
+reports marked indexed is rebuilt from MongoDB: the reports are re-queued and the prep plans re-added.
+
 `ReportIndexer` runs that in the background: the engine schedules a report once the candidate has their
 result, a failed attempt is retried with backoff, and reports still unindexed (a restart, an HF outage
 that outlasted the retries) are picked up by a sweep at startup and when the candidate opens the Mentor.
@@ -16,6 +20,7 @@ import anyio
 
 from app.core.mentor.rag_tool import InterviewReport, QuestionFeedback, chunks_for_report
 from app.db.repositories.interview_repo import InterviewRepository
+from app.db.repositories.prep_repo import PrepPlanRepository
 
 log = logging.getLogger(__name__)
 
@@ -171,8 +176,23 @@ class ReportIndexer:
         self._background.add(task)
         task.add_done_callback(self._background.discard)
 
+    async def heal_lost_index(self) -> int:
+        """Startup: if the index is empty but MongoDB says reports were indexed, the index folder was lost (a
+        restart on an ephemeral disk). Re-queue every report and re-add every prep plan. Returns reports re-queued."""
+        if self.rag is None or await anyio.to_thread.run_sync(self.rag.collection.count):
+            return 0
+        reopened = await self.repo.mark_all_unindexed()
+        if not reopened:
+            return 0
+        plans = await PrepPlanRepository(self.db).all_plans()
+        for plan in plans:
+            await index_prep_plan(self.rag, plan)
+        log.warning("rag_index_rebuilding", extra={"fields": {"reports": reopened, "prep_plans": len(plans)}})
+        return reopened
+
     async def _sweep_safely(self) -> None:
         try:
+            await self.heal_lost_index()
             await self.schedule_unindexed()
         except Exception:  # noqa: BLE001 -- the next sweep (Mentor visit, restart) tries again
             log.exception("rag_index_sweep_failed")
