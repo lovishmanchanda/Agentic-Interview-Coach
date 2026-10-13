@@ -195,7 +195,7 @@ What every file does: **[docs/project-structure.md](docs/project-structure.md)**
 - **Code:** it runs in your own Piston sandbox, never on the app server.
 - **Production mode:** API docs are off, errors never include stack traces, and Docker images run as non-root and exclude `.env`.
 - **Content-Security-Policy:** scripts load only from the site itself (and the code editor's CDN), network calls go only to the API, and there's no framing, plugins or `<base>` rewrites. Inline scripts are allowed, so the policy alone doesn't stop an injected inline script: that keeps pages static and CDN-cached (Next.js streams page data inline; refusing it needs per-request nonces). Injection is prevented in the code instead: React escapes output, ARIA's markdown renders no HTML, and lint forbids `dangerouslySetInnerHTML`.
-- **Telemetry:** browsers report page speed and uncaught errors to the API (no third party). Errors are stored as fingerprints, never free text: the error type, the message with quoted text and long numbers removed, and code locations from the stack. Page paths have IDs removed. Deleted after 14 days.
+- **Telemetry:** browsers report page speed and uncaught errors to the API (no third party). Errors are never stored as free text: a message is kept only if it matches a known browser or library error template (with code names only, like `Cannot read properties of undefined (reading 'map')`), otherwise it's stored as a one-way hash that groups identical errors; stacks are reduced to code locations. Page paths have IDs removed. Deleted after 14 days.
 
 ## Documentation
 

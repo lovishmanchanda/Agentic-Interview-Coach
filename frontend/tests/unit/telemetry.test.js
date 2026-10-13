@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { batches } from "@/lib/telemetry";
+import { batches, byteSize } from "@/lib/telemetry";
 
 const event = (i, size = 10) => ({ kind: "error", name: "Error", path: "/", message: `${i}:${"x".repeat(size)}` });
 
@@ -21,5 +21,15 @@ describe("telemetry batches", () => {
   it("sends an oversized single event on its own rather than dropping it", () => {
     expect(batches([event(1, 20_000)], 16_000)).toHaveLength(1);
     expect(batches([])).toEqual([]);
+  });
+
+  it("measures bodies in UTF-8 bytes, not characters (non-ASCII messages weigh more)", () => {
+    expect(byteSize("abc")).toBe(3);
+    expect(byteSize("é")).toBe(2);
+    expect(byteSize("😀")).toBe(4);
+    const wide = Array.from({ length: 6 }, (_, i) => ({ kind: "error", name: "Error", path: "/", message: `${i}${"é".repeat(2000)}` }));
+    const bodies = batches(wide, 16_000);
+    expect(bodies.every((b) => byteSize(b) <= 16_000)).toBe(true);
+    expect(bodies.length).toBeGreaterThan(1); // 2,000 characters each, but 4,000 bytes
   });
 });

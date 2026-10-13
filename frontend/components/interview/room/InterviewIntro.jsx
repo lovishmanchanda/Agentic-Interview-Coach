@@ -7,12 +7,12 @@ import AgentStatus from "@/components/brand/AgentStatus";
 import { useShot } from "@/components/three/shots";
 
 const EASE = [0.16, 1, 0.3, 1];
-// The server starts a question's clock when it sends it, so the intro never holds a question back (that time
-// would count against the answer): the scene plays while VERA prepares, and when the question arrives the
-// camera starts its push-in and the interview screen takes over at once, the room fading out behind it.
-// `hold` is the moment of push-in shown first (your first interview only), in ms.
-const FULL = { hold: 350, fade: 0.9 };
-const QUICK = { hold: 0, fade: 0.45 };
+// The server starts a question's clock when it sends it, so the intro never holds a question back, not even for
+// a moment (that time would count against the answer): the scene plays while VERA prepares, and when the
+// question arrives the interview screen takes over at once while the camera's push-in plays out behind it as
+// the room fades. Your first interview gets the longer, more cinematic fade.
+const FULL = { fade: 0.9 };
+const QUICK = { fade: 0.45 };
 
 /**
  * The walk into the interview, shown while VERA prepares the first question of a new interview: the room
@@ -44,13 +44,11 @@ export default function InterviewIntro({ full = false, ready, failed, statusText
       return undefined;
     }
     if (!ready) return undefined;
+    // Push in and fade the room (it keeps going behind the interview screen), and hand over now.
     setPushing(true); // eslint-disable-line react-hooks/set-state-in-effect -- reacting to the question's arrival
-    const controls = animate(opacity, 0, { duration: timing.fade, ease: [0.55, 0, 0.75, 0.2] });
-    const timer = setTimeout(() => done.current(), timing.hold);
-    return () => {
-      clearTimeout(timer);
-      controls.stop();
-    };
+    animate(opacity, 0, { duration: timing.fade, ease: [0.55, 0, 0.75, 0.2] });
+    done.current();
+    return undefined;
   }, [ready, failed, opacity, timing]);
 
   return (

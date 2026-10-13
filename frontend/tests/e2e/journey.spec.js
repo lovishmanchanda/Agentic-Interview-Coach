@@ -38,8 +38,27 @@ async function signIn(page, candidate) {
   await fillSignIn(page, candidate);
 }
 
+/**
+ * Sits between the page and the interview WebSocket and holds the first QUESTION back for `ms`, the way a real
+ * AI takes a moment (the fake one answers instantly). Message order is kept.
+ */
+async function slowFirstQuestion(page, ms) {
+  await page.routeWebSocket(/\/ws\/interview\//, (ws) => {
+    const server = ws.connectToServer();
+    let queue = Promise.resolve();
+    let held = false;
+    server.onMessage((message) => {
+      const first = !held && String(message).includes('"type":"QUESTION"');
+      if (first) held = true;
+      queue = queue.then(() => (first ? new Promise((r) => { setTimeout(r, ms); }) : null)).then(() => ws.send(message));
+    });
+    ws.onMessage((message) => server.send(message));
+  });
+}
+
 test("sign in, see your desk, start an interview and get the first question", async ({ page, request }) => {
   const csp = watchCsp(page);
+  await slowFirstQuestion(page, 2500);
   const candidate = await createCandidate(request);
   await signIn(page, candidate);
 
@@ -51,10 +70,12 @@ test("sign in, see your desk, start an interview and get the first question", as
   // Start the default interview; the walk to the table plays while VERA prepares the first question.
   await page.goto("/interview/configure");
   await page.getByRole("button", { name: "Take the seat", exact: true }).click();
-  await expect(page.getByRole("heading", { name: /Take your seat/ })).toBeVisible(); // your first interview: the whole scene
+  // Your first interview: the whole scene plays while VERA prepares the question...
+  await expect(page.getByRole("heading", { name: /Take your seat/ })).toBeVisible();
 
-  // The first question arrives and the interview screen takes over.
+  // ...and the moment it arrives, the interview screen takes over (its clock is already running).
   await expect(page.getByText(/Question 1 of/).first()).toBeVisible({ timeout: 30_000 }); // (the screen-reader announcement says it too)
+  await expect(page.getByRole("heading", { name: /Take your seat/ })).toHaveCount(0);
   await expect(page.getByPlaceholder(/Type your answer/)).toBeVisible();
 
   // Answer it: the answer shows at once, and the server's reply is shown. (The fake AI has no evaluation scripted,
