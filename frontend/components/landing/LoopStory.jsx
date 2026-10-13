@@ -1,13 +1,15 @@
 "use client";
 
-import { AnimatePresence, motion, useInView } from "motion/react";
-import { useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion, useInView, useScroll, useTransform } from "motion/react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { InterviewerAvatar, MentorAvatar } from "@/components/brand/AgentAvatar";
 import NumberTicker from "@/components/motion/NumberTicker";
 import Reveal from "@/components/motion/Reveal";
 import SplitHeading from "@/components/motion/SplitHeading";
 import SpotlightCard from "@/components/ui/SpotlightCard";
+import useMediaQuery from "@/lib/useMediaQuery";
+import { useShotOverride } from "@/components/three/shots";
 
 const EASE = [0.16, 1, 0.3, 1];
 
@@ -133,6 +135,19 @@ function MentorVisual() {
   );
 }
 
+// The room's part in each step (wide screens): the shot, and what happens in it. A stand-in for you sits in the
+// chair throughout. The desk shows sample reports (clearly the story, not anyone's data).
+const SAMPLE_DESK = {
+  reports: [
+    { id: "s3", score: 7.4, label: "Technical · System design", date: "Tonight" },
+    { id: "s2", score: 6.1, label: "Behavioural", date: "Last week" },
+    { id: "s1", score: 5.2, label: "Technical · DBMS", date: "Two weeks ago" },
+  ],
+  nextStep: { title: "Drill system design", detail: "Cache misses and hot keys" },
+};
+// The shots are in components/three/shots.js; the report step also drops the newest sheet onto the desk.
+const STORY = [{ shot: "storyInterview" }, { shot: "storyNotes" }, { shot: "storyReport", drop: true }, { shot: "storyNext" }];
+
 const STEPS = [
   { title: "VERA interviews you", body: "Technical, behavioural and live-coding rounds that adapt to how you answer. When an answer is thin, she follows up. Serious mode feels like the real thing.", Visual: InterviewVisual },
   { title: "Every answer is scored, honestly", body: "Correctness, depth, communication and trade-offs, and for code, real test runs. Not one vague number: what went well and exactly what to fix.", Visual: EvaluateVisual },
@@ -149,6 +164,7 @@ function Step({ index, step, active, onActive }) {
 
   return (
     <div ref={ref} className="flex flex-col justify-center py-10 md:min-h-[70svh] md:py-0">
+      <div className="md:-mx-8 md:rounded-3xl md:bg-gradient-to-l md:from-background/90 md:via-background/75 md:to-background/30 md:px-8 md:py-8">
       {/* On phones the visual sits with its step; on desktop it's pinned beside the text */}
       <div className="mb-8 md:hidden"><step.Visual /></div>
       <p className="font-mono text-sm text-primary">0{index + 1}</p>
@@ -156,14 +172,33 @@ function Step({ index, step, active, onActive }) {
         {step.title}
       </h3>
       <p className={`mt-4 max-w-md text-lg leading-relaxed transition-colors duration-500 ${active ? "text-muted" : "md:text-subtle"}`}>{step.body}</p>
+      </div>
     </div>
   );
 }
 
-/** The loop, told as you scroll: each step's text passes by while its live visual stays pinned beside it. */
+/**
+ * The loop, told as you scroll. On wide screens the room itself plays it, behind the section: you're interviewed
+ * at the table, an interviewer writes up your answer, your report drops onto your desk, ARIA's lamp lights what
+ * to do next. Each step's live visual stays pinned beside the room as a caption. Phones keep the visuals inline.
+ */
 export default function LoopStory() {
   const [active, setActive] = useState(0);
+  const [drops, setDrops] = useState(0); // each time the report step comes round, the sheet drops again
   const Visual = STEPS[active].Visual;
+  const steps = useRef(null);
+  const wide = useMediaQuery("(min-width: 768px)");
+  const inView = useInView(steps);
+  const { scrollYProgress } = useScroll({ target: steps, offset: ["start end", "end start"] });
+  const opacity = useTransform(scrollYProgress, [0.1, 0.22, 0.84, 0.95], [0, 1, 1, 0]);
+  const onActive = useCallback((i) => {
+    setActive(i);
+    if (STORY[i].drop) setDrops((n) => n + 1);
+  }, []);
+
+  const story = STORY[active];
+  useShotOverride(wide && inView ? story.shot : null,
+    { opacity, desk: { ...SAMPLE_DESK, drop: story.drop ? `story-${drops}` : null } });
 
   return (
     <section id="loop" className="relative mx-auto max-w-7xl scroll-mt-16 px-5 py-20 sm:px-6 md:py-32" aria-labelledby="loop-title">
@@ -173,18 +208,18 @@ export default function LoopStory() {
         <p className="mt-4 text-lg text-muted">Every session makes the next one better, because nothing you do is forgotten.</p>
       </Reveal>
 
-      <div className="mt-10 grid gap-0 md:mt-16 md:grid-cols-2 md:gap-16">
+      <div ref={steps} className="mt-10 grid gap-0 md:mt-16 md:grid-cols-2 md:gap-16">
         <div className="relative hidden md:block">
-          <div className="sticky top-0 flex h-svh items-center justify-center">
-            <div aria-hidden="true" className="absolute size-[28rem] rounded-full bg-[radial-gradient(closest-side,rgb(255_122_46/0.1),transparent)] blur-2xl" />
+          {/* The room plays the step up here; its live visual rides beneath it as a caption */}
+          <div className="sticky top-0 flex h-svh flex-col items-start justify-end pb-24">
             <AnimatePresence mode="wait">
-              <motion.div key={active} className="relative flex w-full justify-center"
-                initial={{ opacity: 0, y: 24, filter: "blur(6px)" }} animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-                exit={{ opacity: 0, y: -24, filter: "blur(6px)" }} transition={{ duration: 0.5, ease: EASE }}>
+              <motion.div key={active} className="relative w-full max-w-sm origin-bottom-left scale-90"
+                initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -16 }} transition={{ duration: 0.5, ease: EASE }}>
                 <Visual />
               </motion.div>
             </AnimatePresence>
-            <ol aria-hidden="true" className="absolute bottom-16 flex gap-2">
+            <ol aria-hidden="true" className="absolute bottom-12 left-0 flex gap-2">
               {STEPS.map((s, i) => (
                 <li key={s.title} className={`h-1 rounded-full transition-all duration-500 ${i === active ? "w-8 bg-primary" : "w-3 bg-border-strong"}`} />
               ))}
@@ -192,7 +227,7 @@ export default function LoopStory() {
           </div>
         </div>
         <div>
-          {STEPS.map((step, i) => <Step key={step.title} index={i} step={step} active={i === active} onActive={setActive} />)}
+          {STEPS.map((step, i) => <Step key={step.title} index={i} step={step} active={i === active} onActive={onActive} />)}
         </div>
       </div>
     </section>

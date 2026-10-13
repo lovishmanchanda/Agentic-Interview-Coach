@@ -4,11 +4,12 @@
  */
 import { drillHref, topicLabel } from "@/lib/interviewOptions";
 import { practiceStreak } from "@/store/shellStore";
+import type { MentorWelcome, ReportSummary, SessionSummary } from "@/types/models";
 
 export const STRONG = 7.5; // the evaluator's tier boundaries (see ScoreBars)
 export const ADEQUATE = 5;
 
-export function formatDuration(totalSeconds) {
+export function formatDuration(totalSeconds: number | null | undefined): string {
   if (!totalSeconds) return "0m";
   if (totalSeconds < 60) return `${totalSeconds}s`;
   const hours = Math.floor(totalSeconds / 3600);
@@ -16,7 +17,7 @@ export function formatDuration(totalSeconds) {
   return hours ? `${hours}h ${minutes}m` : `${minutes}m`;
 }
 
-export function kpis(reports, sessions) {
+export function kpis(reports: ReportSummary[], sessions: SessionSummary[]) {
   const [latest, previous] = reports;
   const seconds = reports.reduce((sum, r) => sum + (r.duration_seconds || 0), 0);
   return {
@@ -29,7 +30,7 @@ export function kpis(reports, sessions) {
 }
 
 /** Oldest → newest points for the trend line. */
-export function trend(reports) {
+export function trend(reports: ReportSummary[]) {
   return [...reports].reverse().map((r) => ({
     id: r.report_id,
     score: r.overall,
@@ -42,9 +43,9 @@ export function trend(reports) {
  * Each topic's most recent score, and how it moved since the time before: newest report wins.
  * Weakest first, so the eye lands on what to practise.
  */
-export function mastery(reports) {
-  const latest = new Map();
-  const before = new Map();
+export function mastery(reports: ReportSummary[]) {
+  const latest = new Map<string, number>();
+  const before = new Map<string, number>();
   for (const r of reports) {
     for (const [topic, score] of Object.entries(r.per_topic_scores || {})) {
       if (!latest.has(topic)) latest.set(topic, score);
@@ -53,7 +54,8 @@ export function mastery(reports) {
   }
   return [...latest.entries()]
     .map(([topic, score]) => {
-      const change = before.has(topic) ? Math.round((score - before.get(topic)) * 10) / 10 : null;
+      const previous = before.get(topic);
+      const change = previous !== undefined ? Math.round((score - previous) * 10) / 10 : null;
       return {
         key: topic,
         label: topicLabel(topic),
@@ -64,14 +66,16 @@ export function mastery(reports) {
     .sort((a, b) => a.value - b.value);
 }
 
-const dayKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const dayKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 /**
  * The last `weeks` weeks as columns of 7 days (Mon → Sun), each day with how many interviews you started.
  * The final column ends with this week; days after today are marked `future`.
  */
-export function activity(sessions, weeks = 12, now = new Date()) {
-  const counts = new Map();
+export type ActivityDay = { date: Date; key: string; count: number; future: boolean };
+
+export function activity(sessions: Pick<SessionSummary, "started_at">[], weeks = 12, now = new Date()) {
+  const counts = new Map<string, number>();
   for (const s of sessions) {
     const key = dayKey(new Date(s.started_at));
     counts.set(key, (counts.get(key) || 0) + 1);
@@ -80,9 +84,9 @@ export function activity(sessions, weeks = 12, now = new Date()) {
   const mondayOffset = (today.getDay() + 6) % 7; // 0 = Monday
   const start = new Date(today);
   start.setDate(today.getDate() - mondayOffset - (weeks - 1) * 7);
-  const columns = [];
+  const columns: ActivityDay[][] = [];
   for (let w = 0; w < weeks; w += 1) {
-    const days = [];
+    const days: ActivityDay[] = [];
     for (let d = 0; d < 7; d += 1) {
       const date = new Date(start);
       date.setDate(start.getDate() + w * 7 + d);
@@ -96,17 +100,19 @@ export function activity(sessions, weeks = 12, now = new Date()) {
 }
 
 /** The one thing to do next, in order: finish what you started, drill your weakest topic, or begin. */
-export function nextStep(sessions, welcome, reportCount) {
+export type NextStep = { title: string; detail: string; href: string };
+
+export function nextStep(sessions: SessionSummary[], welcome: MentorWelcome | null, reportCount: number): NextStep {
   const open = sessions.find((s) => !s.report_id && s.state !== "REPORT_READY");
   if (open) return { title: "Resume your interview", detail: `${open.config.interview_type} · in progress`, href: `/interview/session/${open.session_id}` };
   const weakest = welcome?.latest?.weakest_topic;
-  if (weakest) return { title: `Drill ${topicLabel(weakest)}`, detail: "Your weakest topic last time", href: drillHref(weakest, { type: welcome.latest.interview_type }) };
+  if (weakest) return { title: `Drill ${topicLabel(weakest)}`, detail: "Your weakest topic last time", href: drillHref(weakest, { type: welcome?.latest?.interview_type }) };
   if (reportCount) return { title: "Take another interview", detail: "Keep the streak going", href: "/interview/configure" };
   return { title: "Take your first interview", detail: "About fifteen minutes with VERA", href: "/interview/configure" };
 }
 
 /** Questions worth asking ARIA, built from your own results. */
-export function ariaPrompts(reports, weakestTopic) {
+export function ariaPrompts(reports: ReportSummary[], weakestTopic: string | null | undefined): string[] {
   if (!reports.length) return ["What will VERA ask me?", "How are interviews scored?"];
   const prompts = [];
   if (weakestTopic) prompts.push(`Why do I keep losing marks on ${topicLabel(weakestTopic)}?`); // keeps acronyms (DSA, OOP)

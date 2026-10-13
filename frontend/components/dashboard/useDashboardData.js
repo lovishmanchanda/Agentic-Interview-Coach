@@ -1,28 +1,26 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useQueries } from "@tanstack/react-query";
 
-import { api } from "@/lib/api";
+import { queries } from "@/lib/queries";
 
 /**
- * Everything the dashboard shows, fetched once in parallel. A failed list is treated as empty (the page still
- * renders); ARIA's welcome is optional (it's absent when the mentor isn't configured).
+ * Everything the dashboard shows, from the shared cache (lib/queries.js): fetched in parallel the first time,
+ * instant when you come back, refreshed in the background when stale. A failed list counts as empty (the page
+ * still renders); ARIA's welcome is optional (null when the mentor isn't configured).
  */
 export default function useDashboardData() {
-  const [data, setData] = useState({ status: "loading", reports: [], sessions: [], welcome: null, plans: [] });
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([
-      api.reports.list().catch(() => []),
-      api.interviews.list().catch(() => []),
-      api.mentor.welcome().catch(() => null),
-      api.prep.plans().catch(() => []),
-    ]).then(([reports, sessions, welcome, plans]) => {
-      if (!cancelled) setData({ status: "ready", reports, sessions, welcome, plans });
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-  return data;
+  return useQueries({
+    queries: [queries.reports, queries.sessions, queries.welcome, queries.plans],
+    combine: ([reports, sessions, welcome, plans]) => {
+      const settled = [reports, sessions, welcome, plans].every((q) => q.isSuccess || q.isError);
+      return {
+        status: settled ? "ready" : "loading",
+        reports: reports.data ?? [],
+        sessions: sessions.data ?? [],
+        welcome: welcome.data ?? null,
+        plans: plans.data ?? [],
+      };
+    },
+  });
 }

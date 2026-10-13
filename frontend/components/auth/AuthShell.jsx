@@ -7,20 +7,15 @@ import { Suspense, useState } from "react";
 
 import Logo from "@/components/brand/Logo";
 import RedirectIfSignedIn from "@/components/layout/RedirectIfSignedIn";
-import { deskFraming, landingFraming } from "@/components/three/framings";
+import { useShot } from "@/components/three/shots";
 import Spinner from "@/components/ui/Spinner";
-import { api } from "@/lib/api";
 import { sheetsFromReports } from "@/lib/desk";
-import useMediaQuery from "@/lib/useMediaQuery";
+import { fetchShared, queries } from "@/lib/queries";
 import { useProfileStore } from "@/store/profileStore";
-import { useScene } from "@/store/sceneStore";
 
 import AuthForm from "./AuthForm";
 
 const EASE = [0.16, 1, 0.3, 1];
-// The chair sits left of the card on wide screens; on phones the room is a dim backdrop above it.
-const WIDE_FRAMING = { x: 0.75, y: 0, distance: 1 };
-const PHONE_FRAMING = { x: 0, y: -1.05, distance: 1.6 };
 const TO_DESK_MS = 1300;
 const TO_LANDING_MS = 1100;
 const wait = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
@@ -36,29 +31,20 @@ const wait = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
  */
 export default function AuthShell({ children }) {
   const router = useRouter();
-  const wide = useMediaQuery("(min-width: 1024px)");
-  const deskWide = useMediaQuery("(min-width: 768px)"); // the same breakpoint as the dashboard's desk shot
   const [leavingTo, setLeavingTo] = useState(null); // null | "landing" | "desk"
   const [sheets, setSheets] = useState([]);
   const leaving = leavingTo !== null;
 
-  const shot = {
-    landing: { preset: "landing", framing: landingFraming(deskWide) }, // the same numbers the landing hero uses
-    desk: { preset: "desk", framing: deskFraming(deskWide) },
-  }[leavingTo] ?? { preset: "auth", framing: wide ? WIDE_FRAMING : PHONE_FRAMING };
-  useScene({
-    ...shot,
-    parallax: leavingTo !== "desk",
-    desk: leavingTo === "desk" ? { reports: sheets } : undefined,
-    label: "The interview room, dimly lit",
-  });
+  // Leaving, the camera glides on to the next page's own shot (the same one it then claims), so it never jumps.
+  useShot(leavingTo ?? "auth", leavingTo === "desk" ? { desk: { reports: sheets } } : {});
 
   async function onSuccess(destination) {
     const toLanding = destination === "/";
     // Start what the next page needs now, in parallel with the camera move (the landing page needs nothing).
     const loads = toLanding ? [] : [
       useProfileStore.getState().load({ force: true }).catch(() => null),
-      api.reports.list().then((list) => setSheets(sheetsFromReports(list))).catch(() => null),
+      // Into the shared cache: the desk the camera lands on then opens with your reports already there.
+      fetchShared(queries.reports).then((list) => setSheets(sheetsFromReports(list))).catch(() => null),
     ];
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       await Promise.all(loads);

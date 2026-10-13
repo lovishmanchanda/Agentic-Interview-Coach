@@ -8,9 +8,9 @@ import { BlendFunction, ToneMappingMode } from "postprocessing";
  * pulls the eye to the chair or the desk, and a touch of grain so the blacks don't look digital.
  * (The canvas renders `flat`, untone-mapped, because tone mapping happens here.)
  */
-export default function Effects() {
+export default function Effects({ multisampling = 4 }) {
   return (
-    <EffectComposer multisampling={4}>
+    <EffectComposer multisampling={multisampling}>
       <Bloom mipmapBlur intensity={0.75} luminanceThreshold={0.92} luminanceSmoothing={0.2} radius={0.7} />
       <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
       <Vignette offset={0.28} darkness={0.78} />

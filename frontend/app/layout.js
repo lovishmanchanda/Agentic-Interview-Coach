@@ -1,6 +1,8 @@
 import { Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
 
 import MotionProvider from "@/components/motion/MotionProvider";
+import QueryProvider from "@/components/providers/QueryProvider";
+import Telemetry from "@/components/providers/Telemetry";
 import SceneHost from "@/components/three/SceneHost";
 import Toaster from "@/components/ui/Toaster";
 
@@ -22,19 +24,22 @@ export const viewport = { themeColor: "#0a0a0b", colorScheme: "dark" };
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} ${serif.variable}`}>
+    <html lang="en" data-scroll-behavior="smooth" className={`${geistSans.variable} ${geistMono.variable} ${serif.variable}`}>
       <body className="min-h-screen antialiased">
         {/* First stop for keyboard users: jump past the navigation to the page itself (every page's <main id="main">). */}
         <a href="#main"
           className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-xl focus:bg-primary focus:px-4 focus:py-2.5 focus:text-sm focus:font-medium focus:text-primary-foreground focus:outline-none focus:ring-2 focus:ring-foreground print:hidden">
           Skip to content
         </a>
-        <MotionProvider>
-          {/* The one 3D canvas, behind every page that asks for it; survives navigation (store/sceneStore.js) */}
-          <div className="contents print:hidden"><SceneHost /></div>
-          {children}
-          <div className="contents print:hidden"><Toaster /></div>
-        </MotionProvider>
+        <Telemetry />
+        <QueryProvider>
+          <MotionProvider>
+            {/* The one 3D canvas, behind every page that asks for it; survives navigation (store/sceneStore.js) */}
+            <div className="contents print:hidden"><SceneHost /></div>
+            {children}
+            <div className="contents print:hidden"><Toaster /></div>
+          </MotionProvider>
+        </QueryProvider>
       </body>
     </html>
   );

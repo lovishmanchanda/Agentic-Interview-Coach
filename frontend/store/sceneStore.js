@@ -18,6 +18,10 @@ export const useSceneStore = create((set, get) => ({
   active: false,
   everActive: false,
   props: {},
+  // { sessionId, full }: the interview page plays the walk to the table once for this session; `full` (your first
+  // interview) is the whole scene, otherwise it only covers VERA's preparation and never delays the question.
+  introFor: null,
+  override: null, // props a section of the page plays instead, while it's on screen (useSceneOverride)
   claim: (owner, props) => set({ owner, active: true, everActive: true, props }),
   release: (owner) => {
     if (get().owner === owner) set({ active: false });
@@ -45,4 +49,15 @@ export function useScene(props) {
       }, RELEASE_GRACE_MS);
     };
   }, [id]);
+}
+
+/**
+ * While `props` is set, the room plays these instead of the page's own shot (the landing page's loop story takes
+ * over the room while it's on screen, then hands it back to the hero). null, or unmounting, hands it back.
+ */
+export function useSceneOverride(props) {
+  useEffect(() => {
+    useSceneStore.setState({ override: props });
+  });
+  useEffect(() => () => useSceneStore.setState({ override: null }), []);
 }

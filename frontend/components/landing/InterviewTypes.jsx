@@ -1,6 +1,4 @@
-"use client";
-
-import { motion } from "motion/react";
+import * as motion from "motion/react-client"; // usable from a server component
 
 import Reveal, { Stagger, StaggerItem } from "@/components/motion/Reveal";
 import SplitHeading from "@/components/motion/SplitHeading";

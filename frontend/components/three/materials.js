@@ -92,3 +92,17 @@ export function seededRandom(seed) {
 
 export const VERA_LIGHT = "#e6ecf5"; // the spotlight: cool steel-white
 export const ARIA_LIGHT = "#ff7a2e"; // the desk lamp: the brand orange
+
+/**
+ * Re-render a light's shadow map only when it's lit and `fresh` (pace.js shadowFrame): never while the light is
+ * dark, and less often while the room is idle. The map must exist first: a shader that samples a never-rendered
+ * shadow map makes every draw call fail, so until then three updates it as usual.
+ */
+export function shadowsWhileLit(light, lit, fresh = true) {
+  if (!light.shadow.map) {
+    light.shadow.autoUpdate = true;
+    return;
+  }
+  light.shadow.autoUpdate = false;
+  if (lit && fresh) light.shadow.needsUpdate = true;
+}

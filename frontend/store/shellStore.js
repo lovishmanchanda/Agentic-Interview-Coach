@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 
-import { api } from "@/lib/api";
+import { fetchShared, queries } from "@/lib/queries";
 
 /** Days in a row with at least one interview started, ending today (or yesterday, so a streak isn't lost at 9 am). */
 export function practiceStreak(sessions, now = new Date()) {
@@ -37,10 +37,11 @@ export const useShellStore = create((set, get) => ({
   load: async ({ force = false } = {}) => {
     if (!force && get().status !== "idle") return;
     set({ status: "loading" });
+    // Through the shared cache: the dashboard asks for the same lists, so they're fetched once.
     const [sessions, reports, welcome] = await Promise.all([
-      api.interviews.list().catch(() => []),
-      api.reports.list().catch(() => []),
-      api.mentor.welcome().catch(() => null),
+      fetchShared(queries.sessions, { force }).catch(() => []),
+      fetchShared(queries.reports, { force }).catch(() => []),
+      fetchShared(queries.welcome, { force }).catch(() => null),
     ]);
     const open = sessions.find((s) => !s.report_id && s.state !== "REPORT_READY");
     set({

@@ -58,6 +58,19 @@ function Table({ columns, rows, empty = "Nothing yet." }) {
   );
 }
 
+// Core Web Vitals thresholds (web.dev): at or under the first is good, over the second is poor.
+const VITAL_LIMITS = { LCP: [2500, 4000], INP: [200, 500], CLS: [0.1, 0.25], FCP: [1800, 3000], TTFB: [800, 1800] };
+
+function vitalRating(name, p75) {
+  const [good, poor] = VITAL_LIMITS[name] ?? [Infinity, Infinity];
+  return p75 <= good ? "good" : p75 > poor ? "poor" : "needs work";
+}
+
+function formatVital(name, value) {
+  if (value == null) return "–";
+  return name === "CLS" ? value.toFixed(3) : value >= 1000 ? `${(value / 1000).toFixed(2)} s` : `${Math.round(value)} ms`;
+}
+
 /** Tokens per day: one series, one hue (--chart-mark), value at the bar tip, a table view is the Table above. */
 function DailyBars({ rows }) {
   const max = Math.max(1, ...rows.map((r) => r.tokens));
@@ -82,6 +95,7 @@ export default function AdminPage() {
   const [usage, setUsage] = useState(null);
   const [prompts, setPrompts] = useState(null);
   const [errors, setErrors] = useState([]);
+  const [health, setHealth] = useState(null);
   const [days, setDays] = useState(7);
   const [loadError, setLoadError] = useState(null);
 
@@ -99,6 +113,7 @@ export default function AdminPage() {
   }, [loadLive, loadPrompts]);
   useEffect(() => {
     api.admin.usage(days).then(setUsage).catch(setLoadError);
+    api.admin.clientHealth(Math.min(days, 14)).then(setHealth).catch(() => {}); // telemetry is kept 14 days
   }, [days]);
 
   if (loadError) {
@@ -196,6 +211,26 @@ export default function AdminPage() {
 
       <Card title="Prompt versions" description="Switch a prompt's version or split traffic (A/B) without a deploy. A split is stable per interview; other servers pick it up within 30 s.">
         <PromptSettings prompts={prompts} onSaved={loadPrompts} />
+      </Card>
+
+      <Card title="Real users: page speed" description="Core Web Vitals from visitors' browsers, at the 75th percentile (how they're judged). Production builds only.">
+        <Table rows={health?.vitals} empty="No reports yet. They arrive from production visitors as they browse." columns={[
+          { key: "path", label: "Page", mono: true }, { key: "name", label: "Metric" },
+          { key: "p75", label: "p75", right: true, mono: true, format: (v, r) => formatVital(r.name, v) },
+          { key: "rating", label: "Rating", format: (_, r) => {
+            const rating = vitalRating(r.name, r.p75);
+            return <span className={rating === "good" ? "text-success" : rating === "poor" ? "text-danger" : "text-warning"}>{rating}</span>;
+          } },
+          { key: "good_share", label: "Good visits", right: true, format: (v) => `${Math.round(v * 100)}%` },
+          { key: "samples", label: "Samples", right: true }]} />
+      </Card>
+
+      <Card title="Browser errors" description="Uncaught errors visitors' browsers hit, most frequent first (messages are scrubbed of emails, tokens and query strings).">
+        <Table rows={health?.errors} empty="No browser errors reported." columns={[
+          { key: "count", label: "Times", right: true },
+          { key: "message", label: "Error", mono: true, format: (v, r) => `${r.name}: ${v}`.slice(0, 140) },
+          { key: "paths", label: "Pages", mono: true, format: (v) => v.join(", ") },
+          { key: "last_at", label: "Last seen", format: (v) => new Date(v).toLocaleString() }]} />
       </Card>
 
       <Card title="Recent AI errors">

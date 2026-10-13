@@ -1,5 +1,3 @@
-"use client";
-
 import Marquee from "@/components/motion/Marquee";
 import NumberTicker from "@/components/motion/NumberTicker";
 import { Stagger, StaggerItem } from "@/components/motion/Reveal";

@@ -186,6 +186,38 @@ body {
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
 }
 
+/* In-page links (#loop, #faq) glide (each target section clears the fixed header with scroll-mt-16). Next.js
+   still jumps straight to the top on route changes (data-scroll-behavior on <html>). */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+/* Reveal-on-scroll (components/motion/Reveal.jsx): scroll-driven, so it runs off the main thread. Each block
+   finishes arriving by the time it's about half way into view; --reveal-delay starts it a little later.
+   Without support for scroll-driven animations, or with reduced motion, content is simply visible. */
+@keyframes reveal-in {
+  from {
+    opacity: 0;
+    translate: 0 var(--reveal-y, 16px);
+  }
+}
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .reveal {
+      animation: reveal-in linear both;
+      animation-timeline: view();
+      animation-range: entry calc(var(--reveal-delay, 0) * 100%) entry calc(55% + var(--reveal-delay, 0) * 100%);
+    }
+    .reveal-stagger > .reveal:nth-child(2) { --reveal-delay: 0.05; }
+    .reveal-stagger > .reveal:nth-child(3) { --reveal-delay: 0.1; }
+    .reveal-stagger > .reveal:nth-child(4) { --reveal-delay: 0.15; }
+    .reveal-stagger > .reveal:nth-child(5) { --reveal-delay: 0.2; }
+    .reveal-stagger > .reveal:nth-child(n + 6) { --reveal-delay: 0.25; }
+  }
+}
+
 /* Reduced motion: every transition and animation becomes instant. Motion components also check this. */
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -203,6 +235,9 @@ body {
  * to animate in (motion leaves opacity 0 / a transform inline until it scrolls into view) is forced visible.
  */
 @media print {
+  .reveal {
+    animation: none !important;
+  }
   :root {
     --background: #ffffff;
     --surface: #ffffff;

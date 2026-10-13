@@ -16,12 +16,15 @@ const isMotionValue = (v) => v && typeof v.get === "function";
  * `opacity` (a number or a motion value) lets a page fade it with scroll; at ~0 it stops drawing too.
  */
 export default function SceneHost() {
-  const { everActive, active, props } = useSceneStore();
-  const { opacity: pageOpacity = 1, ...sceneProps } = props;
+  const { everActive, active, props, override } = useSceneStore();
+  const { opacity: pageOpacity = 1, ...sceneProps } = override ?? props;
   const fallback = useMotionValue(1);
   const opacity = isMotionValue(pageOpacity) ? pageOpacity : fallback;
-  const [faded, setFaded] = useState(false);
-  useMotionValueEvent(opacity, "change", (v) => setFaded(v < 0.02));
+  // Faded right out → stop drawing. Judged per motion value: when another one takes over (a section of the page
+  // overriding the shot), its current value counts at once, without waiting for it to change.
+  const [fade, setFade] = useState({ of: null, faded: false });
+  useMotionValueEvent(opacity, "change", (v) => setFade({ of: opacity, faded: v < 0.02 }));
+  const faded = fade.of === opacity ? fade.faded : opacity.get() < 0.02;
 
   if (!everActive) return null;
   const staticOpacity = isMotionValue(pageOpacity) ? undefined : pageOpacity;

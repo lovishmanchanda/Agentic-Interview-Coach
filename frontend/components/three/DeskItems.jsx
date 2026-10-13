@@ -1,14 +1,18 @@
 "use client";
 
+import { useFrame } from "@react-three/fiber";
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 
 import { DESK_TOP_Y } from "./InterviewRoom";
+import { RoomFocus } from "./roomFocus";
+import { busy, prefersReducedMotion } from "./pace";
 
 /**
  * What lies on your desk (dashboard, Phase 7.7): one sheet of paper per interview report, newest on top,
  * each printed with its score; and, in the lamp's pool of light, a card with the next thing to do.
- * Positions are relative to the desk's centre. Hover lifts a sheet; click opens it.
+ * Positions are relative to the desk's centre. Hover lifts a sheet (and you, at the desk, look at it); click opens it.
+ * A report you haven't seen on the desk before drops onto the stack from above.
  * Keyboard and screen-reader users get the same actions from a plain 2D list the page renders alongside.
  */
 const SHEET = [0.21, 0.297]; // A4 proportions
@@ -110,8 +114,17 @@ function drawNextStep(ctx, font, { title, detail }) {
 // desk; anything else (a card scrolled over it, a button) is the page's, not the desk's.
 const HitArea = createContext(null);
 
+
+/** Tell the seated figure what the pointer is over (a world point), or that it left. */
+function attendTo(focus, mesh, lean) {
+  if (!focus) return;
+  const point = focus.current.point ?? new THREE.Vector3();
+  focus.current = { point: mesh ? mesh.getWorldPosition(point) : null, lean, owner: mesh };
+}
+
 function Paper({ material, position, rotation, onClick, label }) {
   const hitArea = useContext(HitArea);
+  const focus = useContext(RoomFocus);
   const reachable = (e) => !hitArea || Boolean(e.nativeEvent?.target?.closest?.(hitArea));
   const [hovered, setHovered] = useState(false);
   const lift = hovered ? 0.035 : 0;
@@ -131,10 +144,12 @@ function Paper({ material, position, rotation, onClick, label }) {
         e.stopPropagation();
         if (!reachable(e)) return;
         setHovered(true);
+        attendTo(focus, e.object, label === "next-step");
         document.body.style.cursor = "pointer";
       }}
-      onPointerOut={() => {
+      onPointerOut={(e) => {
         setHovered(false);
+        if (focus?.current.owner === e.object) attendTo(focus, null, false);
         document.body.style.cursor = "";
       }}
       onClick={(e) => {
@@ -148,14 +163,48 @@ function Paper({ material, position, rotation, onClick, label }) {
   );
 }
 
-function ReportSheet({ report, index, onOpen }) {
+// The drop: a short wait (the camera settles), then the sheet falls from above the desk, turning as it
+// goes, and settles with a small skid, the way paper lands.
+const DROP_DELAY = 0.9;
+const DROP_SECONDS = 1.1;
+const DROP_HEIGHT = 0.55;
+
+/**
+ * `drop` (any key, e.g. the report id) makes the sheet at `base` (desk-local) drop onto the desk; a new key drops
+ * it again. Returns the ref for the group that carries the sheet (the sheet itself sits at the group's origin).
+ */
+function useDrop(drop, base) {
+  const group = useRef(null);
+  const started = useRef({ key: null, at: 0 });
+  useFrame((frame) => {
+    if (!group.current) return;
+    const s = started.current;
+    if (drop !== s.key) {
+      s.key = drop;
+      s.at = frame.clock.elapsedTime;
+    }
+    const u = drop && !prefersReducedMotion() ? (frame.clock.elapsedTime - s.at - DROP_DELAY) / DROP_SECONDS : 1;
+    const t = Math.min(1, Math.max(0, u));
+    if (u < 1) busy(); // the sheet is in the air
+    const fall = 1 - t * t * (3 - 2 * t); // 1 → 0
+    group.current.visible = u >= 0 || !drop || prefersReducedMotion();
+    group.current.position.set(base[0] + fall * 0.05, base[1] + fall * DROP_HEIGHT, base[2] - fall * 0.08);
+    group.current.rotation.set(fall * 0.5, fall * 0.9, fall * -0.35);
+  });
+  return group;
+}
+
+function ReportSheet({ report, index, onOpen, drop }) {
   // A loose stack: each older sheet a little lower and turned, the same way every time (no randomness).
   const rotation = ((index * 37) % 11 - 5) * 0.035;
   const offset = [0.28 + ((index * 13) % 5 - 2) * 0.012, DESK_TOP_Y + 0.002 + (MAX_SHEETS - index) * 0.0015,
     0.05 + ((index * 7) % 5 - 2) * 0.01];
+  const group = useDrop(drop, offset);
   return (
-    <Paper position={offset} rotation={rotation} label={`report-${report.id}`} onClick={() => onOpen?.(report.id)}
-      material={<PrintedMaterial draw={(ctx, font) => drawSheet(ctx, font, report)} content={[report.score, report.label, report.date]} />} />
+    <group ref={group} position={offset}>
+      <Paper position={[0, 0, 0]} rotation={rotation} label={`report-${report.id}`} onClick={() => onOpen?.(report.id)}
+        material={<PrintedMaterial draw={(ctx, font) => drawSheet(ctx, font, report)} content={[report.score, report.label, report.date]} />} />
+    </group>
   );
 }
 
@@ -170,13 +219,14 @@ function NextStepCard({ step, onClick }) {
  * reports:  [{ id, score, label, date }] newest first
  * nextStep: { title, detail } shown under the lamp, or null
  * hitArea:  CSS selector; if set, the desk only reacts to pointer events over elements matching it
+ * drop:     a key (e.g. the newest report's id) to drop the newest sheet onto the desk; a new key drops it again
  */
-export default function DeskItems({ reports = [], nextStep = null, onOpenReport, onNextStep, hitArea = null }) {
+export default function DeskItems({ reports = [], nextStep = null, onOpenReport, onNextStep, hitArea = null, drop = null }) {
   const shown = reports.slice(0, MAX_SHEETS);
   return (
     <HitArea.Provider value={hitArea}>
       <group>
-        {shown.map((r, i) => <ReportSheet key={r.id} report={r} index={i} onOpen={onOpenReport} />).reverse()}
+        {shown.map((r, i) => <ReportSheet key={r.id} report={r} index={i} onOpen={onOpenReport} drop={i === 0 ? drop : null} />).reverse()}
         {nextStep && <NextStepCard step={nextStep} onClick={onNextStep} />}
       </group>
     </HitArea.Provider>

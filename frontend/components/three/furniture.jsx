@@ -23,7 +23,7 @@ export const FURNITURE = {
 };
 
 let walnutMaterial = null;
-function deskMaterial() {
+export function deskMaterial() {
   walnutMaterial ??= new THREE.MeshPhysicalMaterial({ map: walnut(), roughness: 0.42, clearcoat: 0.35,
     clearcoatRoughness: 0.3, envMapIntensity: 0.06 });
   return walnutMaterial;
@@ -107,9 +107,10 @@ export function Chair() {
 // ── The desk ─────────────────────────────────────────────────────────────────────────────────────────────
 export const DESK_SIZE = [1.5, 0.045, 0.75];
 
-export function Desk({ topY }) {
+/** The desk; `size` [width, thickness, depth] makes it the interview table too. */
+export function Desk({ topY, size = DESK_SIZE }) {
+  const [w, t, d] = size;
   const geo = useMemo(() => {
-    const [w, t, d] = DESK_SIZE;
     const leg = (x) => tube([
       [x, 0.012, -d / 2 + 0.06], [x, 0.012, d / 2 - 0.06], [x, topY - t, d / 2 - 0.06], [x, topY - t, -d / 2 + 0.06],
     ], { r: 0.05, closed: true, radius: 0.013 });
@@ -119,11 +120,11 @@ export function Desk({ topY }) {
       rail: tube([[-w / 2 + 0.1, topY - t - 0.02, -d / 2 + 0.06], [w / 2 - 0.1, topY - t - 0.02, -d / 2 + 0.06]],
         { radius: 0.01, segments: 8 }),
     };
-  }, [topY]);
+  }, [topY, w, t, d]);
 
   return (
     <group>
-      <mesh geometry={geo.top} material={deskMaterial()} position={[0, topY - DESK_SIZE[1] / 2, 0]} castShadow receiveShadow />
+      <mesh geometry={geo.top} material={deskMaterial()} position={[0, topY - t / 2, 0]} castShadow receiveShadow />
       {[...geo.legs, geo.rail].map((g) => (
         <mesh key={g.uuid} geometry={g} material={FURNITURE.chrome} castShadow receiveShadow />
       ))}

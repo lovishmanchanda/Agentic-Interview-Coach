@@ -4,6 +4,7 @@ import { useEffect } from "react";
 
 import Button from "@/components/ui/Button";
 import { AlertIcon } from "@/components/ui/icons";
+import { flush, reportError } from "@/lib/telemetry";
 
 /**
  * The body of the error pages (app/error.js, app/(app)/error.js). Shows a plain message, never the error's
@@ -12,6 +13,8 @@ import { AlertIcon } from "@/components/ui/icons";
 export default function ErrorState({ error, retry, homeHref = "/" }) {
   useEffect(() => {
     console.error(error);
+    reportError(error); // so it shows in the admin dashboard (lib/telemetry.ts)
+    flush();
   }, [error]);
 
   return (
