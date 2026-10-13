@@ -1,5 +1,6 @@
 """Admin API (implementation_plan.md Phase 6): live metrics, usage and cost, prompt versions (A/B + rollback) and
 recent AI calls for tracing. Admins only (the admin role or ADMIN_EMAILS)."""
+from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Query, Request
@@ -92,3 +93,44 @@ async def llm_calls(_: AdminUser, request: Request, session_id: str | None = Non
     query = {k: v for k, v in {"session_id": session_id, "status": status, "prompt_version": prompt_version}.items() if v}
     rows = await request.app.state.db["llm_calls"].find(query, {"_id": 0}).sort("at", -1).to_list(length=limit)
     return ok([{**r, "at": as_utc(r["at"]).isoformat()} for r in rows])
+
+
+VITALS = ("LCP", "INP", "CLS", "FCP", "TTFB")
+
+
+def _p75(values: list[float]) -> float | None:
+    """The 75th percentile (what Core Web Vitals are judged on): nearest-rank, over the stored samples."""
+    if not values:
+        return None
+    ordered = sorted(values)
+    return ordered[max(0, -(-len(ordered) * 3 // 4) - 1)]
+
+
+@router.get("/client-health")
+async def client_health(_: AdminUser, request: Request, days: Annotated[int, Query(ge=1, le=14)] = 7):
+    """What real visitors' browsers report (api/v1/telemetry.py): Core Web Vitals at the 75th percentile per page,
+    and the errors they hit, most frequent first. Computed here (not with $percentile) so it runs on any MongoDB."""
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    events = request.app.state.db["client_events"]
+    samples: dict[tuple[str, str], list[float]] = {}
+    ratings: dict[tuple[str, str], int] = {}
+    async for e in events.find({"kind": "vital", "at": {"$gte": since}}, {"_id": 0, "name": 1, "path": 1, "value": 1, "rating": 1}).limit(20_000):
+        if e.get("name") not in VITALS or e.get("value") is None:
+            continue
+        key = (e["path"], e["name"])
+        samples.setdefault(key, []).append(e["value"])
+        ratings[key] = ratings.get(key, 0) + (e.get("rating") == "good")
+    vitals = [{"path": path, "name": name, "samples": len(vals), "p75": round(_p75(vals), 3),
+               "good_share": round(ratings[(path, name)] / len(vals), 2)}
+              for (path, name), vals in sorted(samples.items())]
+    errors: dict[tuple[str, str], dict] = {}
+    async for e in events.find({"kind": "error", "at": {"$gte": since}}, {"_id": 0}).sort("at", -1).limit(5_000):
+        key = (e.get("name") or "Error", e.get("message") or "")
+        group = errors.setdefault(key, {"name": key[0], "message": key[1], "count": 0, "paths": set(),
+                                        "last_at": as_utc(e["at"]).isoformat(), "stack": e.get("stack")})
+        group["count"] += 1
+        group["paths"].add(e.get("path"))
+    top = sorted(errors.values(), key=lambda g: g["count"], reverse=True)[:50]
+    return ok({"days": days, "vitals": vitals,
+               "errors": [{**g, "paths": sorted(p for p in g["paths"] if p)} for g in top]})
+

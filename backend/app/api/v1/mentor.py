@@ -5,13 +5,14 @@ from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field, StringConstraints
 
 from app.agents.prep.orchestrator import PrepOrchestrator
+from app.api.v1.response_models import MentorWelcome, documented
 from app.core.mentor.mentor_agent import MentorAgent, public_conversation
 from app.db.repositories.agent_run_repo import AgentRunRepository
 from app.db.repositories.company_repo import CompanyRepository
-from app.db.repositories.prep_repo import PrepPlanRepository
-from app.db.repositories.profile_repo import ProfileRepository
 from app.db.repositories.interview_repo import InterviewRepository
 from app.db.repositories.mentor_repo import MentorConversationRepository
+from app.db.repositories.prep_repo import PrepPlanRepository
+from app.db.repositories.profile_repo import ProfileRepository
 from app.dependencies import CurrentUser, DailyLimitedUser
 from app.utils.exceptions import NotFoundError
 from app.utils.rate_limit import enforce
@@ -63,7 +64,7 @@ async def mentor_prepare(body: PrepareRequest, user: DailyLimitedUser, mentor: M
                                    weeks=body.weeks, conversation_id=body.conversation_id))
 
 
-@router.get("/welcome")
+@router.get("/welcome", responses=documented(MentorWelcome))
 async def mentor_welcome(user: CurrentUser, mentor: MentorDep):
     return ok(await mentor.welcome(user["_id"]))
 

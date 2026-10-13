@@ -8,6 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
+from app.api.v1.response_models import MentorWelcome, ReportSummary, SessionSummary
 from app.core.mentor.rag_tool import RagService
 from app.db.seed import load_seed_questions, seed_question_bank
 from app.main import create_app
@@ -91,6 +92,11 @@ def test_full_skeleton_flow(app_client, gateway, rag):
     assert listed["interview_type"] == "technical"
     assert listed["per_topic_scores"] == report["per_topic_scores"] and listed["topics"] == list(report["per_topic_scores"])
     assert isinstance(listed["duration_seconds"], int)
+
+    # The documented response types (the frontend's generated TypeScript types) match what's really sent.
+    ReportSummary.model_validate(listed)
+    SessionSummary.model_validate(app_client.get("/api/v1/interviews", headers=headers).json()["data"][0])
+    MentorWelcome.model_validate(app_client.get("/api/v1/mentor/welcome", headers=headers).json()["data"])
 
     # Mentor: vague question -> recency retrieval -> cites this session.
     gateway.script("generate", "You have solid hashing basics [1]; next, practise load factor and resizing [2].")

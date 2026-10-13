@@ -91,6 +91,7 @@ def create_app(settings: Settings | None = None, *, db=None, gateway=None, rag=N
         "interviews": SlidingWindowLimiter(settings.interviews_per_hour, 3600),
         "code_run": SlidingWindowLimiter(settings.code_runs_per_minute, 60),
         "prep": SlidingWindowLimiter(settings.prep_plans_per_hour, 3600),
+        "telemetry": SlidingWindowLimiter(settings.telemetry_per_minute, 60),
     }
 
     @app.middleware("http")

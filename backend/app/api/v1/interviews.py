@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, Request, status
 from pydantic import BaseModel, Field
 
+from app.api.v1.response_models import SessionSummary, documented
 from app.core.interview.engine import InterviewEngine
 from app.core.interview.question_engine import topics_for
 from app.core.interview.state_machine import allowed_next
@@ -81,7 +82,7 @@ async def create_interview(body: InterviewConfigRequest, user: DailyLimitedUser,
     return ok(_summary(session))
 
 
-@router.get("")
+@router.get("", responses=documented(list[SessionSummary]))
 async def list_interviews(user: CurrentUser, repo: Annotated[InterviewRepository, Depends(get_interview_repo)]):
     return ok([_summary(s) for s in await repo.list_sessions(user["_id"])])
 

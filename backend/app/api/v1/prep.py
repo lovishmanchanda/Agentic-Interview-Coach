@@ -4,6 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
+from app.api.v1.response_models import PlanSummary, documented
 from app.db.repositories.interview_repo import as_utc
 from app.db.repositories.prep_repo import PrepPlanRepository
 from app.dependencies import CurrentUser, DbDep
@@ -20,7 +21,7 @@ def get_plans(db: DbDep) -> PrepPlanRepository:
 PlansDep = Annotated[PrepPlanRepository, Depends(get_plans)]
 
 
-@router.get("/plans")
+@router.get("/plans", responses=documented(list[PlanSummary]))
 async def list_plans(user: CurrentUser, plans: PlansDep):
     return ok([{**p, "created_at": as_utc(p["created_at"]).isoformat()} for p in await plans.list_for(user["_id"])])
 
