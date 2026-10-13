@@ -31,7 +31,7 @@
   </tr>
 </table>
 
-InterviewOS is an AI interview coach built as one continuous place: *the interview room*. You arrive at an empty chair under a spotlight, sit down for a live interview with VERA, get an honest report, and talk it through with ARIA at your desk. Every interview makes the next one better, because nothing you do is forgotten.
+InterviewOS is an AI interview coach built as one continuous place: *the interview room*. You arrive at an empty chair under a spotlight; once you sign in, you walk in and take the seat. Start an interview and your chair is brought to a table where two interviewers wait; sit through a live interview with VERA, get an honest report, and talk it through with ARIA at your desk. Every interview makes the next one better, because nothing you do is forgotten.
 
 ```mermaid
 flowchart LR
@@ -49,17 +49,18 @@ flowchart LR
 
 | Page | What you get |
 |---|---|
-| **Landing** (`/`) | A 3D interview room (an empty chair under a spotlight) with a scroll-driven story of the loop, the two agents, interview types, a sample report and an FAQ. |
+| **Landing** (`/`) | A 3D interview room: an empty chair under a spotlight (hover "Take the seat" and a glowing preview of you appears in it). Scrolling plays the loop in the room itself: interviewed at the table, an interviewer writing up your answer, the report dropping onto your desk, ARIA's lamp lighting what's next. Then the two agents, interview types, a sample report and an FAQ. |
 | **Sign in / Create account** | One card that morphs between sign-in and sign-up in the same room, no page reload. Signing in or out is a smooth camera move. |
 | **Onboarding** | Four short steps: about you, target role and company (optional JD), skills, preferences. |
-| **Your desk** (`/dashboard`) | Your reports lie on a 3D desk as printed sheets; the lamp lights your next step. Below: KPIs, score over time, where each topic stands, a 12-week practice calendar, Ask ARIA and every interview. |
+| **Your desk** (`/dashboard`) | You sit at a 3D desk, your reports lying there as printed sheets (a new one drops onto the stack); you look at the sheet you point at and lean in to the next step under the lamp. Below: KPIs, score over time, where each topic stands, a 12-week practice calendar, Ask ARIA and every interview. |
+| **Walking into the interview** | While VERA prepares the first question, the room cuts to the interview table: your chair is brought to it, one interviewer takes notes, the other watches you, and the camera pushes in over your shoulder as the question arrives. Skippable; off under reduced motion. |
 | **Start an interview** | One-click presets (Quick practice, Behavioural round, Coding round, Full mock, *Drill your weakest topic*) or Customise everything. VERA sums up what's coming in her own words. |
 | **The interview room** | One question at a time on a lit stage, arriving word by word; earlier rounds fold away. An answer box docked at the bottom (⌘/Ctrl + Enter), a timer ring, hints, and a score ring with feedback after each answer (practice mode). Serious mode is quieter: scores only at the end. |
 | **The coding room** | Problem statement, a Monaco editor in the InterviewOS theme, Run examples / Submit (hidden tests too), your approach, and a console with pass/fail per test. Python is graded; JS, Java, C++ and C run as written. |
 | **The report** | A story: the score and VERA's summary, how you scored (per question, topic and dimension), what went well, what to fix, your next steps, the full evidence, and finally the handoff: *VERA has passed your report to ARIA*. Printable / save as PDF. |
 | **ARIA** (`/mentor`) | Chat grounded in your reports with citation chips (hover to see the source). Replies write themselves out, and drill and practice buttons appear under them. She answers general interview-prep questions as clearly labelled general advice, and politely declines anything off-topic (and attempts to jailbreak her). "Prepare me for Google" builds a week-by-week company plan. |
 | **Everywhere** | ⌘K quick actions, a status line ("VERA ready · ARIA knows 3 reports · 4-day streak"), a phone tab bar, and skip links and full keyboard support. |
-| **Admin** (`/admin`) | For `ADMIN_EMAILS` only: live errors and latency, tokens and cost per prompt version, and prompt A/B switching without a deploy. |
+| **Admin** (`/admin`) | For `ADMIN_EMAILS` only: live errors and latency, tokens and cost per prompt version, prompt A/B switching without a deploy, and what real visitors' browsers report: Core Web Vitals per page (p75) and browser errors (self-hosted, nothing personal stored). |
 
 <table>
   <tr>
@@ -69,20 +70,20 @@ flowchart LR
   </tr>
 </table>
 
-**Design:** dark only, black and greys with sparing orange (the brand, ARIA's lamp) and steel (VERA's light). The 3D room is built entirely in code (no model files) with three.js. It meets WCAG 2.2 AA (checked with axe on every page), respects reduced motion, and falls back to a still image without WebGL.
+**Design:** dark only, black and greys with sparing orange (the brand, ARIA's lamp) and steel (VERA's light). The 3D room, including the people in it (sculpted, faceless mannequin figures that walk, sit and take notes), is built entirely in code (no model files) with three.js. It meets WCAG 2.2 AA (checked with axe on every page), respects reduced motion, and falls back to a still image without WebGL.
 
 ## Tech stack
 
 | Layer | Built with |
 |---|---|
-| Frontend | Next.js 16 (App Router), React 19, Tailwind CSS 4, Zustand, Motion, Lenis |
+| Frontend | Next.js 16 (App Router), React 19, TypeScript (API types generated from the backend's OpenAPI), Tailwind CSS 4, TanStack Query, Zustand, Motion |
 | 3D | three.js + React Three Fiber + postprocessing (bloom, filmic tone mapping) |
 | Backend | FastAPI (REST + WebSockets), Pydantic, PyMongo async |
 | Database | MongoDB (Azure Cosmos DB for MongoDB or Atlas in production; an in-memory double locally) |
 | AI | Groq `openai/gpt-oss-120b` (VERA, reports, ARIA) and `gpt-oss-20b` (evaluation), all through one AI Gateway with token budgets and cost tracking |
 | ARIA's memory | `rag_tool`: Chroma + Hugging Face `all-MiniLM-L6-v2` embeddings, intent-routed retrieval with citations |
 | Code runner | [Piston](https://github.com/engineer-man/piston), self-hosted and optional (sandboxed, separate from the app) |
-| Quality | 575 backend tests, AI eval suites (evaluator, interviewer, questions, 26 ARIA cases incl. jailbreaks), CI on every push |
+| Quality | 575 backend tests, 41 frontend unit tests (Vitest) and end-to-end browser tests (Playwright, against a real backend), AI eval suites (evaluator, interviewer, questions, 26 ARIA cases incl. jailbreaks), CI on every push |
 
 ```
  Browser (Next.js) ──REST──▶ FastAPI ──▶ MongoDB
@@ -150,10 +151,12 @@ Then set `PISTON_URL=http://localhost:2000/api/v2` in `.env` and restart the bac
 cd backend && pytest -q                            # 575 unit + integration tests; no keys needed
 cd backend && python -m scripts.seed --check       # validate the question bank and company seed data
 cd frontend && npm run lint && npm run build       # lint + production build
+cd frontend && npm test                            # 41 unit tests (Vitest): dashboard maths, redirects, 3D poses, cache
+cd frontend && npm run test:e2e                    # end-to-end in Chrome (Playwright); starts its own backend (fake AI) + build
 cd backend && .venv/bin/python ../evaluation/interview_eval/run_evaluator_eval.py   # evaluator accuracy (live Groq)
 ```
 
-CI runs the first three on every push and pull request ([.github/workflows/ci.yml](.github/workflows/ci.yml)).
+CI runs all of these except the live eval on every push and pull request ([.github/workflows/ci.yml](.github/workflows/ci.yml)).
 
 ## Deploy
 
@@ -190,7 +193,9 @@ What every file does: **[docs/project-structure.md](docs/project-structure.md)**
 - **Every AI call goes through one gateway** that records tokens, cost and errors. Prompts and answers are not stored unless `LLM_TRACE_CONTENT=true`.
 - **ARIA's isolation:** she only ever reads the signed-in user's own reports.
 - **Code:** it runs in your own Piston sandbox, never on the app server.
-- **Production mode:** API docs are off, errors never include stack traces, the frontend sends security headers, and Docker images run as non-root and exclude `.env`.
+- **Production mode:** API docs are off, errors never include stack traces, and Docker images run as non-root and exclude `.env`.
+- **Content-Security-Policy:** scripts only from the site itself (and the code editor's CDN), network calls only to the API, no framing, plugins or `<base>` rewrites. Inline scripts are allowed so pages stay static and CDN-cached (Next.js streams page data inline; refusing it needs per-request nonces); the XSS surface is closed instead: React escapes output, nothing injects raw HTML, ARIA's markdown renders no HTML.
+- **Telemetry:** browsers report page speed and uncaught errors to the API (no third party). Stored without personal data: page paths with IDs removed, scrubbed messages; deleted after 14 days.
 
 ## Documentation
 
@@ -216,5 +221,5 @@ What every file does: **[docs/project-structure.md](docs/project-structure.md)**
 **Next:**
 - Voice interviews (Phase 5)
 - Email verification and password reset
-- A full Content-Security-Policy and a custom domain (so Safari keeps sessions across the two hosts)
+- A custom domain (so Safari keeps sessions across the two hosts)
 - Running more than one backend instance: shared rate limits and a hosted vector store
