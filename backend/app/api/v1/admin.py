@@ -96,6 +96,7 @@ async def llm_calls(_: AdminUser, request: Request, session_id: str | None = Non
 
 
 VITALS = ("LCP", "INP", "CLS", "FCP", "TTFB")
+MAX_VITAL_SAMPLES = 20_000  # the most recent ones, if there are more in the period (the response says so)
 
 
 def _p75(values: list[float]) -> float | None:
@@ -109,12 +110,15 @@ def _p75(values: list[float]) -> float | None:
 @router.get("/client-health")
 async def client_health(_: AdminUser, request: Request, days: Annotated[int, Query(ge=1, le=14)] = 7):
     """What real visitors' browsers report (api/v1/telemetry.py): Core Web Vitals at the 75th percentile per page,
-    and the errors they hit, most frequent first. Computed here (not with $percentile) so it runs on any MongoDB."""
+    and the errors they hit, most frequent first. Computed here (not with $percentile) so it runs on any MongoDB:
+    over every sample in the period, or, past MAX_VITAL_SAMPLES, over the most recent ones (`vitals_capped`)."""
     since = datetime.now(timezone.utc) - timedelta(days=days)
     events = request.app.state.db["client_events"]
     samples: dict[tuple[str, str], list[float]] = {}
     ratings: dict[tuple[str, str], int] = {}
-    async for e in events.find({"kind": "vital", "at": {"$gte": since}}, {"_id": 0, "name": 1, "path": 1, "value": 1, "rating": 1}).limit(20_000):
+    query = {"kind": "vital", "at": {"$gte": since}}
+    total = await events.count_documents(query)
+    async for e in events.find(query, {"_id": 0, "name": 1, "path": 1, "value": 1, "rating": 1}).sort("at", -1).limit(MAX_VITAL_SAMPLES):
         if e.get("name") not in VITALS or e.get("value") is None:
             continue
         key = (e["path"], e["name"])
@@ -131,6 +135,7 @@ async def client_health(_: AdminUser, request: Request, days: Annotated[int, Que
         group["count"] += 1
         group["paths"].add(e.get("path"))
     top = sorted(errors.values(), key=lambda g: g["count"], reverse=True)[:50]
-    return ok({"days": days, "vitals": vitals,
+    return ok({"days": days, "vitals": vitals, "vital_samples": total,
+               "vitals_capped": total > MAX_VITAL_SAMPLES,  # p75s then cover the most recent MAX_VITAL_SAMPLES only
                "errors": [{**g, "paths": sorted(p for p in g["paths"] if p)} for g in top]})
 

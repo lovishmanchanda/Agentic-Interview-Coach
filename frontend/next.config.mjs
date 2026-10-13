@@ -1,13 +1,15 @@
 /**
- * Security headers on every page, including a Content-Security-Policy: what the browser may load and run, so an
- * injected script has nowhere to come from and nowhere to send data.
+ * Security headers on every page, including a Content-Security-Policy: where scripts, styles and data may be
+ * loaded from, and where the page may send data.
  *
- *   scripts   this site and the Monaco editor's CDN only: nothing from anywhere else can run. Inline scripts are
- *             allowed because Next.js streams each page's data in inline <script> tags; refusing them needs a
- *             per-request nonce, which would turn every (static, CDN-cached) page into a server render on each
+ *   scripts   from this site and the Monaco editor's CDN only: no script can be loaded from anywhere else.
+ *             Inline scripts ARE allowed ('unsafe-inline'), so this policy does not stop an injected inline
+ *             script: Next.js streams each page's data in inline <script> tags, and refusing inline scripts needs
+ *             a per-request nonce, which would turn every static, CDN-cached page into a server render on each
  *             visit. (Experimental SRI was tried: it hashes only some external scripts, not the inline ones.)
- *             The XSS surface that inline scripts would matter for is kept closed instead: React escapes all
- *             output, nothing uses dangerouslySetInnerHTML, and ARIA's markdown renders no raw HTML.
+ *             Injection is prevented in the code instead: React escapes all output, ARIA's markdown renders no
+ *             raw HTML, and lint forbids dangerouslySetInnerHTML (eslint.config.mjs). Moving to nonces is the
+ *             next step if third-party scripts or raw-HTML rendering are ever added.
  *   connect   this site and the API (HTTP + WebSocket) only, so nothing can be sent anywhere else
  *   styles    inline allowed (animation libraries set styles inline; styles can't run code)
  *   framing   nobody (clickjacking); no plugins; no <base> rewrites; forms post to this site only
@@ -19,7 +21,7 @@ const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").rep
 const API_WS = API_URL.replace(/^http/, "ws");
 const MONACO_CDN = "https://cdn.jsdelivr.net"; // the code editor (@monaco-editor/react's default loader)
 
-const CSP = [
+const CSP = [ // a script that did run could still only talk to this site and the API (connect-src)
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline' ${MONACO_CDN}${isDev ? " 'unsafe-eval'" : ""}`,
   `style-src 'self' 'unsafe-inline' ${MONACO_CDN}`,

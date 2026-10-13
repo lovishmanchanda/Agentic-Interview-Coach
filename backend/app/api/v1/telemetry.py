@@ -1,9 +1,10 @@
 """Client telemetry: how fast the site really is for its visitors (Core Web Vitals) and the errors their browsers
 hit, so problems show up in the admin dashboard instead of going unseen. Self-hosted: no third-party service.
 
-Anonymous on purpose (errors on the landing page matter too), so it stores nothing personal: the page's path
-with any IDs replaced by ":id" and no query string, the metric or error, and a trimmed message and stack.
-Events expire after 14 days (TTL index). Rate-limited per IP.
+Anonymous on purpose (errors on the landing page matter too), and an error is stored as a fingerprint, never as
+free text: its type, its message with quoted text and long numbers replaced (only short code names such as
+'map' are kept), and its stack reduced to code locations (function, file path, line). The page's path has IDs
+replaced by ":id" and no query string. Events expire after 14 days (TTL index). Rate-limited per IP.
 """
 import re
 from datetime import datetime, timezone
@@ -28,12 +29,37 @@ def normalize_path(path: str) -> str:
     return _ID_SEGMENT.sub("/:id", path)[:200]
 
 
-def scrub(text: str | None, limit: int) -> str | None:
-    """No query strings, emails or tokens in what's stored, and a bounded length."""
-    if not text:
+_QUOTED = re.compile(r"""(['"`])(.{0,200}?)\1""")
+_CODE_NAME = re.compile(r"^[A-Za-z_$][\w$.\-]{0,40}$")  # 'map', "user.profile", 'aria-label': code, not content
+_LONG_NUMBER = re.compile(r"\d{3,}")
+# A stack frame: Chrome "at fn (https://host/path/file.js?v=1:12:34)" / "at https://…", Firefox/Safari "fn@https://…"
+_FRAME = re.compile(r"(?:at\s+(?:(?P<fn>[\w$.<>\[\] ]{1,80}?)\s+\()?|(?P<fn2>[\w$.<>]{1,80})?@)"
+                    r"(?P<url>[a-z-]+://[^\s()?#]+|/[^\s()?#]+)(?:[?#][^\s():]*)?:(?P<line>\d+):(?P<col>\d+)")
+
+
+def fingerprint(message: str | None) -> str | None:
+    """An error message with anything that could be someone's text taken out: quoted strings (unless they're a
+    short code name), long numbers, emails, tokens and query strings."""
+    if not message:
         return None
-    text = _TOKEN.sub("[token]", _EMAIL.sub("[email]", _URL_QUERY.sub(r"\1", text)))
-    return text[:limit]
+    text = _TOKEN.sub("[token]", _EMAIL.sub("[email]", _URL_QUERY.sub(r"\1", message)))
+    text = _QUOTED.sub(lambda m: m.group(0) if _CODE_NAME.match(m.group(2)) else f"{m.group(1)}…{m.group(1)}", text)
+    return " ".join(_LONG_NUMBER.sub("N", text).split())[:300] or None
+
+
+def code_frames(stack: str | None, limit: int = 8) -> str | None:
+    """A stack reduced to where in the code it happened: 'fn (/_next/static/chunks/x.js:12:34)' per frame. Lines
+    that aren't frames (the message again, anything else) are dropped."""
+    if not stack:
+        return None
+    frames = []
+    for match in _FRAME.finditer(stack):
+        path = re.sub(r"^[a-z-]+://[^/]+", "", match["url"])  # the file's path, not the host
+        fn = (match["fn"] or match["fn2"] or "").strip()
+        frames.append(f"{fn} ({path}:{match['line']}:{match['col']})" if fn else f"{path}:{match['line']}:{match['col']}")
+        if len(frames) == limit:
+            break
+    return "\n".join(frames) or None
 
 
 class ClientEvent(BaseModel):
@@ -68,7 +94,7 @@ async def collect(body: TelemetryBatch, request: Request) -> Response:
     now = datetime.now(timezone.utc)
     docs = [{
         "kind": e.kind, "name": e.name, "value": e.value, "rating": e.rating, "path": e.path,
-        "message": scrub(e.message, 500), "stack": scrub(e.stack, 2_000), "at": now,
+        "message": fingerprint(e.message), "stack": code_frames(e.stack), "at": now,
     } for e in body.events]
     await request.app.state.db["client_events"].insert_many(docs)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

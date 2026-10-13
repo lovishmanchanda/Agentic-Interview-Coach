@@ -14,7 +14,8 @@ export interface paths {
         /**
          * Client Health
          * @description What real visitors' browsers report (api/v1/telemetry.py): Core Web Vitals at the 75th percentile per page,
-         *     and the errors they hit, most frequent first. Computed here (not with $percentile) so it runs on any MongoDB.
+         *     and the errors they hit, most frequent first. Computed here (not with $percentile) so it runs on any MongoDB:
+         *     over every sample in the period, or, past MAX_VITAL_SAMPLES, over the most recent ones (`vitals_capped`).
          */
         get: operations["client_health_api_v1_admin_client_health_get"];
         put?: never;

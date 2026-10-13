@@ -2,7 +2,7 @@
 from fastapi.testclient import TestClient
 
 from app.api.v1.admin import _p75
-from app.api.v1.telemetry import normalize_path, scrub
+from app.api.v1.telemetry import code_frames, fingerprint, normalize_path
 from app.main import create_app
 from tests.integration.test_walking_skeleton import _signup
 
@@ -23,17 +23,19 @@ def test_vitals_and_errors_are_stored_without_anything_personal(settings, mock_d
         response = client.post(URL, json={"events": [
             {"kind": "vital", "name": "LCP", "value": 1830.5, "rating": "good",
              "path": "/interview/report/9f3c2a1b0d4e5f67a8b9?tab=evidence#top"},
-            {"kind": "error", "name": "TypeError", "path": "/dashboard",
-             "message": "Cannot read 'x' for ada@example.com (token eyJhbGciOi.eyJzdWIiOi.c2lnbmF0dXJl)",
-             "stack": "at f (https://interviewos.app/_next/chunk.js?v=123:1:2)"},
+            {"kind": "error", "name": "SyntaxError", "path": "/dashboard",
+             "message": 'Unexpected token "my answer: a hash map with chaining" for ada@example.com '
+                        "(token eyJhbGciOi.eyJzdWIiOi.c2lnbmF0dXJl) in JSON at position 1234",
+             "stack": "SyntaxError: my answer: a hash map\n    at parse (https://interviewos.app/_next/chunk.js?v=123:1:2)"},
         ]})
         assert response.status_code == 204
         vital, error = _stored(client)
         assert vital["path"] == "/interview/report/:id"  # no IDs, no query string
         assert vital["value"] == 1830.5 and vital["rating"] == "good"
-        assert "ada@example.com" not in error["message"] and "[email]" in error["message"]
-        assert "eyJ" not in error["message"] and "[token]" in error["message"]
-        assert "?v=123" not in error["stack"]
+        # A fingerprint, not free text: nothing the user typed survives in the message or the stack.
+        assert error["message"] == 'Unexpected token "…" for [email] (token [token]) in JSON at position N'
+        assert error["stack"] == "parse (/_next/chunk.js:1:2)"
+        assert "hash map" not in error["message"] + error["stack"]
 
 
 def test_malformed_or_oversized_batches_are_refused(settings, mock_db, gateway):
@@ -64,6 +66,7 @@ def test_admin_sees_p75_vitals_per_page_and_grouped_errors(settings, mock_db, ga
 
         assert client.get("/api/v1/admin/client-health", headers=user).status_code == 403
         data = client.get("/api/v1/admin/client-health", headers=boss).json()["data"]
+        assert data["vital_samples"] == 8 and data["vitals_capped"] is False
         [row] = data["vitals"]
         assert row == {"path": "/", "name": "LCP", "samples": 8, "p75": 2100, "good_share": 0.75}
         [error] = data["errors"]
@@ -75,4 +78,7 @@ def test_helpers():
     assert normalize_path("/mentor/c/0123456789abcdef0123?x=1") == "/mentor/c/:id"
     assert normalize_path("/interview/session/123e4567-e89b-12d3-a456-426614174000") == "/interview/session/:id"
     assert normalize_path("/dashboard") == "/dashboard"
-    assert scrub(None, 10) is None and scrub("a" * 50, 10) == "a" * 10
+    assert fingerprint(None) is None and fingerprint("Cannot read properties of undefined (reading 'map')").endswith("'map')")
+    assert len(fingerprint("x " * 500)) <= 300
+    assert code_frames("no frames here") is None
+    assert code_frames("render@https://x.app/_next/c.js:5:6") == "render (/_next/c.js:5:6)"

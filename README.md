@@ -194,8 +194,8 @@ What every file does: **[docs/project-structure.md](docs/project-structure.md)**
 - **ARIA's isolation:** she only ever reads the signed-in user's own reports.
 - **Code:** it runs in your own Piston sandbox, never on the app server.
 - **Production mode:** API docs are off, errors never include stack traces, and Docker images run as non-root and exclude `.env`.
-- **Content-Security-Policy:** scripts only from the site itself (and the code editor's CDN), network calls only to the API, no framing, plugins or `<base>` rewrites. Inline scripts are allowed so pages stay static and CDN-cached (Next.js streams page data inline; refusing it needs per-request nonces); the XSS surface is closed instead: React escapes output, nothing injects raw HTML, ARIA's markdown renders no HTML.
-- **Telemetry:** browsers report page speed and uncaught errors to the API (no third party). Stored without personal data: page paths with IDs removed, scrubbed messages; deleted after 14 days.
+- **Content-Security-Policy:** scripts load only from the site itself (and the code editor's CDN), network calls go only to the API, and there's no framing, plugins or `<base>` rewrites. Inline scripts are allowed, so the policy alone doesn't stop an injected inline script: that keeps pages static and CDN-cached (Next.js streams page data inline; refusing it needs per-request nonces). Injection is prevented in the code instead: React escapes output, ARIA's markdown renders no HTML, and lint forbids `dangerouslySetInnerHTML`.
+- **Telemetry:** browsers report page speed and uncaught errors to the API (no third party). Errors are stored as fingerprints, never free text: the error type, the message with quoted text and long numbers removed, and code locations from the stack. Page paths have IDs removed. Deleted after 14 days.
 
 ## Documentation
 

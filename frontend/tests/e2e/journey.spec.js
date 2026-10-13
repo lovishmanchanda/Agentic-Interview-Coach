@@ -79,8 +79,11 @@ test("after your first interview the intro never holds the question back", async
   await page.waitForURL("**/");
   await page.goto("/interview/configure");
   await page.getByRole("button", { name: "Take the seat", exact: true }).click();
-  await expect(page.getByRole("heading", { name: /Back in the seat/ })).toBeVisible();
+  // The question shows the moment it arrives (its clock is already running on the server): with the instant
+  // fake AI, the short "Back in the seat." intro may be gone before it's even seen, and the first-interview scene
+  // never plays.
   await expect(page.getByText(/Question 1 of/).first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("heading", { name: /Take your seat/ })).toHaveCount(0);
 });
 
 test("reduced motion skips the intro and goes straight to the question", async ({ browser, request }) => {
