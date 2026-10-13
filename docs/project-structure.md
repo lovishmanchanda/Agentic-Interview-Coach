@@ -62,7 +62,7 @@ backend/
 | `v1/mentor.py` | ARIA: welcome, chat, conversations, "prepare me for <company>". |
 | `v1/prep.py` | Company preparation plans (list/read). |
 | `v1/admin.py` | Admin only: live metrics, usage and cost, prompt versions and A/B splits, client health (real visitors' web vitals at p75 and browser errors). |
-| `v1/telemetry.py` | Browser reports (web vitals, uncaught errors): anonymous, rate-limited, IDs and personal data scrubbed, kept 14 days. |
+| `v1/telemetry.py` | Browser reports (web vitals, uncaught errors): anonymous, rate-limited, kept 14 days; errors stored as fingerprints (type, message without quoted text or numbers, code locations), page paths without IDs. |
 | `v1/response_models.py` | Typed descriptions of list responses for the OpenAPI schema (the frontend's generated types); tests validate real responses against them. |
 | `ws.py` | `/ws/interview/{id}`: the live interview socket (auth handshake, questions, answers, hints, code, heartbeat). |
 | `ws_protocol.py` | Typed messages for that socket; the contract the frontend follows. |

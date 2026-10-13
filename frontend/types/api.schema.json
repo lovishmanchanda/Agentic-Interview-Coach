@@ -1662,7 +1662,7 @@
   "paths": {
     "/api/v1/admin/client-health": {
       "get": {
-        "description": "What real visitors' browsers report (api/v1/telemetry.py): Core Web Vitals at the 75th percentile per page,\nand the errors they hit, most frequent first. Computed here (not with $percentile) so it runs on any MongoDB.",
+        "description": "What real visitors' browsers report (api/v1/telemetry.py): Core Web Vitals at the 75th percentile per page,\nand the errors they hit, most frequent first. Computed here (not with $percentile) so it runs on any MongoDB:\nover every sample in the period, or, past MAX_VITAL_SAMPLES, over the most recent ones (`vitals_capped`).",
         "operationId": "client_health_api_v1_admin_client_health_get",
         "parameters": [
           {

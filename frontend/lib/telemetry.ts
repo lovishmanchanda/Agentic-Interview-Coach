@@ -4,7 +4,9 @@
  * backend drops IDs and query strings), the metric or the error's type, message and a short stack.
  *
  * Events queue up and go in small batches: every 15 s, and when the tab is hidden or closed (fetch keepalive,
- * which outlives the page). Only in production builds, or with NEXT_PUBLIC_TELEMETRY=1.
+ * which outlives the page but which browsers cap at 64 KB in flight: events are trimmed to what the server keeps,
+ * batches are split by size, and keepalive is used only within that budget). Only in production builds, or
+ * with NEXT_PUBLIC_TELEMETRY=1.
  */
 import { API_URL } from "@/lib/api";
 
@@ -18,8 +20,14 @@ export type ClientEvent = {
   stack?: string | null;
 };
 
-const MAX_BATCH = 25;
+const MAX_BATCH = 25; // events per request (the server's limit)
+const MAX_BATCH_BYTES = 16_000;
+const KEEPALIVE_BUDGET = 60_000; // under the browsers' 64 KB cap for keepalive requests in flight
 const MAX_ERRORS_PER_PAGE = 10; // a render loop throwing the same error shouldn't flood anything
+// The server keeps a fingerprint of the message and a few code locations from the stack; send no more than that.
+const MAX_MESSAGE = 300;
+const MAX_STACK_LINES = 8;
+const MAX_STACK = 1_500;
 
 export const telemetryEnabled = () =>
   typeof window !== "undefined" && (process.env.NODE_ENV === "production" || process.env.NEXT_PUBLIC_TELEMETRY === "1");
@@ -43,7 +51,26 @@ export function reportError(error: unknown) {
   seen.add(key);
   errorsThisPage += 1;
   errors.push({ kind: "error", name: (err.name || "Error").slice(0, 40), path: window.location.pathname,
-    message: err.message.slice(0, 2000), stack: (err.stack || "").split("\n").slice(0, 8).join("\n").slice(0, 8000) });
+    message: err.message.slice(0, MAX_MESSAGE),
+    stack: (err.stack || "").split("\n").slice(0, MAX_STACK_LINES + 1).join("\n").slice(0, MAX_STACK) });
+}
+
+/** Split events into request bodies of at most MAX_BATCH events and MAX_BATCH_BYTES each. */
+export function batches(events: ClientEvent[], maxBytes = MAX_BATCH_BYTES, maxCount = MAX_BATCH): string[] {
+  const bodies: string[] = [];
+  let current: ClientEvent[] = [];
+  const body = (list: ClientEvent[]) => JSON.stringify({ events: list });
+  for (const event of events) {
+    const next = [...current, event];
+    if (current.length && (next.length > maxCount || body(next).length > maxBytes)) {
+      bodies.push(body(current));
+      current = [event];
+    } else {
+      current = next;
+    }
+  }
+  if (current.length) bodies.push(body(current));
+  return bodies;
 }
 
 /** Send what's queued (in batches the backend accepts). Safe to call often; does nothing when empty. */
@@ -52,12 +79,14 @@ export function flush() {
   const events = [...vitals.values(), ...errors];
   vitals.clear();
   errors = [];
-  for (let i = 0; i < events.length; i += MAX_BATCH) {
+  let inFlight = 0;
+  for (const body of batches(events)) {
+    inFlight += body.length;
     fetch(`${API_URL}/api/v1/telemetry`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ events: events.slice(i, i + MAX_BATCH) }),
-      keepalive: true, // still delivered when the page is being closed
+      body,
+      keepalive: inFlight <= KEEPALIVE_BUDGET, // delivered even as the page closes, within the browser's cap
       credentials: "omit",
     }).catch(() => {}); // telemetry never gets in the way
   }

@@ -7,18 +7,20 @@ import AgentStatus from "@/components/brand/AgentStatus";
 import { useShot } from "@/components/three/shots";
 
 const EASE = [0.16, 1, 0.3, 1];
-// The whole scene (your first interview): long enough for your chair to reach the table, then the push-in.
-const FULL = { minMs: 3400, pushDelay: 0.5, fade: 1.2 };
-// Every interview after that: the room only fills VERA's preparation; the question is never held back.
-const QUICK = { minMs: 0, pushDelay: 0, fade: 0.45 };
+// The server starts a question's clock when it sends it, so the intro never holds a question back (that time
+// would count against the answer): the scene plays while VERA prepares, and when the question arrives the
+// camera starts its push-in and the interview screen takes over at once, the room fading out behind it.
+// `hold` is the moment of push-in shown first (your first interview only), in ms.
+const FULL = { hold: 350, fade: 0.9 };
+const QUICK = { hold: 0, fade: 0.45 };
 
 /**
  * The walk into the interview, shown while VERA prepares the first question of a new interview: the room
  * (the site-wide SceneHost) cuts to the interview table, your chair is brought to it, two interviewers wait
- * across it. When the first question is ready (and the chair has arrived), the camera pushes in over your
- * shoulder while the room fades, and the interview screen takes over (`onDone`).
+ * across it. When the first question arrives, the camera pushes in over your shoulder while the room fades, and
+ * the interview screen takes over (`onDone`) straight away: the question's clock is already running.
  *
- *   full        your first interview: the whole scene (otherwise it lasts only as long as VERA takes)
+ *   full        your first interview ("Take your seat."); later ones say "Back in the seat."
  *   ready       the first question has arrived
  *   failed      something went wrong (connection, error): end straight away so the page can say so
  *   statusText  what VERA is doing, for the status line
@@ -29,7 +31,6 @@ export default function InterviewIntro({ full = false, ready, failed, statusText
   const timing = full ? FULL : QUICK;
   const opacity = useMotionValue(1);
   const [pushing, setPushing] = useState(false);
-  const startedAt = useRef(0);
   const done = useRef(onDone);
 
   useShot(pushing ? "interviewPush" : "interview", { opacity });
@@ -38,24 +39,17 @@ export default function InterviewIntro({ full = false, ready, failed, statusText
     done.current = onDone;
   });
   useEffect(() => {
-    startedAt.current = Date.now();
-  }, []);
-
-  useEffect(() => {
     if (failed) {
       done.current();
       return undefined;
     }
     if (!ready) return undefined;
-    let controls = null;
-    const timer = setTimeout(() => {
-      setPushing(true);
-      controls = animate(opacity, 0, { duration: timing.fade, delay: timing.pushDelay, ease: [0.55, 0, 0.75, 0.2] });
-      controls.then(() => done.current());
-    }, Math.max(0, timing.minMs - (Date.now() - startedAt.current)));
+    setPushing(true); // eslint-disable-line react-hooks/set-state-in-effect -- reacting to the question's arrival
+    const controls = animate(opacity, 0, { duration: timing.fade, ease: [0.55, 0, 0.75, 0.2] });
+    const timer = setTimeout(() => done.current(), timing.hold);
     return () => {
       clearTimeout(timer);
-      controls?.stop();
+      controls.stop();
     };
   }, [ready, failed, opacity, timing]);
 
