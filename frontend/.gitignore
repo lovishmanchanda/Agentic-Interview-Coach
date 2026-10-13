@@ -43,3 +43,9 @@ next-env.d.ts
 
 # project-local npm cache (see .npmrc)
 /.npm-cache
+
+# Playwright output (traces, reports)
+/test-results
+/playwright-report
+/blob-report
+/playwright/.cache
