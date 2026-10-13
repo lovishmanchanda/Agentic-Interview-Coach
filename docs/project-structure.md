@@ -25,7 +25,7 @@ Agentic Interview Coach/
 | `deploy/vps/docker-compose.yml`, `deploy/vps/Caddyfile` | Production on one Linux server: automatic HTTPS, private network for the API, database and Piston (docs/deployment.md, Path 1). |
 | `.dockerignore` | Keeps secrets, caches, local data and local-only files out of Docker images. |
 | `.gitignore` | Keeps `.env`, virtualenvs, `node_modules`, caches, `data/chroma`, logs and local notes out of git. |
-| `.github/workflows/ci.yml` | CI: seed validation + 575 backend tests; frontend lint + production build. |
+| `.github/workflows/ci.yml` | CI: seed validation + 575 backend tests; frontend lint, unit tests and production build; then end-to-end tests (Playwright) against a real backend with the fake AI. |
 
 ## backend/
 
@@ -61,7 +61,9 @@ backend/
 | `v1/reports.py` | Report list (with scores per topic, type, duration) and a full report. |
 | `v1/mentor.py` | ARIA: welcome, chat, conversations, "prepare me for <company>". |
 | `v1/prep.py` | Company preparation plans (list/read). |
-| `v1/admin.py` | Admin only: live metrics, usage and cost, prompt versions and A/B splits. |
+| `v1/admin.py` | Admin only: live metrics, usage and cost, prompt versions and A/B splits, client health (real visitors' web vitals at p75 and browser errors). |
+| `v1/telemetry.py` | Browser reports (web vitals, uncaught errors): anonymous, rate-limited, IDs and personal data scrubbed, kept 14 days. |
+| `v1/response_models.py` | Typed descriptions of list responses for the OpenAPI schema (the frontend's generated types); tests validate real responses against them. |
 | `ws.py` | `/ws/interview/{id}`: the live interview socket (auth handshake, questions, answers, hints, code, heartbeat). |
 | `ws_protocol.py` | Typed messages for that socket; the contract the frontend follows. |
 
@@ -140,8 +142,9 @@ frontend/
 ├── Dockerfile, .dockerignore   production image (next build → next start, non-root)
 ├── .env.example                NEXT_PUBLIC_API_URL only (public, inlined into the bundle)
 ├── .npmrc                      npm cache inside the project (.npm-cache/)
-├── next.config.mjs             security headers, no "powered by" header
-├── eslint.config.mjs, jsconfig.json (@/ imports), postcss.config.mjs (Tailwind 4), package.json
+├── next.config.mjs             security headers incl. the Content-Security-Policy, no "powered by" header
+├── eslint.config.mjs, tsconfig.json (@/ imports; TypeScript alongside JavaScript), postcss.config.mjs (Tailwind 4), package.json
+├── types/        api.schema.json (the backend's OpenAPI, exported) → api.d.ts (generated types) and models.ts (short names)
 ├── app/          pages (Next.js App Router)
 ├── components/   UI, grouped by area
 ├── lib/          API client, socket, pure helpers
@@ -173,7 +176,7 @@ frontend/
 
 | Folder | What's inside |
 |---|---|
-| `three/` | The 3D interview room (three.js via react-three-fiber): `SceneHost` (one persistent canvas), `InterviewRoom` (camera shots, lights), `furniture` (chair, desk, lamp from code), `DeskItems` (report sheets, lamp pool), `Effects` (bloom, tone mapping), `materials`/`textures` (procedural), `RoomPoster` (no-WebGL fallback), `framings`, `SceneBackdrop`. |
+| `three/` | The 3D interview room (three.js via react-three-fiber): `SceneHost` (one persistent canvas), `InterviewRoom` (camera shots, lights), `furniture` (chair, desk, lamp from code), `figure` (the jointed mannequin people and their poses: walk, sit, seated), `Candidate` (you: walks in and takes the seat once signed in, looks at what you point at on the desk; plus the hover "ghost"), `roomFocus` (what the seated figure attends to), `InterviewSet` (the interview table, two interviewers, pendant, window, plant, floor lamp), `DeskItems` (report sheets, lamp pool), `Effects` (bloom, tone mapping), `materials`/`textures` (procedural), `RoomPoster` (no-WebGL fallback), `quality` (high/medium/low from the GPU, cores and memory: effects, shadows, dust, resolution), `shots` (every named shot: camera, framing per screen size, who's in the room, its screen-reader label; pages call `useShot("desk")`), `pace` (frame pacing: full rate while something moves, 30 fps idle), `SceneBackdrop`. |
 | `landing/` | Landing sections: header, hero, the loop story, bands, VERA & ARIA, interview types, sample report, FAQ, final CTA. |
 | `auth/` | `AuthShell` (room + card + camera moves), `AuthForm` (sign in ⇄ sign up). |
 | `profile/` | Onboarding wizard, skills input. |
@@ -190,14 +193,24 @@ frontend/
 | `ui/` | Component library: Button, Card, Field, Badge, Alert, Tabs, Dialog, Tooltip, Toaster, Skeleton, ProgressRing, StatTile, SpotlightCard, Kbd, icons… |
 | `admin/` | Prompt version / A/B settings. |
 
+### frontend tests
+| Path | What it is |
+|---|---|
+| `tests/unit/` | Vitest unit tests (`npm test`): dashboard numbers and streaks, the post-login redirect guard, desk sheets, the 3D figure's pose maths (feet stay on the floor), the cache's retry rule. |
+| `tests/e2e/` | Playwright end-to-end tests (`npm run test:e2e`): sign in → desk → start an interview → intro → first question, the reduced-motion path, the sign-in redirect, and one request per list. Starts its own backend (in-memory DB, fake AI) and a production build on ports 8100/3100; uses the installed Chrome. |
+| `vitest.config.mjs`, `playwright.config.mjs` | Test runner settings. |
+
 ### frontend/lib/ and store/
 
 | File | What it does |
 |---|---|
-| `lib/api.js` | REST client: auth headers, token refresh (shared across tabs), error envelope. |
+| `lib/api.ts` | REST client: auth headers, token refresh (shared across tabs), error envelope; responses typed from the generated API types. |
+| `lib/interviewSession.ts` | The interview room's state as a pure reducer (every socket event and local action is one tested transition); `components/interview/room/useInterviewSession.js` wires the socket to it. |
 | `lib/interviewSocket.js` | Interview WebSocket: auth handshake, heartbeat, reconnect with backoff. |
-| `lib/session.js` | Sign-out and safe redirects. |
-| `lib/dashboard.js`, `desk.js` | Pure functions turning API data into dashboard numbers and desk sheets. |
+| `lib/session.js` | Sign-out (also clears the data cache) and safe redirects. |
+| `lib/telemetry.ts` | Reports real visitors' web vitals and uncaught errors to the API in small batches (production builds only); `components/providers/Telemetry.jsx` hooks it up in the root layout. |
+| `lib/queryClient.ts`, `queries.ts` | The server-data cache (TanStack Query): one cached copy of reports, sessions, ARIA's welcome and plans shared by every screen; retries only server/network errors; refreshed after an interview. |
+| `lib/dashboard.ts`, `desk.ts` | Pure functions turning API data into dashboard numbers and desk sheets. |
 | `lib/interviewOptions.js`, `interviewPresets.js`, `profileOptions.js` | Option lists, labels, presets, drill links. |
 | `lib/navigation.js`, `format.js`, `useMediaQuery.js`, `useElementWidth.js` | Nav items, formatting, small hooks. |
 | `store/authStore.js` | Session: the 30-minute access token + user in `localStorage` (synced across tabs); the refresh token is an httpOnly cookie the page can't read. |

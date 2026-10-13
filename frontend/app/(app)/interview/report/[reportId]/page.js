@@ -1,7 +1,6 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
 
 import ScoreBars from "@/components/charts/ScoreBars";
 import { PastRound, groupRounds } from "@/components/interview/room/Round";
@@ -16,9 +15,9 @@ import Button from "@/components/ui/Button";
 import { ArrowRightIcon, CheckIcon, PrinterIcon, TargetIcon } from "@/components/ui/icons";
 import Skeleton from "@/components/ui/Skeleton";
 import StatTile from "@/components/ui/StatTile";
-import { api } from "@/lib/api";
 import { formatDuration } from "@/lib/format";
 import { INTERVIEW_MODES, INTERVIEW_TYPES, dimensionLabel, drillHref, topicLabel } from "@/lib/interviewOptions";
+import { useReport } from "@/lib/queries";
 import { TARGET_ROLES, labelFor } from "@/lib/profileOptions";
 
 const SEVERITY = { high: { tone: "warning", label: "High" }, medium: { tone: "neutral", label: "Medium" }, low: { tone: "neutral", label: "Low" } };
@@ -46,14 +45,9 @@ function Loading() {
  */
 export default function ReportPage() {
   const { reportId } = useParams();
-  const [report, setReport] = useState(null);
-  const [error, setError] = useState(null);
+  const { data: report, error } = useReport(reportId); // cached: coming back to a report is instant
 
-  useEffect(() => {
-    api.reports.get(reportId).then(setReport).catch((err) => setError(err.message));
-  }, [reportId]);
-
-  if (error) return <Alert tone="error" title="Couldn't load this report">{error}</Alert>;
+  if (error) return <Alert tone="error" title="Couldn't load this report">{error.message}</Alert>;
   if (!report) return <Loading />;
 
   const config = report.config;

@@ -27,7 +27,7 @@ COLLECTIONS = [
     "users", "refresh_tokens", "candidate_profiles", "roles", "companies",
     "interview_sessions", "interview_questions", "candidate_answers", "evaluations",
     "interview_reports", "agent_runs", "mentor_conversations", "question_bank", "prep_plans", "llm_calls",
-    "prompt_settings",
+    "prompt_settings", "client_events",
 ]
 
 # architecture.md §5.3 index strategy. (collection, keys, options)
@@ -65,6 +65,9 @@ INDEXES: list[tuple[str, list[tuple[str, int]], dict]] = [
     ("companies", [("aliases", ASCENDING)], {}),
     ("prep_plans", [("plan_id", ASCENDING)], {"unique": True}),
     ("prep_plans", [("candidate_id", ASCENDING), ("created_at", DESCENDING)], {}),
+    # Browser telemetry (api/v1/telemetry.py): kept 14 days, then MongoDB deletes it.
+    ("client_events", [("at", ASCENDING)], {"expireAfterSeconds": 14 * 24 * 3600}),
+    ("client_events", [("kind", ASCENDING), ("at", DESCENDING)], {}),
 ]
 
 

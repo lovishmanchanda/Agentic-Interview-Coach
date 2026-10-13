@@ -2,6 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
+from app.api.v1.response_models import ReportSummary, documented
 from app.core.interview.engine import InterviewEngine
 from app.db.repositories.interview_repo import InterviewRepository, as_utc
 from app.dependencies import CurrentUser, get_engine, get_interview_repo
@@ -18,7 +19,7 @@ def _public(report: dict) -> dict:
     return out
 
 
-@router.get("")
+@router.get("", responses=documented(list[ReportSummary]))
 async def list_reports(user: CurrentUser, repo: RepoDep):
     """Newest first. Carries what the dashboard charts need (score trend, topic mastery, practice time), so it
     never has to fetch each report."""

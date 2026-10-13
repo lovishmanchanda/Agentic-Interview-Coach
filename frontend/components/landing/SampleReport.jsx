@@ -1,6 +1,4 @@
-"use client";
-
-import { motion } from "motion/react";
+import * as motion from "motion/react-client"; // usable from a server component
 
 import NumberTicker from "@/components/motion/NumberTicker";
 import Reveal from "@/components/motion/Reveal";

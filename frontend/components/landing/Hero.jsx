@@ -6,10 +6,9 @@ import { useRef, useState } from "react";
 import Magnetic from "@/components/motion/Magnetic";
 import SplitHeading from "@/components/motion/SplitHeading";
 import Button from "@/components/ui/Button";
-import useMediaQuery from "@/lib/useMediaQuery";
 import { useAuthStore } from "@/store/authStore";
-import { landingFraming } from "@/components/three/framings";
-import { useScene, useSceneStore } from "@/store/sceneStore";
+import { useShot } from "@/components/three/shots";
+import { useSceneStore } from "@/store/sceneStore";
 
 const EASE = [0.16, 1, 0.3, 1];
 // The words arrive as the spotlight flickers on; if the room is already lit (you came back here from signing in
@@ -36,35 +35,27 @@ function Credit({ delay, className, children }) {
 /**
  * "Take the seat": the room starts dark, VERA's spotlight flickers on over the empty chair, then the words rise.
  * The hero is pinned while you scroll through it: the camera dollies toward the chair and the words fade.
- * Hovering the call to action switches on a warm light behind the chair.
+ * Hovering the call to action switches on a warm light behind the chair, and a faint glowing silhouette of you
+ * appears in it (signed out): a preview of taking the seat.
  */
 export default function Hero() {
   const section = useRef(null);
   const { scrollYProgress } = useScroll({ target: section, offset: ["start start", "end end"] }); // 1 exactly when the pin releases
   const textOpacity = useTransform(scrollYProgress, [0, 0.35], [1, 0]);
   const textY = useTransform(scrollYProgress, [0, 0.35], [0, -80]);
+  const textScale = useTransform(scrollYProgress, [0, 0.35], [1, 0.96]);
   const cueOpacity = useTransform(scrollYProgress, [0, 0.08], [1, 0]);
   // The room fades away as the pin releases, so the sections below sit on plain black.
   const sceneOpacity = useTransform(scrollYProgress, [0.78, 1], [1, 0]);
   const [warm, setWarm] = useState(false);
   const [afterLight] = useState(() => (useSceneStore.getState().everActive ? RETURN_DELAY : FIRST_VISIT_DELAY));
-  const wide = useMediaQuery("(min-width: 768px)");
   const signedIn = useAuthStore((s) => s.hasHydrated && Boolean(s.user)); // remembered user (the token is in memory)
   const warmOn = { onMouseEnter: () => setWarm(true), onMouseLeave: () => setWarm(false), onFocus: () => setWarm(true),
     onBlur: () => setWarm(false) };
 
   // The shared room (SceneHost) plays this shot; it stays alive when you go on to sign in, so the camera just
   // keeps moving into the auth shot.
-  useScene({
-    preset: "landing",
-    progress: scrollYProgress,
-    lightOn: warm,
-    parallax: true,
-    intro: true,
-    framing: landingFraming(wide),
-    opacity: sceneOpacity,
-    label: "An empty chair under a spotlight in a dark room",
-  });
+  useShot("landing", { progress: scrollYProgress, lightOn: warm, opacity: sceneOpacity });
 
   return (
     <section ref={section} className="relative h-[170svh] md:h-[190svh]" aria-labelledby="hero-title">
@@ -78,7 +69,7 @@ export default function Hero() {
           <span className="mr-2 inline-block size-1.5 animate-blink rounded-full bg-steel align-middle" />VERA · standing by
         </Credit>
 
-        <motion.div style={{ opacity: textOpacity, y: textY }}
+        <motion.div style={{ opacity: textOpacity, y: textY, scale: textScale, transformOrigin: "0% 60%" }}
           className="relative z-10 mx-auto flex h-full max-w-7xl flex-col justify-end px-5 pb-24 sm:px-6 md:justify-center md:pb-0">
           <motion.p {...fadeUp(afterLight)}
             className="mb-6 inline-flex w-fit items-center gap-2 rounded-full border border-border-strong bg-background/60 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-muted backdrop-blur sm:text-xs">

@@ -86,6 +86,7 @@ class Settings(BaseSettings):
     mentor_messages_per_minute: int = Field(default=10, ge=1)  # per candidate: each one is an LLM call
     interviews_per_hour: int = Field(default=20, ge=1)         # per candidate: each one is several LLM calls
     prep_plans_per_hour: int = Field(default=5, ge=1)          # per candidate: research + JD + plan (Phase 3)
+    telemetry_per_minute: int = Field(default=30, ge=1)        # per IP: batches of browser vitals/errors
     max_request_bytes: int = Field(default=1_000_000, ge=10_000)
 
     # ── Observability (Phase 6) ──

@@ -14,9 +14,11 @@ import { Input, Select } from "@/components/ui/Field";
 import { ChevronDownIcon, SlidersIcon } from "@/components/ui/icons";
 import Skeleton from "@/components/ui/Skeleton";
 import { api } from "@/lib/api";
+import { fetchShared, queries, refreshAfterStart } from "@/lib/queries";
 import { CODING_LANGUAGES, CODING_QUESTION_COUNTS, INTERVIEW_MODES, INTERVIEW_TYPES, QUESTION_COUNTS, topicLabel } from "@/lib/interviewOptions";
 import { BASE_PRESETS, drillPreset, matchPreset } from "@/lib/interviewPresets";
 import { DIFFICULTIES, EXPERIENCE_LEVELS, TARGET_ROLES } from "@/lib/profileOptions";
+import { useSceneStore } from "@/store/sceneStore";
 import { useShellStore } from "@/store/shellStore";
 
 const MAX_FOCUS = 5;
@@ -71,6 +73,17 @@ function ConfigureForm() {
   const [customise, setCustomise] = useState(() => URL_CHOICES.some((k) => params.has(k)));
 
   // First load: the profile's defaults, plus any drill topics from the URL.
+  // The interview opens in the 3D room (InterviewIntro): fetch its code while you choose, so it starts at once.
+  useEffect(() => {
+    const load = () => import("@/components/three/RoomSceneCanvas").catch(() => {});
+    if ("requestIdleCallback" in window) {
+      const id = window.requestIdleCallback(load, { timeout: 4000 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const id = setTimeout(load, 1500);
+    return () => clearTimeout(id);
+  }, []);
+
   useEffect(() => {
     api.interviews.options()
       .then((options) => {
@@ -145,7 +158,12 @@ function ConfigureForm() {
     setStarting(true);
     setError(null);
     try {
+      // Your history (usually already cached) says whether this is your first interview: only that one gets the
+      // whole walk-to-the-table scene. Read before creating the new session, so it isn't counted.
+      const history = await fetchShared(queries.sessions).catch(() => null);
       const session = await api.interviews.create({ ...form, company: form.company.trim() || null });
+      useSceneStore.setState({ introFor: { sessionId: session.session_id, full: history?.length === 0 } });
+      refreshAfterStart();
       router.push(`/interview/session/${session.session_id}`);
     } catch (err) {
       setError(err.message);

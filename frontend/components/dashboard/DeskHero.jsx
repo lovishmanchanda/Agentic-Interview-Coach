@@ -3,17 +3,32 @@
 import { motion, useScroll, useTransform } from "motion/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-import { deskFraming } from "@/components/three/framings";
+import { useShot } from "@/components/three/shots";
 import Button from "@/components/ui/Button";
 import { nextStep } from "@/lib/dashboard";
 import { sheetsFromReports } from "@/lib/desk";
-import useMediaQuery from "@/lib/useMediaQuery";
-import { useScene, useSceneStore } from "@/store/sceneStore";
+import { useSceneStore } from "@/store/sceneStore";
 
 const EASE = [0.16, 1, 0.3, 1];
 const HIT_AREA = "[data-desk-hit]";
+const SEEN_KEY = "aic-desk-seen"; // the newest report this browser has already seen land on the desk
+
+function readSeen() {
+  try {
+    return window.localStorage.getItem(SEEN_KEY);
+  } catch {
+    return null;
+  }
+}
+function writeSeen(id) {
+  try {
+    window.localStorage.setItem(SEEN_KEY, id);
+  } catch {
+    // storage blocked: no drop next time, that's all
+  }
+}
 
 /**
  * The top of the dashboard is a window onto your desk: the same room the sign-in camera flew to (the shared
@@ -24,7 +39,6 @@ const HIT_AREA = "[data-desk-hit]";
  */
 export default function DeskHero({ firstName, role, company, data }) {
   const router = useRouter();
-  const wide = useMediaQuery("(min-width: 768px)");
   // Until the page's data arrives, keep whatever is already on the desk (the sign-in move put the sheets
   // there), so nothing blinks.
   const [initialSheets] = useState(() => useSceneStore.getState().props.desk?.reports ?? []);
@@ -34,17 +48,25 @@ export default function DeskHero({ firstName, role, company, data }) {
   const { scrollY } = useScroll();
   const opacity = useTransform(scrollY, [0, 520], [1, 0]);
 
-  useScene({
-    preset: "desk",
-    framing: deskFraming(wide),
+  // A report you haven't seen on the desk yet (you've just finished an interview) drops onto the stack.
+  const latest = ready ? sheets[0]?.id ?? "none" : null;
+  const [drop, setDrop] = useState(null);
+  useEffect(() => {
+    if (!latest) return;
+    const seen = readSeen();
+    writeSeen(latest);
+    if (seen !== null && seen !== latest && latest !== "none") queueMicrotask(() => setDrop(latest));
+  }, [latest]);
+
+  useShot("desk", {
     opacity,
-    label: "Your desk: your interview reports, and a lamp over what to do next",
     desk: {
       reports: sheets,
       nextStep: next && { title: next.title, detail: next.detail },
       onOpenReport: (id) => router.push(`/interview/report/${id}`),
       onNextStep: () => next && router.push(next.href),
       hitArea: HIT_AREA,
+      drop,
     },
   });
 

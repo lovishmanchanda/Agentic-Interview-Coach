@@ -8,6 +8,7 @@ from app.core.mentor.rag_tool import RagService
 from app.db.seed import load_seed_questions, seed_question_bank
 from app.main import create_app
 from app.utils.exceptions import ServiceUnavailableError
+from app.api.v1.response_models import PlanSummary
 from tests.fakes import GOOD_EVALUATION, HashEmbeddings, drain_indexing
 from tests.integration.test_walking_skeleton import ONE_QUESTION, _open, _signup
 
@@ -78,7 +79,9 @@ def test_prepare_me_for_a_known_company_in_chat(app_client, gateway, mock_db, ra
     plan = app_client.get(f"/api/v1/prep/plans/{reply['prep_plan_id']}", headers=headers).json()["data"]
     assert plan["company_source"] == "curated" and plan["plan_source"] == "llm"
     assert plan["plan"]["weeks"][0]["focus_areas"] == ["system_design"]  # "kafka" isn't a known area
-    assert [p["plan_id"] for p in app_client.get("/api/v1/prep/plans", headers=headers).json()["data"]] == [reply["prep_plan_id"]]
+    listed = app_client.get("/api/v1/prep/plans", headers=headers).json()["data"]
+    assert [p["plan_id"] for p in listed] == [reply["prep_plan_id"]]
+    PlanSummary.model_validate(listed[0])  # the documented type (and the frontend's) matches the real response
     [run] = asyncio.run(mock_db["agent_runs"].find({"agent_name": "prep_orchestrator"}).to_list(10))
     assert [s["step"] for s in run["steps"]] == ["research_company", "analyze_jd", "profile_candidate", "gap_analysis", "write_plan"]
     assert run["steps"][1]["status"] == "skipped" and run["plan_id"] == reply["prep_plan_id"]

@@ -16,17 +16,22 @@ const SAMPLE_DESK = {
   nextStep: { title: "Drill system design", detail: "Your weakest topic: 4.6" },
 };
 
-/** The interview room on /design: switch presets to see the camera, chair and lights move between them. */
+/**
+ * The interview room on /design: switch presets to see the camera, chair and lights move between them, empty
+ * the chair or replay your walk-in.
+ */
 export default function RoomDemo() {
   const [preset, setPreset] = useState("landing");
   const [progress, setProgress] = useState(0);
   const [lightOn, setLightOn] = useState(false);
   const [clicked, setClicked] = useState(null);
+  const [occupied, setOccupied] = useState(true);
+  const [replay, setReplay] = useState(0);
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        {["landing", "auth", "desk"].map((p) => (
+        {["landing", "auth", "desk", "interview", "interviewPush"].map((p) => (
           <Button key={p} size="sm" variant={preset === p ? "primary" : "secondary"} onClick={() => setPreset(p)}>{p}</Button>
         ))}
         <label className="ml-2 flex items-center gap-2 text-sm text-muted">
@@ -38,6 +43,8 @@ export default function RoomDemo() {
           onFocus={() => setLightOn(true)} onBlur={() => setLightOn(false)}>
           Hover me: warm light
         </Button>
+        <Button size="sm" variant="ghost" onClick={() => setOccupied((o) => !o)}>{occupied ? "Empty the chair" : "Sit someone down"}</Button>
+        <Button size="sm" variant="ghost" disabled={!occupied} onClick={() => setReplay((r) => r + 1)}>Replay walk-in</Button>
         {clicked && <span className="text-sm text-muted">Clicked: <span className="font-mono text-foreground">{clicked}</span></span>}
       </div>
       <RoomScene
@@ -46,6 +53,8 @@ export default function RoomDemo() {
         progress={progress}
         lightOn={lightOn}
         parallax
+        occupied={occupied}
+        replay={replay}
         label="The interview room"
         desk={{ ...SAMPLE_DESK, onOpenReport: (id) => setClicked(`report ${id}`), onNextStep: () => setClicked("next step") }}
       />
@@ -59,7 +68,7 @@ export default function RoomDemo() {
         ))}
       </div>
       <Stagger className="flex flex-wrap gap-2">
-        {["Reveal", "Stagger", "NumberTicker", "PageTransition", "SmoothScroll"].map((name) => (
+        {["Reveal", "Stagger", "NumberTicker", "PageTransition"].map((name) => (
           <StaggerItem key={name} className="rounded-full border border-border px-3 py-1 font-mono text-xs text-muted">{name}</StaggerItem>
         ))}
       </Stagger>

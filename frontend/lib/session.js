@@ -1,6 +1,7 @@
 "use client";
 
 import { api } from "@/lib/api";
+import { getQueryClient } from "@/lib/queryClient";
 import { useAuthStore } from "@/store/authStore";
 import { useMentorStore } from "@/store/mentorStore";
 import { useProfileStore } from "@/store/profileStore";
@@ -28,6 +29,7 @@ export async function signOut() {
 
 /** Drops the signed-in user's cached data, so the next account to sign in on this tab never sees it. */
 export function clearUserData() {
+  getQueryClient().clear(); // every cached report, session and plan belonged to the account signing out
   useProfileStore.getState().reset();
   useMentorStore.getState().reset();
   useShellStore.getState().reset();

@@ -1,12 +1,20 @@
 "use client";
 
+import { useEffect } from "react";
+
+import { flush, reportError } from "@/lib/telemetry";
+
 import "./globals.css";
 
 /**
  * Last resort: an error in the root layout itself. It replaces the whole document, so it brings its own
  * <html>/<body> and uses no app components (they may be what failed).
  */
-export default function GlobalError({ retry }) {
+export default function GlobalError({ error, retry }) {
+  useEffect(() => {
+    reportError(error); // the worst kind: worth knowing about (lib/telemetry.ts)
+    flush();
+  }, [error]);
   return (
     <html lang="en">
       <body className="flex min-h-screen items-center justify-center bg-background px-4 text-foreground antialiased">

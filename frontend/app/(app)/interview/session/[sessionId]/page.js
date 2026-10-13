@@ -1,5 +1,6 @@
 "use client";
 
+import { motion } from "motion/react";
 import dynamic from "next/dynamic";
 import { useParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -9,14 +10,15 @@ import EvaluationCard from "@/components/interview/EvaluationCard";
 import QuestionTimer from "@/components/interview/QuestionTimer";
 import AnswerComposer from "@/components/interview/room/AnswerComposer";
 import InterviewDone from "@/components/interview/room/InterviewDone";
+import InterviewIntro from "@/components/interview/room/InterviewIntro";
+import useInterviewSession from "@/components/interview/room/useInterviewSession";
 import RoomHeader from "@/components/interview/room/RoomHeader";
 import { EmptyStage, PastRound, StageRound, groupRounds } from "@/components/interview/room/Round";
 import Alert from "@/components/ui/Alert";
 import Skeleton from "@/components/ui/Skeleton";
 import { INTERVIEW_MODES, INTERVIEW_TYPES, topicLabel } from "@/lib/interviewOptions";
-import { connectInterview } from "@/lib/interviewSocket";
 import { TARGET_ROLES, labelFor } from "@/lib/profileOptions";
-import { useShellStore } from "@/store/shellStore";
+import { useSceneStore } from "@/store/sceneStore";
 
 // The coding room (editor, markdown statement, console) loads only when a coding problem is on screen, so a
 // technical or behavioural interview never downloads it. Monaco itself loads from its CDN on first use.
@@ -57,140 +59,64 @@ const DRAFT_DEBOUNCE_MS = 1500; // autosave the answer being typed, so a reload 
  *
  * Everything shown is rebuilt from the socket's SESSION_SNAPSHOT on every (re)connect, so a reload or a
  * dropped connection resumes exactly where you were.
+ *
+ * A brand-new interview (started from the configure page, which sets the scene store's `introFor`) opens with
+ * InterviewIntro: the 3D walk to the interview table while VERA prepares the first question; the whole scene
+ * before your first interview, afterwards only as long as VERA takes.
  */
+const reduceMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 export default function InterviewSessionPage() {
   const { sessionId } = useParams();
-  const socketRef = useRef(null);
   const bottomRef = useRef(null);
   const answerRef = useRef(null);
   const focusedFor = useRef(null);
-  const [status, setStatus] = useState({ kind: "connecting", message: null });
-  const [state, setState] = useState(null);
-  const [transcript, setTranscript] = useState([]);
-  const [progress, setProgress] = useState(null);
-  const [processing, setProcessing] = useState(false);
-  const [processingText, setProcessingText] = useState("Evaluating your answer…");
-  const [config, setConfig] = useState(null);
-  const [focusTopics, setFocusTopics] = useState([]);
   const [answer, setAnswer] = useState("");
-  const [error, setError] = useState(null);
-  const [reportId, setReportId] = useState(null);
-  const [hintsLeft, setHintsLeft] = useState(0);
-  const [hintLoading, setHintLoading] = useState(false);
-  const [announcement, setAnnouncement] = useState(""); // read out by screen readers (a polite live region)
   const lastDraftRef = useRef("");
-  const [currentQuestion, setCurrentQuestion] = useState(null); // {question_id, asked_at, suggested_seconds, …}
-  const [clockOffset, setClockOffset] = useState(0);            // server clock − browser clock, for the timers
-  const [startedAt, setStartedAt] = useState(null);
-  const [draftCode, setDraftCode] = useState(null);   // {code, language} autosaved for the current coding problem
-  const [codeResult, setCodeResult] = useState(null); // the latest CODE_RESULT (the server's run of a submission)
+  const session = useInterviewSession(sessionId, {
+    onDraftRestored: (draft) => {
+      // Restore the autosaved answer, unless something has been typed since.
+      lastDraftRef.current = draft;
+      setAnswer((current) => current || draft);
+    },
+  });
+  const { status, state, transcript, progress, processing, processingText, config, focusTopics, error, reportId, hintsLeft,
+    hintLoading, announcement, currentQuestion, clockOffset, startedAt, draftCode, codeResult, waiting } = session;
+  // Only reached by client-side navigation from the configure page, so this never differs from a server render.
+  // "full" | "quick" | null. Only reached by client-side navigation from the configure page, so this never
+  // differs from a server render.
+  const [introMode] = useState(() => {
+    const pending = typeof window !== "undefined" ? useSceneStore.getState().introFor : null;
+    if (pending?.sessionId !== sessionId || reduceMotion()) return null;
+    return pending.full ? "full" : "quick";
+  });
+  const withIntro = introMode !== null;
+  const [intro, setIntro] = useState(withIntro);
 
   useEffect(() => {
-    const socket = connectInterview(sessionId, {
-      onStatus: (kind, message) => setStatus({ kind, message }),
-      onEvent: ({ type, state: eventState, payload }) => {
-        if (eventState) setState(eventState);
-        switch (type) {
-          case "SESSION_SNAPSHOT":
-            setClockOffset(new Date(payload.server_time).getTime() - Date.now());
-            setStartedAt(payload.started_at);
-            setCurrentQuestion(payload.current_question);
-            setState(payload.state);
-            setConfig(payload.config);
-            setFocusTopics(payload.focus_topics || []);
-            setTranscript(payload.transcript);
-            setReportId(payload.report_id);
-            setProcessing(false); // the state now says whether the server is busy
-            setProgress({ asked: payload.questions_asked, total: payload.total_questions,
-              followUp: Boolean(payload.current_question?.is_follow_up) });
-            setHintsLeft(payload.current_question?.hints_left ?? 0);
-            setDraftCode(payload.draft_code || null);
-            if (payload.draft_answer) {
-              // Restore the autosaved answer, unless something has been typed since.
-              lastDraftRef.current = payload.draft_answer;
-              setAnswer((current) => current || payload.draft_answer);
-            }
-            break;
-          case "QUESTION":
-            setClockOffset(new Date(payload.server_time).getTime() - Date.now());
-            setCurrentQuestion(payload);
-            setProcessing(false); // serious mode sends no EVALUATION, so the next question ends the wait
-            setTranscript((t) => [...t, { role: "interviewer", question_id: payload.question_id, content: payload.text,
-              is_follow_up: payload.is_follow_up }]);
-            setProgress({ asked: payload.question_number, total: payload.total_questions, followUp: payload.is_follow_up });
-            setHintsLeft(payload.hints_left ?? 0);
-            setAnnouncement(`${payload.is_follow_up ? "Follow-up question" : `Question ${payload.question_number} of ${payload.total_questions}`}: ${payload.text}`);
-            break;
-          case "HINT":
-            setHintLoading(false);
-            setHintsLeft(payload.hints_left);
-            setTranscript((t) => [...t, { role: "hint", question_id: payload.question_id, content: payload.text }]);
-            setAnnouncement(`Hint: ${payload.text}`);
-            break;
-          case "PROCESSING":
-            if (payload.message) setProcessingText(payload.message);
-            setProcessing(true);
-            break;
-          case "CODE_RESULT":
-            setCodeResult(payload);
-            // Attach the run to the submission this page just added to the transcript.
-            setTranscript((t) => t.map((e) => (e.role === "candidate" && e.code && !e.execution ? { ...e, execution: payload } : e)));
-            break;
-          case "EVALUATION":
-            setProcessing(false);
-            setTranscript((t) => [...t, { role: "evaluation", question_id: payload.question_id, evaluation: payload }]);
-            setAnnouncement(`VERA scored your answer ${payload.overall_score} out of 10, ${payload.performance_tier}.`);
-            break;
-          case "INTERVIEW_COMPLETE":
-            setProcessing(false);
-            if (payload.closing_message) {
-              setTranscript((t) => [...t, { role: "interviewer", question_id: null, content: payload.closing_message, is_closing: true }]);
-            }
-            setReportId(payload.report_id);
-            setAnnouncement("Interview complete. Your report is ready.");
-            // The status line and ⌘K suggestions (latest report, streak, what ARIA knows) are now out of date.
-            useShellStore.getState().load({ force: true });
-            break;
-          case "ERROR":
-            setProcessing(false);
-            setHintLoading(false);
-            if (payload.retryable) {
-              // Nothing was recorded: drop the optimistic submission so a retry doesn't show twice.
-              setTranscript((t) => t.filter((e) => e.question_id !== "pending"));
-            }
-            setError(payload.retryable ? `${payload.message} Your answer is kept. Submit it again.` : payload.message);
-            break;
-          default:
-        }
-      },
-    });
-    socketRef.current = socket;
-    return () => socket.close();
+    if (useSceneStore.getState().introFor?.sessionId === sessionId) useSceneStore.setState({ introFor: null }); // play it once
   }, [sessionId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [transcript, processing]);
 
-  const waiting = state === "WAITING_FOR_RESPONSE" && !processing;
-
   // A new question puts the cursor in the answer box (keyboard and mouse users; on a phone that would pop the
   // keyboard over the question, so there it waits for a tap).
   const questionId = currentQuestion?.question_id;
   useEffect(() => {
-    if (!waiting || !questionId || focusedFor.current === questionId) return;
+    if (intro || !waiting || !questionId || focusedFor.current === questionId) return;
     focusedFor.current = questionId;
     if (window.matchMedia("(pointer: fine)").matches) answerRef.current?.focus({ preventScroll: true });
-  }, [waiting, questionId]);
+  }, [waiting, questionId, intro]);
 
   // Draft autosave: a short pause after typing sends ANSWER_DRAFT (the server keeps it for this question).
   useEffect(() => {
     if (!waiting || answer === lastDraftRef.current) return undefined;
     const timer = setTimeout(() => {
-      if (socketRef.current?.send({ type: "ANSWER_DRAFT", answer_text: answer })) lastDraftRef.current = answer;
+      if (session.sendDraft(answer)) lastDraftRef.current = answer;
     }, DRAFT_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [answer, waiting]);
+  }, [answer, waiting]); // eslint-disable-line react-hooks/exhaustive-deps -- session.sendDraft is a fresh closure each render
   // `processing`: an answer this page just sent. EVALUATING / BUSY_TEXT: the server is between steps.
   const busyText = processing || state === "EVALUATING" ? processingText : BUSY_TEXT[state];
   const finished = state === "REPORT_READY" || Boolean(reportId);
@@ -210,38 +136,21 @@ export default function InterviewSessionPage() {
     event.preventDefault();
     const text = answer.trim();
     if (!text || !waiting) return;
-    setError(null);
-    if (socketRef.current?.send({ type: "ANSWER", answer_text: text })) {
-      setTranscript((t) => [...t, { role: "candidate", question_id: "pending", content: text }]);
+    if (session.sendAnswer(text)) {
       setAnswer("");
       lastDraftRef.current = "";
-      setProcessing(true);
-    } else {
-      setError("Not connected yet. Wait a moment and try again.");
     }
   }
 
-  function submitCode({ code, language, explanation }) {
-    setError(null);
-    if (socketRef.current?.send({ type: "CODE_SUBMIT", code, language, explanation })) {
-      setTranscript((t) => [...t, { role: "candidate", question_id: "pending", content: explanation, code, language }]);
-      setProcessing(true);
-    } else {
-      setError("Not connected yet. Wait a moment and try again.");
-    }
-  }
-
-  function requestHint() {
-    setError(null);
-    if (socketRef.current?.send({ type: "HINT_REQUEST", draft_text: answer })) setHintLoading(true);
-  }
+  const submitCode = session.sendCode;
+  const requestHint = () => session.requestHint(answer);
 
   const alerts = (
     <>
       {status.kind === "failed" && (
         <Alert tone="error" title="Couldn't connect to the interview">
           {status.message}{" "}
-          <button type="button" onClick={() => socketRef.current?.reconnect()} className="font-medium underline">
+          <button type="button" onClick={session.reconnect} className="font-medium underline">
             Try again
           </button>
         </Alert>
@@ -280,32 +189,42 @@ export default function InterviewSessionPage() {
     );
   }
 
+  if (intro) {
+    return (
+      <InterviewIntro full={introMode === "full"} ready={Boolean(currentQuestion) || ended} failed={status.kind === "failed" || Boolean(error)}
+        statusText={busyText || STATUS_TEXT[status.kind] || "Getting ready…"} onDone={() => setIntro(false)} />
+    );
+  }
+  // After the intro, the interview screen rises out of the fading room.
+  const arrive = withIntro ? { initial: { opacity: 0, y: 10 }, animate: { opacity: 1, y: 0 },
+    transition: { duration: 0.7, ease: [0.16, 1, 0.3, 1] } } : {};
+
   const coding = !ended && currentQuestion?.coding ? currentQuestion : null;
   if (coding) {
     // Coding problem: the room is the problem + editor; earlier problems fold away above it.
     const evaluation = [...transcript].reverse().find((e) => e.role === "evaluation" && e.question_id === coding.question_id);
     const past = rounds.filter((r) => r.question.question_id !== coding.question_id);
     return (
-      <div className="flex flex-col gap-5">
+      <motion.div {...arrive} className="flex flex-col gap-5">
         {header}
         {liveRegion}
         {alerts}
         {pastList(past, { label: "Earlier problems" })}
         <CodingRoom key={coding.question_id} sessionId={sessionId} question={coding} draftCode={draftCode}
-          waiting={waiting} submitting={processing} socketRef={socketRef} timer={timer}
+          waiting={waiting} submitting={processing} socketRef={session.socketRef} timer={timer}
           submittedResult={codeResult?.question_id === coding.question_id ? codeResult : null} onSubmit={submitCode} />
         {busyText && !error && <AgentStatus agent="interviewer" text={busyText} />}
         {!serious && evaluation && <EvaluationCard evaluation={evaluation.evaluation} />}
         {serious && <p className="text-xs text-subtle">Serious mode: scores and feedback appear in your report at the end. Hidden tests show pass/fail only.</p>}
         <div ref={bottomRef} />
-      </div>
+      </motion.div>
     );
   }
 
   const stage = ended ? null : rounds[rounds.length - 1];
   const past = stage ? rounds.slice(0, -1) : rounds;
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-6">
+    <motion.div {...arrive} className="mx-auto flex max-w-3xl flex-col gap-6">
       {header}
       {liveRegion}
       {alerts}
@@ -324,6 +243,6 @@ export default function InterviewSessionPage() {
           hintsLeft={hintsLeft} hintLoading={hintLoading} onHint={requestHint} />
       )}
       <div ref={bottomRef} />
-    </div>
+    </motion.div>
   );
 }

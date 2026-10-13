@@ -1,6 +1,4 @@
-"use client";
-
-import { motion } from "motion/react";
+import * as motion from "motion/react-client"; // usable from a server component
 
 import { InterviewerAvatar, MentorAvatar } from "@/components/brand/AgentAvatar";
 import Reveal from "@/components/motion/Reveal";
