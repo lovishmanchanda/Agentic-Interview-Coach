@@ -6,6 +6,7 @@ from typing import Annotated
 from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, Field
 
+from app.api.v1.telemetry import VITALS
 from app.core.prompts import all_prompt_names, available_versions
 from app.db.client import aggregate_list
 from app.db.repositories.interview_repo import as_utc
@@ -95,7 +96,6 @@ async def llm_calls(_: AdminUser, request: Request, session_id: str | None = Non
     return ok([{**r, "at": as_utc(r["at"]).isoformat()} for r in rows])
 
 
-VITALS = ("LCP", "INP", "CLS", "FCP", "TTFB")
 MAX_VITAL_SAMPLES = 20_000  # the most recent ones, if there are more in the period (the response says so)
 
 
@@ -116,11 +116,11 @@ async def client_health(_: AdminUser, request: Request, days: Annotated[int, Que
     events = request.app.state.db["client_events"]
     samples: dict[tuple[str, str], list[float]] = {}
     ratings: dict[tuple[str, str], int] = {}
-    query = {"kind": "vital", "at": {"$gte": since}}
+    # Only measurable vitals (the ingest rejects others; this also skips any stored before it did), so the
+    # count, the cap and the p75 all describe the same samples.
+    query = {"kind": "vital", "at": {"$gte": since}, "name": {"$in": list(VITALS)}, "value": {"$ne": None}}
     total = await events.count_documents(query)
     async for e in events.find(query, {"_id": 0, "name": 1, "path": 1, "value": 1, "rating": 1}).sort("at", -1).limit(MAX_VITAL_SAMPLES):
-        if e.get("name") not in VITALS or e.get("value") is None:
-            continue
         key = (e["path"], e["name"])
         samples.setdefault(key, []).append(e["value"])
         ratings[key] = ratings.get(key, 0) + (e.get("rating") == "good")

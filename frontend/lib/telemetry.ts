@@ -4,9 +4,10 @@
  * backend drops IDs and query strings), the metric or the error's type, message and a short stack.
  *
  * Events queue up and go in small batches: every 15 s, and when the tab is hidden or closed (fetch keepalive,
- * which outlives the page but which browsers cap at 64 KB in flight: events are trimmed to what the server keeps,
- * batches are split by size, and keepalive is used only within that budget). Only in production builds, or
- * with NEXT_PUBLIC_TELEMETRY=1.
+ * which outlives the page but which browsers cap at 64 KB in flight across the page: events are trimmed to what
+ * the server keeps, batches are split by their UTF-8 size, and the bytes of keepalive requests still in flight
+ * are tracked for the whole page, so keepalive is used only while it fits). Only in production builds, or with
+ * NEXT_PUBLIC_TELEMETRY=1.
  */
 import { API_URL } from "@/lib/api";
 
@@ -22,7 +23,7 @@ export type ClientEvent = {
 
 const MAX_BATCH = 25; // events per request (the server's limit)
 const MAX_BATCH_BYTES = 16_000;
-const KEEPALIVE_BUDGET = 60_000; // under the browsers' 64 KB cap for keepalive requests in flight
+const KEEPALIVE_BUDGET = 60_000; // under the browsers' 64 KB cap for keepalive requests in flight (whole page)
 const MAX_ERRORS_PER_PAGE = 10; // a render loop throwing the same error shouldn't flood anything
 // The server keeps a fingerprint of the message and a few code locations from the stack; send no more than that.
 const MAX_MESSAGE = 300;
@@ -34,6 +35,11 @@ export const telemetryEnabled = () =>
 
 const vitals = new Map<string, ClientEvent>(); // by metric id: CLS and INP update as the page lives; keep the latest
 let errors: ClientEvent[] = [];
+let keepaliveInFlight = 0; // UTF-8 bytes of keepalive requests sent and not yet settled, across every flush
+
+const encoder = typeof TextEncoder === "undefined" ? null : new TextEncoder();
+/** What a body really weighs on the wire (UTF-8), not its length in UTF-16 code units. */
+export const byteSize = (body: string) => (encoder ? encoder.encode(body).length : body.length * 3);
 let errorsThisPage = 0;
 const seen = new Set<string>();
 
@@ -55,14 +61,14 @@ export function reportError(error: unknown) {
     stack: (err.stack || "").split("\n").slice(0, MAX_STACK_LINES + 1).join("\n").slice(0, MAX_STACK) });
 }
 
-/** Split events into request bodies of at most MAX_BATCH events and MAX_BATCH_BYTES each. */
+/** Split events into request bodies of at most MAX_BATCH events and MAX_BATCH_BYTES (UTF-8) each. */
 export function batches(events: ClientEvent[], maxBytes = MAX_BATCH_BYTES, maxCount = MAX_BATCH): string[] {
   const bodies: string[] = [];
   let current: ClientEvent[] = [];
   const body = (list: ClientEvent[]) => JSON.stringify({ events: list });
   for (const event of events) {
     const next = [...current, event];
-    if (current.length && (next.length > maxCount || body(next).length > maxBytes)) {
+    if (current.length && (next.length > maxCount || byteSize(body(next)) > maxBytes)) {
       bodies.push(body(current));
       current = [event];
     } else {
@@ -79,16 +85,22 @@ export function flush() {
   const events = [...vitals.values(), ...errors];
   vitals.clear();
   errors = [];
-  let inFlight = 0;
   for (const body of batches(events)) {
-    inFlight += body.length;
+    const bytes = byteSize(body);
+    // Delivered even as the page closes, as long as it fits the browser's cap with what's still in flight.
+    const keepalive = keepaliveInFlight + bytes <= KEEPALIVE_BUDGET;
+    if (keepalive) keepaliveInFlight += bytes;
     fetch(`${API_URL}/api/v1/telemetry`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body,
-      keepalive: inFlight <= KEEPALIVE_BUDGET, // delivered even as the page closes, within the browser's cap
+      keepalive,
       credentials: "omit",
-    }).catch(() => {}); // telemetry never gets in the way
+    })
+      .catch(() => {}) // telemetry never gets in the way
+      .finally(() => {
+        if (keepalive) keepaliveInFlight -= bytes;
+      });
   }
 }
 
